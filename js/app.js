@@ -264,12 +264,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     const remoteCfg = await loadRemoteConfig();
     const app = new App();
     // Apply remote config (if present). Only set client-safe values.
-    if (remoteCfg.SUPABASE_URL) app.config.supabaseConfig.url = remoteCfg.SUPABASE_URL;
-    if (remoteCfg.SUPABASE_ANON_KEY) app.config.supabaseConfig.key = remoteCfg.SUPABASE_ANON_KEY;
-    // enable cloud usage when remote config is present
-    if (remoteCfg.SUPABASE_URL && remoteCfg.SUPABASE_ANON_KEY) app.config.useSupabase = true;
-    // re-init cloud client with the possibly-updated config
-    try { app.cloud.init(); } catch (e) { console.warn('Cloud re-init failed', e); }
+    if (remoteCfg.SUPABASE_URL) app.config.supabaseUrl = remoteCfg.SUPABASE_URL;
+    if (remoteCfg.SUPABASE_ANON_KEY) app.config.supabaseKey = remoteCfg.SUPABASE_ANON_KEY;
     window.app = app;
     app.boot();
 });
