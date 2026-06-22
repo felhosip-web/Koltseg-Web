@@ -1,0 +1,166 @@
+/* ========================================================
+   Kiegészítő stílusok a Költség Nyilvántartóhoz (v4.0)
+   ======================================================== */
+
+/* ---------- Bejegyzések (kis kártyák a cellákban) ---------- */
+.entry {
+    @apply px-1.5 py-1 rounded-md shadow-sm text-[10px] font-semibold leading-tight;
+    width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.entry:hover {
+    white-space: normal;
+    overflow: visible;
+    position: relative;
+    z-index: 50;
+    @apply shadow-lg;
+}
+
+/* ---------- Modálok animációja ---------- */
+.modal {
+    animation: modalPop 0.25s ease-out;
+}
+
+@keyframes modalPop {
+    from {
+        opacity: 0;
+        transform: scale(0.9) translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}
+
+/* Modern tabok */
+.tab-btn {
+    background-color: #f3f4f6;
+    color: #4b5563;
+    border: none;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+.tab-btn.active {
+    background-color: #3b82f6;
+    color: white;
+    box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.3);
+}
+.tab-btn:active {
+    transform: scale(0.96);
+}
+
+/* Gombok és egyéb elemek kisebb érintési felületen is kényelmesek */
+button {
+    min-height: 36px;
+    min-width: 36px;
+}
+
+/* ---------- Táblázat görgetősáv ---------- */
+#mainTableContainer {
+    scrollbar-width: thin;
+    scrollbar-color: #94a3b8 #f8fafc;
+}
+
+#mainTableContainer::-webkit-scrollbar {
+    height: 10px;
+}
+
+#mainTableContainer::-webkit-scrollbar-track {
+    background: #f8fafc;
+}
+
+#mainTableContainer::-webkit-scrollbar-thumb {
+    background-color: #94a3b8;
+    border-radius: 20px;
+}
+
+/* ---------- Mentés LED állapotjelző ---------- */
+#saveLed {
+    transition: background-color 0.3s ease, box-shadow 0.3s ease;
+    box-shadow: 0 0 4px rgba(0, 0, 0, 0.2);
+}
+
+#saveLed.save-success {
+    background-color: #10b981 !important;
+    box-shadow: 0 0 12px #10b981;
+    animation: ledPulseGreen 2s infinite;
+}
+
+#saveLed.save-error {
+    background-color: #ef4444 !important;
+    box-shadow: 0 0 12px #ef4444;
+    animation: ledPulseRed 1s infinite;
+}
+
+@keyframes ledPulseGreen {
+    0% { box-shadow: 0 0 4px #10b981; }
+    50% { box-shadow: 0 0 14px #10b981; }
+    100% { box-shadow: 0 0 4px #10b981; }
+}
+
+@keyframes ledPulseRed {
+    0% { box-shadow: 0 0 4px #ef4444; }
+    50% { box-shadow: 0 0 16px #ef4444; }
+    100% { box-shadow: 0 0 4px #ef4444; }
+}
+
+/* ---------- Mobil optimalizáció ---------- */
+@media (max-width: 768px) {
+    th {
+        min-width: 90px;
+        font-size: 0.75rem;
+    }
+    .entry {
+        font-size: 9px;
+        padding: 0.125rem 0.25rem;
+    }
+}
+
+/* Mobil nézetben a tabok ne törjenek el */
+@media (max-width: 480px) {
+    .tab-btn {
+        font-size: 10px;
+        padding: 0.5rem 0.75rem;
+    }
+    header .flex-wrap {
+        gap: 0.25rem;
+    }
+}
+
+/* ---------- Segéd animációk ---------- */
+@keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-6px); }
+    75% { transform: translateX(6px); }
+}
+.animate-shake {
+    animation: shake 0.2s ease-in-out 0s 2;
+}
+
+/* Header jobb mobil elrendezés */
+header {
+    flex-wrap: wrap;
+}
+
+@media (max-width: 768px) {
+    header .flex-wrap {
+        justify-content: stretch;
+        gap: 8px;
+    }
+    
+    #btnNewItem, #btnNewMonth {
+        flex: 1;
+        justify-content: center;
+    }
+    
+    .flex.gap-2 > button {
+        padding: 10px 12px;
+    }
+}
+
+/* Reminder státusz jobb elhelyezés */
+#reminderGlobalStatus {
+    margin-left: auto;
+}
