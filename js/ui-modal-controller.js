@@ -46,7 +46,13 @@ export class UIModalController {
                 header.className = 'bg-amber-500 p-5 text-gray-950 flex items-center gap-3';
                 icon.className = 'fas fa-circle-info';
                 okBtn.className = 'flex-1 py-4 bg-amber-500 text-gray-950 hover:bg-amber-600 transition text-center font-black uppercase tracking-wider';
-                cancelBtn.classList.add('hidden');
+ //               cancelBtn.classList.add('hidden');
+                // Ha showCancel = false, elrejtjük a Mégse gombot
+                if (showCancel) {
+                    cancelBtn.classList.remove('hidden');
+                } else {
+                    cancelBtn.classList.add('hidden');
+                }
             }
 
             modal.classList.remove('hidden');

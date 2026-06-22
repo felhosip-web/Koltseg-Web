@@ -37,6 +37,29 @@ class App {
 
     async boot() {
         try {
+        // ===== TARTÓS TÁRHELY KÉRÉSE ÉS FIGYELMEZTETÉS =====
+        if (navigator.storage && navigator.storage.persist) {
+            const isPersisted = await navigator.storage.persisted();
+            if (!isPersisted) {
+                const granted = await navigator.storage.persist();
+                if (granted) {
+                    console.log('[STORAGE] Tartós tárhely engedélyezve!');
+                    this.hmiNotif.showToast('Adatok tartósan tárolva!', 'success');
+                } else {
+                    console.warn('[STORAGE] Tartós tárhely elutasítva!');
+                    // SÁRGA FIGYELMEZTETŐ MODAL (csak "Értem" gomb)
+                    await this.hmiNotif.showConfirm(
+                        "⚠️ Tárhely figyelmeztetés",
+                        "A böngésző nem engedélyezte a tartós tárhelyet.\n\nAz adatok a böngésző gyorsítótárának törlésekor (pl. 'Cookie-k és webhelyadatok törlése') VESZNEK EL!\n\nKérlek, a böngésző beállításaiban engedélyezd a tartós tárolást, vagy rendszeresen készíts biztonsági mentést.",
+                        false,          // false = sárga (info) stílus
+                        "Értem",        // gomb szövege
+                        false           // showCancel = false → csak OK gomb
+                    );
+                }
+            } else {
+                console.log('[STORAGE] Már tartós a tárhely.');
+            }
+        }
             await this.db.connect();
             await Promise.all([
                 this.reminderManager.load(),
