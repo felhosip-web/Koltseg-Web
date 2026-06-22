@@ -251,7 +251,11 @@ class App {
 // Indítás
 async function loadRemoteConfig() {
     try {
-        const res = await fetch('/settings.json');
+        let res = await fetch('/settings.json');
+        if (res.ok) return await res.json();
+        // fallback: try raw file from gh-pages branch
+        const rawUrl = 'https://raw.githubusercontent.com/felhosip-web/Koltseg-Web/gh-pages/settings.json';
+        res = await fetch(rawUrl);
         if (!res.ok) return {};
         return await res.json();
     } catch (e) {
