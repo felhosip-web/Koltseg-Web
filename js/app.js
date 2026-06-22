@@ -249,8 +249,23 @@ class App {
 }
 
 // Indítás
-document.addEventListener('DOMContentLoaded', () => {
+async function loadRemoteConfig() {
+    try {
+        const res = await fetch('/settings.json');
+        if (!res.ok) return {};
+        return await res.json();
+    } catch (e) {
+        return {};
+    }
+}
+
+// Indítás
+document.addEventListener('DOMContentLoaded', async () => {
+    const remoteCfg = await loadRemoteConfig();
     const app = new App();
+    // Apply remote config (if present). Only set client-safe values.
+    if (remoteCfg.SUPABASE_URL) app.config.supabaseUrl = remoteCfg.SUPABASE_URL;
+    if (remoteCfg.SUPABASE_ANON_KEY) app.config.supabaseKey = remoteCfg.SUPABASE_ANON_KEY;
     window.app = app;
     app.boot();
 });
