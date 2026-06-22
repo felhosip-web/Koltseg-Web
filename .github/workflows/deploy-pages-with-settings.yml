@@ -20,9 +20,10 @@ jobs:
           }
           EOF
 
-      - name: Deploy to GitHub Pages (gh-pages)
+      - name: Deploy to GitHub Pages (publish to main)
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: .
+          publish_branch: main
           keep_files: false
