@@ -1,13 +1,16 @@
 {
   "name": "Költség Nyilvántartó",
   "short_name": "KöltségNY",
-  "description": "Egyszerű költség nyilvántartó webalkalmazás.",
+  "description": "Egyszerű és modern költség nyilvántartó webalkalmazás.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#1e3a8a",
   "theme_color": "#1e3a8a",
+  "categories": ["finance", "productivity", "utilities"],
+  "lang": "hu",
+  "dir": "ltr",
   "icons": [
     {
       "src": "icons/icon-48.png",
@@ -23,6 +26,11 @@
       "src": "icons/icon-96.png",
       "type": "image/png",
       "sizes": "96x96"
+    },
+    {
+      "src": "icons/icon-128.png",
+      "type": "image/png",
+      "sizes": "128x128"
     },
     {
       "src": "icons/icon-144.png",
@@ -42,6 +50,11 @@
       "purpose": "maskable"
     },
     {
+      "src": "icons/icon-256.png",
+      "type": "image/png",
+      "sizes": "256x256"
+    },
+    {
       "src": "icons/icon-512.png",
       "type": "image/png",
       "sizes": "512x512",
@@ -58,5 +71,7 @@
       "type": "image/svg+xml",
       "sizes": "any"
     }
-  ]
+  ],
+  "prefer_related_applications": false,
+  "related_applications": []
 }

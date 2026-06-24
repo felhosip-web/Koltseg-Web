@@ -86,6 +86,14 @@
                             <i class="fas fa-arrows-rotate"></i> Szinkronizálás
                         </button>
                         <div class="border-t border-gray-100 my-1"></div>
+<div class="px-3 py-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider">Backup</div>
+<button id="btnRestoreBackup" class="w-full text-left px-3 py-2.5 hover:bg-gray-50 flex items-center gap-2 text-gray-700">
+    <i class="fas fa-undo-alt text-purple-500"></i> Visszaállítás backupból
+</button>
+<button id="btnForceBackup" class="w-full text-left px-3 py-2.5 hover:bg-gray-50 flex items-center gap-2 text-gray-700">
+    <i class="fas fa-database text-blue-500"></i> Manuális backup mentés
+</button>
+                        <div class="border-t border-gray-100 my-1"></div>
                         <button id="btnWipeDatabase" class="w-full text-left px-3 py-2.5 hover:bg-red-50 flex items-center gap-2 text-red-600 font-semibold">
                             <i class="fas fa-trash-can"></i> Adatbázis törlése
                         </button>
@@ -523,6 +531,87 @@
         <div class="border-t flex">
             <button id="btnCancelEditReminder" class="flex-1 py-4 text-gray-600 hover:bg-gray-100">Mégse</button>
             <button id="btnSaveEditReminder" class="flex-1 py-4 bg-amber-600 text-white hover:bg-amber-700">Mentés</button>
+        </div>
+    </div>
+</div>
+
+<!-- ===== SZINKRONIZÁCIÓS MODAL ===== -->
+<div id="syncModal" class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 hidden modal">
+    <div class="bg-white rounded-[32px] shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden border border-gray-100">
+        <div class="bg-gradient-to-r from-indigo-600 to-blue-600 p-5 text-white flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center text-lg">
+                    <i class="fas fa-arrows-rotate"></i>
+                </div>
+                <div>
+                    <h3 class="text-base font-black uppercase tracking-wider">Szinkronizáció kezelése</h3>
+                    <p class="text-[10px] text-blue-100 uppercase tracking-wide font-mono">HMI Sync Module</p>
+                </div>
+            </div>
+            <button id="btnCloseSyncModal" class="w-8 h-8 flex items-center justify-center bg-white/10 hover:bg-white/20 rounded-lg text-white transition">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        
+        <div class="p-6 overflow-y-auto max-h-[60vh]">
+            <!-- Állapotjelző -->
+            <div id="syncStatus" class="mb-4 p-3 bg-gray-50 rounded-xl text-sm flex items-center gap-2">
+                <span id="syncLed" class="w-3 h-3 rounded-full bg-gray-400"></span>
+                <span id="syncStatusText" class="text-gray-600 font-medium">Készen áll a szinkronizációra</span>
+            </div>
+            
+            <!-- Kétirányú szinkronizáció -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <button id="btnPullData" class="p-4 bg-blue-50 hover:bg-blue-100 border-2 border-blue-200 rounded-2xl transition text-left">
+                    <div class="flex items-center gap-3">
+                        <i class="fas fa-cloud-download-alt text-blue-600 text-xl"></i>
+                        <div>
+                            <h4 class="font-bold text-gray-800">Letöltés (Pull)</h4>
+                            <p class="text-xs text-gray-500">Adatok lekérése a felhőből</p>
+                        </div>
+                    </div>
+                    <div id="pullStats" class="mt-2 text-xs text-gray-600">Ellenőrzés...</div>
+                </button>
+                
+                <button id="btnPushData" class="p-4 bg-emerald-50 hover:bg-emerald-100 border-2 border-emerald-200 rounded-2xl transition text-left">
+                    <div class="flex items-center gap-3">
+                        <i class="fas fa-cloud-upload-alt text-emerald-600 text-xl"></i>
+                        <div>
+                            <h4 class="font-bold text-gray-800">Feltöltés (Push)</h4>
+                            <p class="text-xs text-gray-500">Helyi adatok feltöltése a felhőbe</p>
+                        </div>
+                    </div>
+                    <div id="pushStats" class="mt-2 text-xs text-gray-600">Ellenőrzés...</div>
+                </button>
+            </div>
+            
+            <!-- Részletes lista -->
+            <div class="border-t border-gray-200 pt-4">
+                <h4 class="text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">
+                    <i class="fas fa-list-ul text-gray-400"></i> Részletes változások
+                </h4>
+                <div id="syncDetails" class="bg-gray-50 rounded-xl p-3 max-h-[150px] overflow-y-auto text-xs font-mono">
+                    <p class="text-gray-400 italic">Kattints a "Letöltés" vagy "Feltöltés" gombra az adatok ellenőrzéséhez.</p>
+                </div>
+            </div>
+            
+            <!-- Függő változtatások (offline) -->
+            <div id="pendingChangesContainer" class="mt-4 border-t border-amber-200 pt-4 hidden">
+                <h4 class="text-sm font-bold text-amber-700 mb-2 flex items-center gap-2">
+                    <i class="fas fa-clock text-amber-500"></i> Függőben lévő változtatások (offline)
+                </h4>
+                <div id="pendingChangesList" class="bg-amber-50 rounded-xl p-3 text-xs"></div>
+            </div>
+        </div>
+        
+        <!-- Műveleti gombok -->
+        <div class="border-t border-gray-100 flex text-sm font-bold bg-gray-50">
+            <button id="btnCancelSync" class="flex-1 py-4 text-gray-600 hover:bg-gray-100 transition text-center border-r border-gray-100 uppercase tracking-wider">
+                Bezárás
+            </button>
+            <button id="btnExecuteSync" class="flex-1 py-4 bg-indigo-600 text-white hover:bg-indigo-700 transition text-center font-black uppercase tracking-wider shadow-inner flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                <i class="fas fa-play"></i> Szinkronizáció indítása
+            </button>
         </div>
     </div>
 </div>

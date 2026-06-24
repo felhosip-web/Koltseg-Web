@@ -91,14 +91,14 @@ export class CellModalController {
         document.getElementById('cellAmountInput').focus();
     }
 
-    async deleteEntry(id) {
-        const targetEntry = this.app.entries.entries.find(ent => ent.id === id);
-        const confirmed = await this.app.hmiNotif.showConfirm(
-            'Rész-tétel törlése',
-            `Biztosan törli ezt a rész-tételt (${targetEntry.amount.toLocaleString()} ${targetEntry.currency})?`,
-            true,
-            'Törlés'
-        );
+       async deleteEntry(id) {
+       const targetEntry = this.app.entries.entries.find(ent => ent.id === id);
+       const confirmed = await this.app.hmiNotif.showConfirm({
+           title: 'Rész-tétel törlése',
+           message: `Biztosan törli ezt a rész-tételt (${targetEntry.amount.toLocaleString()} ${targetEntry.currency})?`,
+            type: 'danger',
+           confirmText: 'Törlés'
+        });
         if (confirmed) {
             await this.app.entries.deleteEntry(id);
             await this.app.entries.load();

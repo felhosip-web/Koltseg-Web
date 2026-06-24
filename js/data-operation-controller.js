@@ -1,41 +1,186 @@
-// js/data-operation-controller.js
+// js/data-operation-controller.js - Adatműveletek egységes modal-okkal
+// Tartalmazza: Szinkronizáció, Excel, PDF, JSON export/import, Wipe, Backup restore
+
 export class DataOperationController {
     constructor(app) {
         this.app = app;
     }
 
+    // ==================== SZINKRONIZÁCIÓ ====================
     async forceSync() {
-        this.app.renderer.updateFooterStatus('Teljes szinkronizáció (push + pull)...', false);
+        this.app.renderer.updateFooterStatus('Teljes szinkronizáció...', false);
+        
         try {
-            // Push minden helyi adatot
-            await Promise.all([
-                this.app.items.items.forEach(item => this.app.cloud.push('items', item)),
-                this.app.entries.entries.forEach(entry => this.app.cloud.push('entries', entry)),
-                // stb.
-            ]);
+            // === 1. ELLENŐRZÉSEK (csak ConfigManager-ből) ===
+            const config = this.app.config;
+            if (!config) {
+                await this.app.hmiNotif.showInfo(
+                    '⚠️ Konfigurációs hiba',
+                    'A ConfigManager nem elérhető!'
+                );
+                return;
+            }
 
-            this.app.hmiNotif.showToast('Szinkronizáció elindítva (push sikeres)', 'success');
-            this.app.renderer.updateFooterStatus('Supabase szinkronizálva', false);
+            const useCloud = config.useSupabase === true;
+            const hasUrl = !!(config.supabaseConfig?.url);
+            const hasKey = !!(config.supabaseConfig?.key);
+            
+            if (!useCloud) {
+                await this.app.hmiNotif.showInfo(
+                    '☁️ Felhő kikapcsolva',
+                    'A szinkronizációhoz kapcsold be a felhőt a Beállításokban!\n\n' +
+                    '1. Kattints a ⚙️ gombra\n' +
+                    '2. Kapcsold be a "Felhő használata" opciót\n' +
+                    '3. Add meg a Supabase URL-t és API kulcsot\n' +
+                    '4. Kattints a "Mentés és Alkalmazás" gombra'
+                );
+                return;
+            }
+
+            if (!hasUrl || !hasKey) {
+                await this.app.hmiNotif.showInfo(
+                    '⚠️ Hiányzó Supabase adatok',
+                    'A szinkronizációhoz meg kell adni a Supabase URL-t és API kulcsot!\n\n' +
+                    '1. Kattints a ⚙️ gombra\n' +
+                    '2. Töltsd ki a Supabase URL és Anon Public API Key mezőket\n' +
+                    '3. Kattints a "Mentés és Alkalmazás" gombra'
+                );
+                return;
+            }
+
+            // Internet kapcsolat ellenőrzése
+            if (!navigator.onLine) {
+                await this.app.hmiNotif.showInfo(
+                    '📡 Nincs internetkapcsolat',
+                    'A szinkronizációhoz internetkapcsolat szükséges!\n\n' +
+                    'Ellenőrizd a hálózati kapcsolatot, majd próbáld újra.'
+                );
+                return;
+            }
+
+            // === 2. STATUSZ LEKÉRÉS ===
+            const syncService = this.app.syncService || this.app.syncManager;
+            if (!syncService) {
+                throw new Error('Szinkronizációs szolgáltatás nem elérhető!');
+            }
+
+            const status = syncService.getStatus ? syncService.getStatus() : { 
+                useCloud: useCloud,
+                hasCloud: true,
+                pendingChanges: 0,
+                lastSyncTime: null
+            };
+
+            // Függő változtatások
+            const pendingCount = status.pendingChanges || 0;
+            
+            // Üzenet összeállítása
+            let message = `📋 Szinkronizációs információk:\n\n`;
+            message += `☁️ Felhő állapot: ${status.useCloud ? '✅ Aktív' : '❌ Inaktív'}\n`;
+            message += `📦 Függő változtatások: ${pendingCount} db\n`;
+            if (status.lastSyncTime) {
+                message += `🕐 Utolsó szinkron: ${status.lastSyncTime.toLocaleString('hu-HU')}\n`;
+            }
+            
+            // Cloud kapcsolat ellenőrzése
+            if (status.hasCloud !== undefined) {
+                message += `🔗 Kapcsolat: ${status.hasCloud ? '✅ Elérhető' : '❌ Nem elérhető'}\n`;
+            }
+            
+            message += `\n💡 A szinkronizáció során:\n`;
+            message += `• A helyi adatok feltöltésre kerülnek a felhőbe (push)\n`;
+            message += `• A felhőben lévő újabb adatok letöltésre kerülnek (pull)\n`;
+            message += `• Konfliktus esetén a frissebb időbélyegű adat marad meg\n\n`;
+            message += `Folytatod a szinkronizációt?`;
+
+            const confirmed = await this.app.hmiNotif.showConfirm({
+                title: '🔄 Szinkronizáció indítása',
+                message: message,
+                type: 'info',
+                confirmText: '✅ Indítás'
+            });
+
+            if (!confirmed) return;
+
+            // === 3. SZINKRONIZÁCIÓ VÉGREHAJTÁSA ===
+            this.app.renderer.updateFooterStatus('🔄 Szinkronizáció folyamatban...', false);
+            this.app.hmiNotif.showToast('🔄 Szinkronizáció indul...', 'info');
+
+            try {
+                // SyncService vagy SyncManager sync metódusa
+                let result;
+                if (typeof syncService.sync === 'function') {
+                    result = await syncService.sync();
+                } else if (typeof syncService.fullSync === 'function') {
+                    result = await syncService.fullSync();
+                } else {
+                    throw new Error('A szinkronizációs szolgáltatás nem támogatja a sync műveletet!');
+                }
+
+                // === 4. UI FRISSÍTÉS ===
+                this.app.renderer.renderTable();
+                this.app.renderStats?.();
+                this.app.remindersRenderer?.renderList?.();
+                this.app.updateReminderStatus?.();
+
+                const syncTime = new Date().toLocaleTimeString('hu-HU');
+                this.app.hmiNotif.showToast('✅ Szinkronizáció sikeres!', 'success');
+                this.app.renderer.updateFooterStatus(`✅ Szinkronizálva: ${syncTime}`, false);
+
+                console.log('[SYNC] Szinkronizáció eredménye:', result);
+
+            } catch (syncError) {
+                console.error('[SYNC ERROR]', syncError);
+                
+                // Hibaüzenet részletezése
+                let errorMsg = syncError.message || 'Ismeretlen hiba';
+                if (errorMsg.includes('JWT')) {
+                    errorMsg = 'Hitelesítési hiba! Ellenőrizd a Supabase API kulcsot.';
+                } else if (errorMsg.includes('network')) {
+                    errorMsg = 'Hálózati hiba! Ellenőrizd az internetkapcsolatot.';
+                } else if (errorMsg.includes('permission')) {
+                    errorMsg = 'Jogosultsági hiba! Ellenőrizd a Supabase RLS szabályokat.';
+                }
+
+                await this.app.hmiNotif.showInfo(
+                    '❌ Szinkronizációs hiba',
+                    `Hiba történt a szinkronizáció során:\n\n${errorMsg}\n\n` +
+                    `Próbáld újra később, vagy ellenőrizd a konzolt (F12) a részletekért.`
+                );
+                this.app.renderer.updateFooterStatus('❌ Szinkronizációs hiba!', true);
+            }
+
         } catch (err) {
-            console.error('[HMI SYNC ERR]', err);
-            this.app.hmiNotif.showToast('Szinkronizációs hiba!', 'error');
+            console.error('[FORCE SYNC ERROR]', err);
+            await this.app.hmiNotif.showInfo(
+                '❌ Kritikus hiba',
+                `A szinkronizáció előkészítése során hiba történt:\n\n${err.message || 'Ismeretlen hiba'}`
+            );
+            this.app.renderer.updateFooterStatus('❌ Kritikus hiba!', true);
         }
     }
 
-    exportExcel() {
+    // ==================== EXCEL EXPORT ====================
+    async exportExcel() {
         this.app.renderer.updateFooterStatus('Részletes Excel generálása...', false);
     
         try {
+            const entries = this.app.entries.entries;
+            if (entries.length === 0) {
+                await this.app.hmiNotif.showInfo(
+                    'Nincs adat',
+                    'Nincs megjeleníthető adat az Excel exportáláshoz!'
+                );
+                return;
+            }
+
             const wb = XLSX.utils.book_new();
             const items = this.app.items.items;
             const months = this.app.months.months;
-            const entries = this.app.entries.entries;
-            const eurRate = this.app.renderer.getEffectiveEurRate?.() || 400;
+            const eurRate = this.app.config.eurRate || 400;
 
-            // === 1. FŐ ADATLAP - Részletes mátrix ===
+            // === 1. FŐ ADATLAP ===
             const mainData = [];
-        
-            // Fejléc
             const header = ['Kategória', ...months.flatMap(m => [
                 `${m} HUF`,
                 `${m} EUR`,
@@ -46,26 +191,22 @@ export class DataOperationController {
 
             items.forEach(item => {
                 const row = [item.name];
-            
                 months.forEach(month => {
                     const cellBaseKey = `${item.id}_${month}`;
                     const cellEntries = entries.filter(e => e.cellKey && e.cellKey.startsWith(cellBaseKey));
 
                     let huf = 0, eur = 0;
-
                     cellEntries.forEach(e => {
                         if (e.currency === 'EUR') eur += e.amount;
                         else huf += e.amount;
                     });
 
                     const totalFt = huf + Math.round(eur * eurRate);
-
-                    row.push(huf > 0 ? huf : 0);
-                    row.push(eur > 0 ? eur : 0);
-                    row.push(totalFt > 0 ? totalFt : 0);
+                    row.push(huf || 0);
+                    row.push(eur || 0);
+                    row.push(totalFt || 0);
                     row.push(cellEntries.length);
                 });
-            
                 mainData.push(row);
             });
 
@@ -83,30 +224,21 @@ export class DataOperationController {
                 totalRow.push(monthHuf);
                 totalRow.push(monthEur);
                 totalRow.push(monthTotal);
-                totalRow.push(''); // darabszám nem releváns az összesítőnél
+                totalRow.push('');
             });
             mainData.push(totalRow);
 
             const mainSheet = XLSX.utils.aoa_to_sheet(mainData);
-        
-            // Oszlopszélesség finomhangolás
-            const colWidths = [{wch: 35}]; // Kategória
-            for (let i = 0; i < months.length * 4; i++) {
-                colWidths.push({wch: 14});
-            }
-            mainSheet['!cols'] = colWidths;
-
+            mainSheet['!cols'] = [{wch: 35}, ...Array(months.length * 4).fill({wch: 14})];
             XLSX.utils.book_append_sheet(wb, mainSheet, 'Költség Mátrix');
 
-            // === 2. FIZETÉSI MÓD BONTÁS LAP ===
+            // === 2. FIZETÉSI MÓD BONTÁS ===
             const methodData = [['Fizetési mód', ...months, 'Összesen Ft']];
-        
             const methods = ['Kártya', 'Készpénz', 'Utalás', 'Egyéb'];
-        
+
             methods.forEach(method => {
                 const row = [method];
                 let methodTotal = 0;
-            
                 months.forEach(month => {
                     let sum = 0;
                     entries.forEach(e => {
@@ -131,14 +263,12 @@ export class DataOperationController {
                 ['Generálva', new Date().toLocaleString('hu-HU')],
                 ['EUR Árfolyam', eurRate + ' Ft'],
                 ['', ''],
-                ['Összes kiadás (Ft)', ''],
                 ['Kategóriák száma', items.length],
                 ['Hónapok száma', months.length],
                 ['Bejegyzések száma', entries.length],
                 ['', '']
             ];
 
-            // Fizetési mód összesítők
             let totalCard = 0, totalCash = 0, totalTransfer = 0, totalOther = 0;
             entries.forEach(e => {
                 const amt = e.currency === 'EUR' ? Math.round(e.amount * eurRate) : e.amount;
@@ -149,7 +279,6 @@ export class DataOperationController {
             });
 
             const grandTotal = totalCard + totalCash + totalTransfer + totalOther;
-
             stats.push(['Összes kiadás', grandTotal]);
             stats.push(['Kártya', totalCard]);
             stats.push(['Készpénz', totalCash]);
@@ -159,22 +288,35 @@ export class DataOperationController {
             const statsSheet = XLSX.utils.aoa_to_sheet(stats);
             XLSX.utils.book_append_sheet(wb, statsSheet, 'Statisztika');
 
-            // Mentés
-            XLSX.writeFile(wb, `koltseg_nyilvantartas_reszletes_${new Date().toISOString().slice(0,10)}.xlsx`);
+            XLSX.writeFile(wb, `koltseg_nyilvantartas_${new Date().toISOString().slice(0,10)}.xlsx`);
 
-            this.app.hmiNotif.showToast('Részletes Excel fájl letöltve!', 'success');
-            this.app.renderer.updateFooterStatus('Sikeres Excel export', false);
+            this.app.hmiNotif.showToast('✅ Excel fájl letöltve!', 'success');
+            this.app.renderer.updateFooterStatus('Excel export kész', false);
 
         } catch (err) {
-            console.error('[EXCEL ENGINE ERROR]', err);
-            this.app.hmiNotif.showToast('Excel generálási hiba!', 'error');
+            console.error('[EXCEL ERROR]', err);
+            await this.app.hmiNotif.showInfo(
+                '❌ Excel generálási hiba',
+                `Hiba történt az Excel exportálás során:\n\n${err.message || 'Ismeretlen hiba'}`
+            );
+            this.app.renderer.updateFooterStatus('Excel hiba!', true);
         }
     }
 
+    // ==================== PDF EXPORT ====================
     async exportPdf() {
-        this.app.renderer.updateFooterStatus('Részletes hivatalos PDF generálása...', false);
+        this.app.renderer.updateFooterStatus('Részletes PDF generálása...', false);
     
         try {
+            const entries = this.app.entries.entries;
+            if (entries.length === 0) {
+                await this.app.hmiNotif.showInfo(
+                    'Nincs adat',
+                    'Nincs megjeleníthető adat a PDF exportáláshoz!'
+                );
+                return;
+            }
+
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF({
                 orientation: 'landscape',
@@ -184,22 +326,19 @@ export class DataOperationController {
 
             const items = this.app.items.items;
             const months = this.app.months.months;
-            const entries = this.app.entries.entries;
-            const eurRate = this.app.renderer.getEffectiveEurRate?.() || 400;
+            const eurRate = this.app.config.eurRate || 400;
 
             let y = 20;
 
-            // Fejléc
             doc.setFont('helvetica', 'bold');
             doc.setFontSize(18);
-            doc.text('KÖLTSÉG NYILVÁNTARTÁS - RÉSZLETES HIVATALOS ÖSSZESÍTŐ', 20, y);
+            doc.text('KÖLTSÉG NYILVÁNTARTÁS - RÉSZLETES ÖSSZESÍTŐ', 20, y);
             y += 8;
 
             doc.setFontSize(11);
             doc.text(`Generálva: ${new Date().toLocaleDateString('hu-HU')} | EUR árfolyam: ${eurRate} Ft/EUR`, 20, y);
             y += 15;
 
-            // === FŐ TÁBLA - Részletes cellákkal ===
             doc.setFontSize(14);
             doc.text('1. Részletes kiadások kategóriánként és hónaponként', 20, y);
             y += 8;
@@ -209,103 +348,56 @@ export class DataOperationController {
 
             items.forEach(item => {
                 const row = [item.name];
-
                 months.forEach(month => {
                     const cellBaseKey = `${item.id}_${month}`;
                     const cellEntries = entries.filter(e => e.cellKey && e.cellKey.startsWith(cellBaseKey));
 
-                    let totalHUF = 0;
-                    let totalEUR = 0;
-                    let details = [];
-
+                    let totalHUF = 0, totalEUR = 0;
                     cellEntries.forEach(e => {
-                        if (e.currency === 'EUR') {
-                            totalEUR += e.amount;
-                            details.push(`${e.amount} EUR (${e.paymentMethod})`);
-                        } else {
-                            totalHUF += e.amount;
-                            details.push(`${e.amount} Ft (${e.paymentMethod})`);
-                        }
+                        if (e.currency === 'EUR') totalEUR += e.amount;
+                        else totalHUF += e.amount;
                     });
 
-                    const totalHUF_Ft = totalHUF;
                     const totalEUR_Ft = Math.round(totalEUR * eurRate);
-                    const grandCellTotal = totalHUF_Ft + totalEUR_Ft;
+                    const grandCellTotal = totalHUF + totalEUR_Ft;
 
                     let cellText = '-';
                     if (grandCellTotal > 0) {
-                        cellText = `${totalHUF_Ft.toLocaleString('hu-HU')} | ${totalEUR} EUR | ${grandCellTotal.toLocaleString('hu-HU')} Ft`;
-                    
-                        // Ha több tétel van, jelezzük
+                        cellText = `${totalHUF.toLocaleString('hu-HU')} | ${totalEUR} EUR | ${grandCellTotal.toLocaleString('hu-HU')} Ft`;
                         if (cellEntries.length > 1) {
                             cellText += `\n(${cellEntries.length} tétel)`;
                         }
                     }
-
                     row.push(cellText);
                 });
-
                 tableRows.push(row);
             });
-
-            // Összesítő sor
-            const totalRow = ['ÖSSZESEN'];
-            let grandTotalAll = 0;
-
-            months.forEach(month => {
-                let monthHUF = 0, monthEUR = 0;
-                entries.forEach(e => {
-                    if (e.cellKey && e.cellKey.includes(`_${month}`)) {
-                        if (e.currency === 'EUR') monthEUR += e.amount;
-                        else monthHUF += e.amount;
-                    }
-                });
-                const monthTotal = monthHUF + Math.round(monthEUR * eurRate);
-                totalRow.push(monthTotal > 0 ? 
-                    `${monthHUF.toLocaleString()} | ${monthEUR} EUR | ${monthTotal.toLocaleString()} Ft` : '-');
-                grandTotalAll += monthTotal;
-            });
-
-            tableRows.push(totalRow);
 
             doc.autoTable({
                 startY: y,
                 head: [tableColumn],
                 body: tableRows,
                 theme: 'grid',
-                styles: { 
-                    fontSize: 8.5, 
-                    cellPadding: 4,
-                    lineColor: [200, 200, 200]
-                },
-                headStyles: { 
-                    fillColor: [30, 58, 138], 
-                    textColor: 255, 
-                    fontStyle: 'bold',
-                    halign: 'center'
-                },
-                columnStyles: { 
-                    0: { halign: 'left', cellWidth: 48 } 
-                },
+                styles: { fontSize: 8.5, cellPadding: 4, lineColor: [200, 200, 200] },
+                headStyles: { fillColor: [30, 58, 138], textColor: 255, fontStyle: 'bold', halign: 'center' },
+                columnStyles: { 0: { halign: 'left', cellWidth: 48 } },
                 margin: { left: 12, right: 12, top: 10 }
             });
 
             y = doc.lastAutoTable.finalY + 15;
 
-            // === FIZETÉSI MÓD BONTÁS (marad) ===
+            // Fizetési mód bontás
             doc.setFontSize(14);
             doc.text('2. Fizetési mód szerinti bontás', 20, y);
             y += 8;
 
             const methods = ['Kártya', 'Készpénz', 'Utalás', 'Egyéb'];
             const methodTableColumn = ['Fizetési mód', ...months, 'Összesen'];
-
             const methodRows = [];
 
             methods.forEach(method => {
                 const row = [method];
                 let methodGrandTotal = 0;
-
                 months.forEach(month => {
                     let monthMethodTotal = 0;
                     entries.forEach(e => {
@@ -316,7 +408,6 @@ export class DataOperationController {
                     row.push(monthMethodTotal > 0 ? monthMethodTotal.toLocaleString('hu-HU') + ' Ft' : '-');
                     methodGrandTotal += monthMethodTotal;
                 });
-
                 row.push(methodGrandTotal > 0 ? methodGrandTotal.toLocaleString('hu-HU') + ' Ft' : '-');
                 methodRows.push(row);
             });
@@ -329,66 +420,61 @@ export class DataOperationController {
                 styles: { fontSize: 10, cellPadding: 5, halign: 'right' },
                 headStyles: { fillColor: [16, 185, 129], textColor: 255, fontStyle: 'bold' },
                 alternateRowStyles: { fillColor: [240, 253, 244] },
-                columnStyles: { 
-                    0: { halign: 'left', cellWidth: 45 },
-                    [methodTableColumn.length - 1]: { fontStyle: 'bold' }
-                },
+                columnStyles: { 0: { halign: 'left', cellWidth: 45 } },
                 margin: { left: 15, right: 15 }
             });
 
-            y = doc.lastAutoTable.finalY + 12;
-        
+            doc.save(`koltseg_nyilvantartas_${new Date().toISOString().slice(0,10)}.pdf`);
 
-            // Végső összesítő
-            doc.setFontSize(14);
-            doc.setFont('helvetica', 'bold');
-            doc.text(`TELJES IDŐSZAK ÖSSZES KIADÁSA: ${grandTotalAll.toLocaleString('hu-HU')} Ft`, 20, y + 10);
-
-            doc.save(`koltseg_nyilvantartas_reszletes_${new Date().toISOString().slice(0,10)}.pdf`);
-
-            this.app.hmiNotif.showToast('Részletes PDF letöltve!', 'success');
-            this.app.renderer.updateFooterStatus('Sikeres részletes PDF export', false);
+            this.app.hmiNotif.showToast('✅ PDF fájl letöltve!', 'success');
+            this.app.renderer.updateFooterStatus('PDF export kész', false);
 
         } catch (err) {
-            console.error('[PDF ENGINE ERROR]', err);
-            this.app.hmiNotif.showToast('PDF generálási hiba!', 'error');
+            console.error('[PDF ERROR]', err);
+            await this.app.hmiNotif.showInfo(
+                '❌ PDF generálási hiba',
+                `Hiba történt a PDF exportálás során:\n\n${err.message || 'Ismeretlen hiba'}`
+            );
+            this.app.renderer.updateFooterStatus('PDF hiba!', true);
         }
     }
 
-    exportJson() {
-        this.app.renderer.updateFooterStatus('Teljes JSON backup készítése (Supabase beállításokkal)...', false);
+    // ==================== JSON EXPORT ====================
+    async exportJson() {
+        this.app.renderer.updateFooterStatus('Teljes JSON backup készítése...', false);
+        
         try {
+            const entries = this.app.entries.entries;
+            if (entries.length === 0) {
+                const confirmed = await this.app.hmiNotif.showConfirm({
+                    title: 'Üres adatbázis',
+                    message: 'Nincs egyetlen bejegyzés sem. Mégis exportálnád az üres adatbázist?',
+                    type: 'warning',
+                    confirmText: 'Igen, exportálom'
+                });
+                if (!confirmed) return;
+            }
+
             const backupData = {
-                version: 'v4.9-OOP-FULL-SECURE',
+                version: 'v4.0',
                 timestamp: new Date().toISOString(),
                 appVersion: 'Költség Nyilvántartó v4.0',
-                
-                // Domain adatok
                 items: this.app.items.items || [],
                 months: this.app.months.months || [],
                 entries: this.app.entries.entries || [],
                 templates: this.app.templates?.templates || [],
                 reminders: this.app.reminderManager?.reminders || [],
-                
-                // Supabase teljes konfiguráció (saját használatra)
                 supabaseConfig: {
-                    url: this.app.config?.supabaseConfig?.url || 
-                         localStorage.getItem('supabase_url') || '',
-                    key: this.app.config?.supabaseConfig?.key || 
-                         localStorage.getItem('supabase_key') || '',
-                    useCloud: this.app.config?.useSupabase || 
-                              localStorage.getItem('supabase_use') === 'true' || false
+                    url: this.app.config?.supabaseConfig?.url || '',
+                    key: this.app.config?.supabaseConfig?.key || '',
+                    useCloud: this.app.config?.useSupabase || false
                 },
-                
-                // Egyéb beállítások
                 settings: {
-                    eurRate: this.app.config?.eurRate || this.app.eurRate || 400
+                    eurRate: this.app.config?.eurRate || 400
                 }
             };
 
-            const dataStr = 'data:text/json;charset=utf-8,' + 
-                           encodeURIComponent(JSON.stringify(backupData, null, 2));
-
+            const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(backupData, null, 2));
             const downloadAnchor = document.createElement('a');
             downloadAnchor.setAttribute('href', dataStr);
             downloadAnchor.setAttribute('download', `koltseg_full_backup_${new Date().toISOString().slice(0,10)}.json`);
@@ -396,14 +482,19 @@ export class DataOperationController {
             downloadAnchor.click();
             downloadAnchor.remove();
 
-            this.app.hmiNotif.showToast('Teljes backup (Supabase-el) letöltve!', 'success');
-            this.app.renderer.updateFooterStatus('JSON Export kész', false);
+            this.app.hmiNotif.showToast('✅ JSON backup letöltve!', 'success');
+            this.app.renderer.updateFooterStatus('JSON export kész', false);
+
         } catch (err) {
-            console.error('[JSON EXPORT ERR]', err);
-            this.app.hmiNotif.showToast('Exportálási hiba!', 'error');
+            console.error('[JSON EXPORT ERROR]', err);
+            await this.app.hmiNotif.showInfo(
+                '❌ JSON exportálási hiba',
+                `Hiba történt a JSON exportálás során:\n\n${err.message || 'Ismeretlen hiba'}`
+            );
         }
     }
 
+    // ==================== JSON IMPORT ====================
     async importJson() {
         const fileInput = document.createElement('input');
         fileInput.type = 'file';
@@ -419,15 +510,19 @@ export class DataOperationController {
                     const importedData = JSON.parse(event.target.result);
 
                     if (!importedData.items || !importedData.entries) {
-                        throw new Error('Érvénytelen backup fájl!');
+                        await this.app.hmiNotif.showInfo(
+                            'Érvénytelen fájl',
+                            'A kiválasztott fájl nem érvényes backup fájl!'
+                        );
+                        return;
                     }
 
-                    const confirmed = await this.app.hmiNotif.showConfirm(
-                        'TELJES ADATBÁZIS + BEÁLLÍTÁSOK FELÜLÍRÁSA',
-                        `Importálsz egy teljes backupot?\n\nVerzió: ${importedData.version || 'ismeretlen'}\nDátum: ${importedData.timestamp || 'ismeretlen'}\n\nEz felülírja az összes adatot ÉS a Supabase beállításokat is!`,
-                        true,
-                        'IGEN, FELÜLÍROM'
-                    );
+                    const confirmed = await this.app.hmiNotif.showConfirm({
+                        title: '⚠️ TELJES ADATBÁZIS FELÜLÍRÁSA',
+                        message: `Importálsz egy teljes backupot?\n\n📁 Verzió: ${importedData.version || 'ismeretlen'}\n📅 Dátum: ${importedData.timestamp || 'ismeretlen'}\n\nEz felülírja az összes jelenlegi adatot!`,
+                        type: 'danger',
+                        confirmText: 'IGEN, FELÜLÍROM'
+                    });
 
                     if (!confirmed) return;
 
@@ -438,14 +533,12 @@ export class DataOperationController {
 
                     const tx = dbRaw.transaction(['items', 'months', 'entries', 'templates', 'reminders'], 'readwrite');
 
-                    // Törlés
                     tx.objectStore('items').clear();
                     tx.objectStore('months').clear();
                     tx.objectStore('entries').clear();
                     tx.objectStore('templates').clear();
                     tx.objectStore('reminders').clear();
 
-                    // Visszaírás
                     importedData.items?.forEach(item => tx.objectStore('items').put(item));
                     importedData.months?.forEach(m => {
                         if (typeof m === 'string') tx.objectStore('months').put({ month: m });
@@ -456,32 +549,26 @@ export class DataOperationController {
                     importedData.reminders?.forEach(rem => tx.objectStore('reminders').put(rem));
 
                     tx.oncomplete = async () => {
-                        // Supabase beállítások visszaállítása
+                        // Supabase beállítások
                         if (importedData.supabaseConfig) {
                             const cfg = importedData.supabaseConfig;
-                            
                             localStorage.setItem('supabase_url', cfg.url || '');
                             localStorage.setItem('supabase_key', cfg.key || '');
                             localStorage.setItem('supabase_use', cfg.useCloud ? 'true' : 'false');
-
                             if (this.app.config) {
                                 this.app.config.supabaseConfig = cfg;
                                 this.app.config.useSupabase = cfg.useCloud;
                             }
-                            
-                            // Cloud kliens újrainicializálása
                             if (typeof this.app.cloud?.init === 'function') {
                                 this.app.cloud.init();
                             }
                         }
 
-                        // EUR árfolyam
                         if (importedData.settings?.eurRate) {
                             localStorage.setItem('eurRate', importedData.settings.eurRate);
                             if (this.app.config) this.app.config.eurRate = importedData.settings.eurRate;
                         }
 
-                        // UI frissítés
                         await Promise.all([
                             this.app.items.load(),
                             this.app.months.load(),
@@ -492,14 +579,18 @@ export class DataOperationController {
 
                         this.app.renderer.renderTable();
                         this.app.remindersRenderer?.renderList?.();
+                        this.app.renderStats?.();
 
-                        this.app.hmiNotif.showToast('Teljes backup sikeresen visszaállítva (Supabase beállításokkal)!', 'success');
-                        this.app.renderer.updateFooterStatus('JSON Import kész', false);
+                        this.app.hmiNotif.showToast('✅ Backup sikeresen visszaállítva!', 'success');
+                        this.app.renderer.updateFooterStatus('JSON import kész', false);
                     };
 
                 } catch (err) {
-                    console.error('[JSON IMPORT ERR]', err);
-                    this.app.hmiNotif.showToast('Hibás vagy sérült JSON fájl!', 'error');
+                    console.error('[JSON IMPORT ERROR]', err);
+                    await this.app.hmiNotif.showInfo(
+                        '❌ Importálási hiba',
+                        `Hiba történt az importálás során:\n\n${err.message || 'Érvénytelen JSON formátum'}`
+                    );
                 }
             };
             reader.readAsText(file);
@@ -508,22 +599,23 @@ export class DataOperationController {
         fileInput.click();
     }
 
+    // ==================== ADATBÁZIS WIPE ====================
     async wipeDatabase() {
-        const firstConfirm = await this.app.hmiNotif.showConfirm(
-            'MINDEN HELYI ADAT TÖRLÉSE!',
-            'Biztosan ki akarja törölni a **TELJES** helyi adatbázist?\n\nMinden kategória, hónap, tranzakció, sablon és határidő törlődni fog!',
-            true,
-            'IGEN, TÖRÖLJÖM'
-        );
+        const firstConfirm = await this.app.hmiNotif.showConfirm({
+            title: '🚨 MINDEN HELYI ADAT TÖRLÉSE!',
+            message: 'Biztosan ki akarja törölni a **TELJES** helyi adatbázist?\n\nMinden kategória, hónap, tranzakció, sablon és határidő törlődni fog!',
+            type: 'danger',
+            confirmText: 'IGEN, TÖRÖLJÖM'
+        });
 
         if (!firstConfirm) return;
 
-        const secondConfirm = await this.app.hmiNotif.showConfirm(
-            'VÉGSŐ BIZTONSÁGI ELLENŐRZÉS',
-            'Ez a művelet **visszafordíthatatlan**!\n\nBiztosan törli az összes helyi adatot?',
-            true,
-            'VÉGLEGES TÖRLÉS'
-        );
+        const secondConfirm = await this.app.hmiNotif.showConfirm({
+            title: '🚨 VÉGSŐ BIZTONSÁGI ELLENŐRZÉS',
+            message: 'Ez a művelet **visszafordíthatatlan**!\n\nBiztosan törli az összes helyi adatot?',
+            type: 'danger',
+            confirmText: 'VÉGLEGES TÖRLÉS'
+        });
 
         if (!secondConfirm) return;
 
@@ -542,7 +634,6 @@ export class DataOperationController {
             tx.objectStore('reminders').clear();
 
             tx.oncomplete = async () => {
-                // Teljes újratöltés
                 await Promise.all([
                     this.app.items.load(),
                     this.app.months.load(),
@@ -553,15 +644,24 @@ export class DataOperationController {
 
                 this.app.renderer.renderTable();
                 this.app.remindersRenderer?.renderList?.();
+                this.app.renderStats?.();
 
-                this.app.hmiNotif.showToast('Minden helyi adat törölve! Gyári állapot visszaállítva.', 'error');
+                this.app.hmiNotif.showToast('🗑️ Minden helyi adat törölve!', 'error');
                 this.app.renderer.updateFooterStatus('Adatbázis kiürítve', false);
             };
 
         } catch (err) {
             console.error('[WIPE DATABASE ERROR]', err);
-            this.app.hmiNotif.showToast('Hiba történt a törlés során!', 'error');
+            await this.app.hmiNotif.showInfo(
+                '❌ Törlési hiba',
+                `Hiba történt az adatbázis törlése során:\n\n${err.message || 'Ismeretlen hiba'}`
+            );
             this.app.renderer.updateFooterStatus('Törlési hiba!', true);
         }
+    }
+
+    // ==================== BACKUP VISSZAÁLLÍTÁS ====================
+    async restoreFromBackup() {
+        await this.app.backupManager.restoreFromBackup();
     }
 }

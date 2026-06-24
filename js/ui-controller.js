@@ -68,10 +68,10 @@ export class UIController {
                 this.cellModal.selectedColor = e.currentTarget.getAttribute('data-color');
             });
         });
-
+ 
         document.getElementById('btnForceSync')?.addEventListener('click', () => {
-            this.togglePanel('exportMenu');
-            this.dataOps.forceSync();
+          this.togglePanel('exportMenu');
+          this.openSyncModal(); // Új modal megnyitása
         });
         document.getElementById('btnExportExcel')?.addEventListener('click', () => {
             this.togglePanel('exportMenu');
@@ -89,6 +89,17 @@ export class UIController {
             this.togglePanel('exportMenu');
             this.dataOps.importJson();
         });
+        // Backup gombok
+document.getElementById('btnRestoreBackup')?.addEventListener('click', () => {
+    this.togglePanel('exportMenu');
+    this.dataOps.restoreFromLocalBackup();
+});
+
+document.getElementById('btnForceBackup')?.addEventListener('click', () => {
+    this.togglePanel('exportMenu');
+    this.app._performBackup();
+    this.app.hmiNotif.showToast('✅ Backup mentés kész!', 'success');
+});
         document.getElementById('btnWipeDatabase')?.addEventListener('click', async () => {
             this.togglePanel('exportMenu');
             await this.dataOps.wipeDatabase();
@@ -161,12 +172,12 @@ export class UIController {
         const allEntries = this.app.entries.entries;
         const associatedEntries = allEntries.filter(e => e.cellKey && e.cellKey.startsWith(`${itemId}_`));
 
-        const confirmed = await this.app.hmiNotif.showConfirm(
-            'KRITIKUS: Kategóriasor törlése',
-            `Biztosan törölni szeretné a teljes "${itemName.toUpperCase()}" kategóriát az összes havi rész-tételével (${associatedEntries.length} db) együtt?`,
-            true,
-            'SOR TÖRLÉSE'
-        );
+        const confirmed = await this.app.hmiNotif.showConfirm({
+           title: '⚠️ KRITIKUS: Kategóriasor törlése',
+           message: `Biztosan törölni szeretné a teljes "${itemName.toUpperCase()}" kategóriát az összes havi rész-tételével (${associatedEntries.length} db) együtt?`,
+          type: 'danger',
+           confirmText: 'SOR TÖRLÉSE'
+         });
 
         if (confirmed) {
             try {
@@ -205,4 +216,208 @@ export class UIController {
             }
         }
     }
+    
+    // ui-controller.js - Új metódus
+
+openSyncModal() {
+    const modal = document.getElementById('syncModal');
+    const pullBtn = document.getElementById('btnPullData');
+    const pushBtn = document.getElementById('btnPushData');
+    const executeBtn = document.getElementById('btnExecuteSync');
+    const statusText = document.getElementById('syncStatusText');
+    const details = document.getElementById('syncDetails');
+    
+    // Modal megnyitása
+    modal.classList.remove('hidden');
+    
+    // Állapot visszaállítása
+    statusText.textContent = 'Kattints a "Letöltés" vagy "Feltöltés" gombra az adatok ellenőrzéséhez.';
+    document.getElementById('syncLed').className = 'w-3 h-3 rounded-full bg-gray-400';
+    executeBtn.disabled = true;
+    
+    // Pull adatok ellenőrzése
+    pullBtn.onclick = async () => {
+        pullBtn.disabled = true;
+        pullBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Ellenőrzés...';
+        details.innerHTML = '<p class="text-gray-400 italic">Adatok lekérése...</p>';
+        
+        try {
+            const stats = await this.app.syncManager.getPullStats();
+            const total = Object.values(stats).reduce((sum, v) => sum + v, 0);
+            
+            // Statisztika megjelenítése
+            document.getElementById('pullStats').innerHTML = `
+                <span class="font-bold text-blue-600">${total}</span> elem a felhőben
+                <div class="text-[9px] text-gray-400 mt-0.5">
+                    ${Object.entries(stats).map(([table, count]) => `${table}: ${count}`).join(' | ')}
+                </div>
+            `;
+            
+            // Részletes lista
+            let html = '<div class="space-y-1">';
+            html += `<div class="font-bold text-blue-600">⬇️ Letöltendő adatok:</div>`;
+            for (const [table, count] of Object.entries(stats)) {
+                if (count > 0) {
+                    html += `<div class="flex justify-between text-gray-700"><span>${table}</span><span class="font-bold">${count}</span></div>`;
+                }
+            }
+            html += '</div>';
+            details.innerHTML = html;
+            
+            // Szinkronizáció engedélyezése
+            executeBtn.disabled = false;
+            executeBtn.dataset.mode = 'pull';
+            document.getElementById('syncLed').className = 'w-3 h-3 rounded-full bg-blue-500 animate-pulse';
+            statusText.textContent = `${total} elem letöltése a felhőből`;
+            
+            // Függő változtatások ellenőrzése
+            this._checkPendingChanges();
+            
+        } catch (e) {
+            console.error(e);
+            details.innerHTML = '<p class="text-red-500">Hiba történt az adatok lekérése során.</p>';
+        } finally {
+            pullBtn.disabled = false;
+            pullBtn.innerHTML = `
+                <div class="flex items-center gap-3">
+                    <i class="fas fa-cloud-download-alt text-blue-600 text-xl"></i>
+                    <div>
+                        <h4 class="font-bold text-gray-800">Letöltés (Pull)</h4>
+                        <p class="text-xs text-gray-500">Adatok lekérése a felhőből</p>
+                    </div>
+                </div>
+            `;
+        }
+    };
+    
+    // Push adatok ellenőrzése
+    pushBtn.onclick = async () => {
+        pushBtn.disabled = true;
+        pushBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Ellenőrzés...';
+        details.innerHTML = '<p class="text-gray-400 italic">Helyi adatok ellenőrzése...</p>';
+        
+        try {
+            const stats = await this.app.syncManager.getPushStats();
+            const total = Object.values(stats).reduce((sum, v) => sum + v, 0);
+            
+            // Statisztika megjelenítése
+            document.getElementById('pushStats').innerHTML = `
+                <span class="font-bold text-emerald-600">${total}</span> elem helyben
+                <div class="text-[9px] text-gray-400 mt-0.5">
+                    ${Object.entries(stats).map(([table, count]) => `${table}: ${count}`).join(' | ')}
+                </div>
+            `;
+            
+            // Részletes lista
+            let html = '<div class="space-y-1">';
+            html += `<div class="font-bold text-emerald-600">⬆️ Feltöltendő adatok:</div>`;
+            for (const [table, count] of Object.entries(stats)) {
+                if (count > 0) {
+                    html += `<div class="flex justify-between text-gray-700"><span>${table}</span><span class="font-bold">${count}</span></div>`;
+                }
+            }
+            html += '</div>';
+            details.innerHTML = html;
+            
+            // Szinkronizáció engedélyezése
+            executeBtn.disabled = false;
+            executeBtn.dataset.mode = 'push';
+            document.getElementById('syncLed').className = 'w-3 h-3 rounded-full bg-emerald-500 animate-pulse';
+            statusText.textContent = `${total} elem feltöltése a felhőbe`;
+            
+            // Függő változtatások ellenőrzése
+            this._checkPendingChanges();
+            
+        } catch (e) {
+            console.error(e);
+            details.innerHTML = '<p class="text-red-500">Hiba történt a helyi adatok ellenőrzése során.</p>';
+        } finally {
+            pushBtn.disabled = false;
+            pushBtn.innerHTML = `
+                <div class="flex items-center gap-3">
+                    <i class="fas fa-cloud-upload-alt text-emerald-600 text-xl"></i>
+                    <div>
+                        <h4 class="font-bold text-gray-800">Feltöltés (Push)</h4>
+                        <p class="text-xs text-gray-500">Helyi adatok feltöltése a felhőbe</p>
+                    </div>
+                </div>
+            `;
+        }
+    };
+    
+    // Szinkronizáció végrehajtása
+    executeBtn.onclick = async () => {
+        const mode = executeBtn.dataset.mode;
+        if (!mode) return;
+        
+        executeBtn.disabled = true;
+        executeBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Folyamatban...';
+        statusText.textContent = mode === 'pull' ? 'Adatok letöltése...' : 'Adatok feltöltése...';
+        document.getElementById('syncLed').className = 'w-3 h-3 rounded-full bg-amber-500 animate-pulse';
+        
+        try {
+            if (mode === 'pull') {
+                await this.app.syncManager.executePull();
+            } else {
+                await this.app.syncManager.executePush();
+            }
+            
+            // Sikeres befejezés
+            document.getElementById('syncLed').className = 'w-3 h-3 rounded-full bg-emerald-500';
+            statusText.textContent = '✅ Szinkronizáció sikeresen befejeződött!';
+            details.innerHTML = '<p class="text-emerald-600 font-bold">✅ A művelet sikeresen végrehajtódott.</p>';
+            
+            // UI frissítése
+            this.app.renderer.renderTable();
+            this.app.renderStats?.();
+            this.app.remindersRenderer?.renderList?.();
+            
+            setTimeout(() => {
+                modal.classList.add('hidden');
+            }, 2000);
+            
+        } catch (e) {
+            document.getElementById('syncLed').className = 'w-3 h-3 rounded-full bg-red-500';
+            statusText.textContent = '❌ Hiba történt a szinkronizáció során!';
+            details.innerHTML = `<p class="text-red-500">${e.message || 'Ismeretlen hiba'}</p>`;
+            executeBtn.disabled = false;
+            executeBtn.innerHTML = '<i class="fas fa-play"></i> Újrapróbálkozás';
+        }
+    };
+    
+    // Bezárás
+    const closeModal = () => {
+        modal.classList.add('hidden');
+        executeBtn.disabled = true;
+    };
+    
+    document.getElementById('btnCloseSyncModal').onclick = closeModal;
+    document.getElementById('btnCancelSync').onclick = closeModal;
+}
+
+/**
+ * Függő változtatások ellenőrzése
+ */
+_checkPendingChanges() {
+    const container = document.getElementById('pendingChangesContainer');
+    const list = document.getElementById('pendingChangesList');
+    
+    const hasPending = this.app.syncManager.hasPendingChanges();
+    if (hasPending) {
+        container.classList.remove('hidden');
+        let html = '';
+        for (const table in this.app.syncManager.pendingChanges) {
+            const changes = this.app.syncManager.pendingChanges[table];
+            if (changes.length > 0) {
+                html += `<div class="flex justify-between text-amber-700"><span>${table}</span><span class="font-bold">${changes.length} függő</span></div>`;
+                changes.forEach(c => {
+                    html += `<div class="text-[9px] text-amber-600 ml-4">${c.operation}: ${JSON.stringify(c.data).substring(0, 40)}...</div>`;
+                });
+            }
+        }
+        list.innerHTML = html;
+    } else {
+        container.classList.add('hidden');
+    }
+}
 }

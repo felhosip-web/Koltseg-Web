@@ -1,0 +1,18 @@
+{
+  "version": "4.0.0",
+  "build": "2026-06-24T12:00:00Z",
+  "release": "stable",
+  "changelog": [
+    {
+      "version": "4.0.0",
+      "date": "2026-06-24",
+      "changes": [
+        "✅ Teljes OOP refaktor",
+        "✅ Kétirányú szinkronizáció konfliktuskezeléssel",
+        "✅ Offline naplózás és várakozási sor",
+        "✅ Egységes modal rendszer",
+        "✅ PWA támogatás frissítve"
+      ]
+    }
+  ]
+}

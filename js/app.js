@@ -1,164 +1,202 @@
-// js/app.js – v4.0 – Egységes tabos felület
-import { Database, ConfigManager, CloudSync, ItemManager, MonthManager, EntryManager, TemplateManager } from './oop-core.js';
+// js/app.js – v4.0 – Egységes tabos felület verziókezeléssel
+import { 
+    Database, ConfigManager, CloudSync, 
+    ItemManager, MonthManager, EntryManager, 
+    TemplateManager, ReminderManager 
+} from './oop-core.js';
+import { SyncService } from './sync-service.js';
 import { UIModalController } from './ui-modal-controller.js';
 import { UIRenderer } from './ui-renderer.js';
 import { UIController } from './ui-controller.js';
 import { ChartsRenderer } from './oop-charts.js';
-import { RemindersRenderer, ReminderManager } from './oop-reminders.js';
+import { RemindersRenderer } from './oop-reminders.js';
+import { StorageManager } from './storage-manager.js';
+import { BootManager } from './boot-manager.js';
+import { BackupManager } from './backup-manager.js';
+import { PwaManager } from './pwa-manager.js';
+import { RemoteConfigManager } from './remote-config-manager.js';
+import { OfflineHandler } from './offline-handler.js';
+import { getVersionManager } from './version-manager.js';
 
 class App {
     constructor() {
+        // === 1. ALAP KOMPONENSEK ===
         this.config = new ConfigManager();
         this.db = new Database();
-        this.cloud = new CloudSync(this.config);
         this.hmiNotif = new UIModalController();
+        this.storage = new StorageManager();
 
-        // Domain managerek
-        this.items = new ItemManager(this.db, this.cloud);
-        this.months = new MonthManager(this.db, this.cloud);
-        this.entries = new EntryManager(this.db, this.cloud);
-        this.templates = new TemplateManager(this.db, this.cloud);
+        // === 2. VERZIÓKEZELÉS ===
+        this.version = getVersionManager();
 
-        // Rendererek
+        // === 3. OFFLINE KEZELÉS ===
+        this.offline = new OfflineHandler(this);
+
+        // === 4. SZINKRONIZÁCIÓS SZOLGÁLTATÁS ===
+        this.syncService = new SyncService(this.config, this.offline);
+        // App referencia beállítása a SyncService-nek
+        if (typeof this.syncService.setApp === 'function') {
+            this.syncService.setApp(this);
+        }
+
+        // === 5. CLOUD (alacsony szintű API) ===
+        // A CloudSync már létrejött a SyncService konstruktorában
+        this.cloud = this.syncService.cloud;
+
+        // === 6. DOMAIN MANAGEREK ===
+        this.items = new ItemManager(this.db, this.syncService);
+        this.months = new MonthManager(this.db, this.syncService);
+        this.entries = new EntryManager(this.db, this.syncService);
+        this.templates = new TemplateManager(this.db, this.syncService);
+        this.reminderManager = new ReminderManager(this.db, this.syncService);
+
+        // === 7. UI RENDEREREK ===
         this.renderer = new UIRenderer(this);
         this.uiController = new UIController(this);
         this.chartsRenderer = new ChartsRenderer(this);
-        
-        // Reminder rendszer
-        this.reminderManager = new ReminderManager(this.db, this.cloud);
-        
-        this.deferredInstallPrompt = null;
         this.remindersRenderer = new RemindersRenderer(this, this.hmiNotif);
 
-        // Állapotok
+        // === 8. TOVÁBBI MENEDZSEREK ===
+        this.backupManager = new BackupManager(this);
+        this.pwaManager = new PwaManager(this);
+        this.remoteConfig = new RemoteConfigManager(this);
+        this.bootManager = new BootManager(this);
+
+        // === 9. SYNC MANAGER (kompatibilitási wrapper) ===
+        // Dinamikus import, hogy elkerüljük a körkörös függőséget
+        this._initSyncManager();
+
+        // === 10. ÁLLAPOTOK ===
         this.currentFilter = 'all';
         this.activeTab = 'table';
+        this.isBooted = false;
     }
 
-    async boot() {
+    /**
+     * SyncManager dinamikus inicializálása (körkörös függőség elkerülése)
+     */
+    async _initSyncManager() {
         try {
-        // ===== TARTÓS TÁRHELY KÉRÉSE ÉS FIGYELMEZTETÉS =====
-        if (navigator.storage && navigator.storage.persist) {
-            const isPersisted = await navigator.storage.persisted();
-            if (!isPersisted) {
-                const granted = await navigator.storage.persist();
-                if (granted) {
-                    console.log('[STORAGE] Tartós tárhely engedélyezve!');
-                    this.hmiNotif.showToast('Adatok tartósan tárolva!', 'success');
-                } else {
-                    console.warn('[STORAGE] Tartós tárhely elutasítva!');
-                    // SÁRGA FIGYELMEZTETŐ MODAL (csak "Értem" gomb)
-                    await this.hmiNotif.showConfirm(
-                        "⚠️ Tárhely figyelmeztetés",
-                        "A böngésző nem engedélyezte a tartós tárhelyet.\n\nAz adatok a böngésző gyorsítótárának törlésekor (pl. 'Cookie-k és webhelyadatok törlése') VESZNEK EL!\n\nKérlek, a böngésző beállításaiban engedélyezd a tartós tárolást, vagy rendszeresen készíts biztonsági mentést.",
-                        false,          // false = sárga (info) stílus
-                        "Értem",        // gomb szövege
-                        false           // showCancel = false → csak OK gomb
-                    );
-                }
-            } else {
-                console.log('[STORAGE] Már tartós a tárhely.');
-            }
+            const { SyncManager } = await import('./sync-manager.js');
+            this.syncManager = new SyncManager(this);
+        } catch (e) {
+            console.log('[APP] SyncManager nem szükséges (csak kompatibilitás)');
         }
-            await this.db.connect();
-            await Promise.all([
-                this.reminderManager.load(),
-                this.items.load(),
-                this.months.load(),
-                this.entries.load(),
-                this.templates.load()
-            ]);
+    }
 
-            // UI eseménykötések
-            this.uiController.bindStaticEvents();
+    /**
+     * Alkalmazás indítása
+     */
+    async start() {
+        try {
+            console.log('[APP] 🚀 Alkalmazás indítása...');
 
-            // Tab kezelés
-            this._initTabs();
+            // === 1. VERZIÓ BETÖLTÉSE ===
+            await this.version.load();
+            console.log(`[APP] 🏷️ Verzió: ${this.version.toString()}`);
 
-            // Kezdeti renderelés
-            this.renderer.renderTable();
-            this.remindersRenderer.renderList();
-            this.renderStats();
-            this.updateReminderStatus();           // ← Új
-            this._registerServiceWorker();
-            this._bindPwaInstall();
+            // === 2. REMOTE CONFIG BETÖLTÉSE ===
+            await this.remoteConfig.load();
+            this.remoteConfig.applyToApp();
 
-            // Watchdog
-            await this.config.watchDogEur((rate, mode) => {
-                this.renderer.updateLed(rate, mode);
-                const numericRate = Number(rate);
-                this.eurRate = numericRate;
-                if (this.config) this.config.eurRate = numericRate;
-                this.renderer.renderTable();
-                this.renderStats();
-                if (this.activeTab === 'charts') {
-                    this.chartsRenderer.renderAll(this.currentFilter);
-                }
-                this.renderer.updateFooterStatus(`Rendszer üzemkész - Online EUR: ${numericRate} Ft`);
-            });
+            // === 3. KONFIGURÁCIÓ ELLENŐRZÉS ===
+            const configStatus = this.remoteConfig.getStatus();
+            console.log('[APP] Konfigurációs állapot:', configStatus);
 
-            // Havi szűrő
-            document.getElementById('monthFilter')?.addEventListener('change', (e) => {
-                this.currentFilter = e.target.value;
-                if (this.activeTab === 'charts') {
-                    this.chartsRenderer.renderAll(this.currentFilter);
-                }
-            });
+            // === 4. RENDSZER INDÍTÁSA ===
+            await this.bootManager.boot();
 
-            // Reminder globális státusz kattintásra megnyitja a tabot
-            document.getElementById('reminderGlobalStatus')?.addEventListener('click', () => {
-                document.querySelector('[data-tab="reminders"]').click();
-            });
+            // === 5. VERZIÓ MEGJELENÍTÉSE ===
+            this._updateVersionDisplay();
 
-            console.log('[HMI APP] Boot complete.');
+            // === 6. VERZIÓ ELLENŐRZÉS (opcionális) ===
+            // Automatikus frissítés ellenőrzés 5 perc után
+            setTimeout(() => {
+                this.checkVersion().catch(() => {});
+            }, 5 * 60 * 1000);
+
+            this.isBooted = true;
+            console.log('[APP] ✅ Alkalmazás sikeresen elindult!');
+
         } catch (error) {
-            console.error('Boot hiba:', error);
+            console.error('[APP] ❌ Indítási hiba:', error);
             this.hmiNotif.showToast('Rendszerindítási hiba!', 'error');
-        }
-    }
-
-    // ===== TAB KEZELÉS =====
-    _bindPwaInstall() {
-        const installButton = document.getElementById('btnInstallApp');
-
-        window.addEventListener('beforeinstallprompt', event => {
-            event.preventDefault();
-            this.deferredInstallPrompt = event;
-            installButton?.classList.remove('hidden');
-        });
-
-        window.addEventListener('appinstalled', () => {
-            installButton?.classList.add('hidden');
-            this.deferredInstallPrompt = null;
-            this.hmiNotif.showToast('Az alkalmazás telepítése sikeres!', 'success');
-        });
-
-        installButton?.addEventListener('click', async () => {
-            if (!this.deferredInstallPrompt) return;
-            this.deferredInstallPrompt.prompt();
-            const choiceResult = await this.deferredInstallPrompt.userChoice;
-            if (choiceResult.outcome === 'accepted') {
-                this.hmiNotif.showToast('Telepítés elfogadva!', 'success');
-            } else {
-                this.hmiNotif.showToast('Telepítés elutasítva.', 'info');
+            
+            // Fallback: próbáljuk meg az alapvető UI-t betölteni
+            try {
+                this.renderer.renderTable();
+            } catch (e) {
+                console.error('[APP] UI fallback hiba:', e);
             }
-            this.deferredInstallPrompt = null;
-            installButton.classList.add('hidden');
-        });
-    }
-
-    _registerServiceWorker() {
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('./service-worker.js')
-                .then(reg => {
-                    console.log('[PWA] Service worker registered:', reg.scope);
-                })
-                .catch(err => {
-                    console.warn('[PWA] Service worker registration failed:', err);
-                });
         }
     }
 
+    /**
+     * Verzió megjelenítése a UI-ban
+     */
+    _updateVersionDisplay() {
+        const info = this.version.getFullInfo();
+        
+        // Lábléc verzió
+        const versionEl = document.querySelector('.version-text');
+        if (versionEl) {
+            versionEl.textContent = info.label;
+            versionEl.title = `Build: ${new Date(info.build).toLocaleString('hu-HU')}`;
+        }
+
+        // Badge (Beállítások panelben)
+        const badgeEl = document.getElementById('dbVersionBadge');
+        if (badgeEl) {
+            badgeEl.textContent = `${info.label} (${new Date(info.build).toLocaleDateString('hu-HU')})`;
+        }
+
+        // Document title
+        document.title = `Költség Nyilvántartó ${info.short}`;
+    }
+
+    /**
+     * Verzió ellenőrzés (frissítés keresés)
+     */
+    async checkVersion() {
+        try {
+            const update = await this.version.checkForUpdate();
+            if (update) {
+                const changelogText = this.version.getFormattedChangelog();
+                
+                const confirmed = await this.hmiNotif.showConfirm({
+                    title: '🔄 Új verzió elérhető!',
+                    message: `📌 Jelenlegi: ${update.current}\n📌 Új verzió: ${update.latest}\n📅 Build: ${new Date(update.build).toLocaleDateString('hu-HU')}\n\n📋 Változások:\n${changelogText || 'Nincs részletes változásnapló.'}\n\nKattints az "Újratöltés" gombra a frissítéshez.`,
+                    type: 'info',
+                    confirmText: '🔄 Újratöltés',
+                    showCancel: true
+                });
+                
+                if (confirmed) {
+                    // Service Worker frissítés kérése
+                    if ('serviceWorker' in navigator) {
+                        const registrations = await navigator.serviceWorker.getRegistrations();
+                        for (const registration of registrations) {
+                            await registration.update();
+                        }
+                    }
+                    location.reload(true);
+                }
+            }
+            return update;
+        } catch (e) {
+            console.warn('[APP] Verzió ellenőrzés sikertelen:', e);
+            return null;
+        }
+    }
+
+    /**
+     * Verzió információ lekérése (külső hívásokhoz)
+     */
+    getVersionInfo() {
+        return this.version.getFullInfo();
+    }
+
+    // ==================== TAB KEZELÉS ====================
     _initTabs() {
         const tabButtons = document.querySelectorAll('.tab-btn');
         const tabPanes = {
@@ -170,22 +208,23 @@ class App {
 
         tabButtons.forEach(btn => {
             btn.addEventListener('click', () => {
+                // Stílusok
                 tabButtons.forEach(b => {
                     b.classList.remove('bg-blue-600', 'text-white', 'shadow-md');
                     b.classList.add('bg-gray-100', 'text-gray-600');
                 });
-
                 btn.classList.remove('bg-gray-100', 'text-gray-600');
                 btn.classList.add('bg-blue-600', 'text-white', 'shadow-md');
 
+                // Pane-ek
                 Object.values(tabPanes).forEach(pane => pane.classList.add('hidden'));
-
                 const tab = btn.dataset.tab;
                 this.activeTab = tab;
 
                 if (tabPanes[tab]) {
                     tabPanes[tab].classList.remove('hidden');
-
+                    
+                    // Frissítés szükség szerint
                     if (tab === 'charts') {
                         this.chartsRenderer.renderAll(this.currentFilter);
                     } else if (tab === 'reminders') {
@@ -199,10 +238,11 @@ class App {
             });
         });
 
+        // Alapértelmezett fül
         document.querySelector('[data-tab="table"]')?.click();
     }
 
-    // ===== STATISZTIKA =====
+    // ==================== STATISZTIKA ====================
     renderStats() {
         const entries = this.entries.entries;
         const items = this.items.items;
@@ -218,30 +258,43 @@ class App {
             else cash += amount;
         });
 
-        document.getElementById('statTotal').textContent = total.toLocaleString('hu-HU') + ' Ft';
-        document.getElementById('statCard').textContent = card.toLocaleString('hu-HU') + ' Ft';
-        document.getElementById('statCash').textContent = cash.toLocaleString('hu-HU') + ' Ft';
-        document.getElementById('statTransfer').textContent = transfer.toLocaleString('hu-HU') + ' Ft';
-        document.getElementById('statItems').textContent = items.length;
-        document.getElementById('statMonths').textContent = months.length;
-        document.getElementById('statEntries').textContent = entries.length;
+        // Kártyák frissítése
+        const statElements = {
+            total: document.getElementById('statTotal'),
+            card: document.getElementById('statCard'),
+            cash: document.getElementById('statCash'),
+            transfer: document.getElementById('statTransfer'),
+            items: document.getElementById('statItems'),
+            months: document.getElementById('statMonths'),
+            entries: document.getElementById('statEntries'),
+            fillBar: document.getElementById('statFillBar'),
+            fillPercent: document.getElementById('statFillPercent')
+        };
 
+        if (statElements.total) statElements.total.textContent = total.toLocaleString('hu-HU') + ' Ft';
+        if (statElements.card) statElements.card.textContent = card.toLocaleString('hu-HU') + ' Ft';
+        if (statElements.cash) statElements.cash.textContent = cash.toLocaleString('hu-HU') + ' Ft';
+        if (statElements.transfer) statElements.transfer.textContent = transfer.toLocaleString('hu-HU') + ' Ft';
+        if (statElements.items) statElements.items.textContent = items.length;
+        if (statElements.months) statElements.months.textContent = months.length;
+        if (statElements.entries) statElements.entries.textContent = entries.length;
+
+        // Kitöltöttség
         const totalCells = items.length * months.length;
         const filledCells = entries.filter(e => e.cellKey).length;
         const fillPercent = totalCells > 0 ? Math.round((filledCells / totalCells) * 100) : 0;
-        document.getElementById('statFillBar').style.width = fillPercent + '%';
-        document.getElementById('statFillPercent').textContent = fillPercent + '%';
+        if (statElements.fillBar) statElements.fillBar.style.width = fillPercent + '%';
+        if (statElements.fillPercent) statElements.fillPercent.textContent = fillPercent + '%';
     }
 
-    // ===== REMINDER GLOBÁLIS STÁTUSZ =====
+    // ==================== REMINDER STÁTUSZ ====================
     updateReminderStatus() {
         const reminders = this.reminderManager.reminders || [];
         const today = dayjs();
         let overdue = 0, soon = 0;
 
         reminders.forEach(rem => {
-            if (!rem.active) return;
-            const due = dayjs(rem.due_date || rem.next_due_date);
+            const due = dayjs(rem.due_date);
             const diff = due.diff(today, 'day');
             if (diff < 0) overdue++;
             else if (diff <= 7) soon++;
@@ -269,34 +322,56 @@ class App {
             text.className = 'text-emerald-600';
         }
     }
-}
 
-// Indítás
-async function loadRemoteConfig() {
-    try {
-        let res = await fetch('/settings.json');
-        if (res.ok) return await res.json();
-        // fallback: try raw file from gh-pages branch
-        const rawUrl = 'https://raw.githubusercontent.com/felhosip-web/Koltseg-Web/gh-pages/settings.json';
-        res = await fetch(rawUrl);
-        if (!res.ok) return {};
-        return await res.json();
-    } catch (e) {
-        return {};
+    // ==================== ÚJRATÖLTÉS (SEGÉD) ====================
+    async reload() {
+        console.log('[APP] 🔄 Alkalmazás újratöltése...');
+        this.hmiNotif.showToast('Újratöltés...', 'info');
+        
+        try {
+            // Adatok újratöltése
+            await Promise.all([
+                this.items.load(),
+                this.months.load(),
+                this.entries.load(),
+                this.templates.load(),
+                this.reminderManager.load()
+            ]);
+
+            // UI frissítés
+            this.renderer.renderTable();
+            this.remindersRenderer.renderList();
+            this.renderStats();
+            this.updateReminderStatus();
+
+            // Aktív tab frissítése
+            if (this.activeTab === 'charts') {
+                this.chartsRenderer.renderAll(this.currentFilter);
+            }
+
+            this.hmiNotif.showToast('✅ Adatok frissítve!', 'success');
+            console.log('[APP] ✅ Újratöltés kész');
+        } catch (e) {
+            console.error('[APP] Újratöltési hiba:', e);
+            this.hmiNotif.showToast('❌ Újratöltési hiba!', 'error');
+        }
     }
 }
 
-// Indítás
+// ==================== INDÍTÁS ====================
 document.addEventListener('DOMContentLoaded', async () => {
-    const remoteCfg = await loadRemoteConfig();
     const app = new App();
-    // Apply remote config (if present). Only set client-safe values.
-    if (remoteCfg.SUPABASE_URL) app.config.supabaseConfig.url = remoteCfg.SUPABASE_URL;
-    if (remoteCfg.SUPABASE_ANON_KEY) app.config.supabaseConfig.key = remoteCfg.SUPABASE_ANON_KEY;
-    // enable cloud usage when remote config is present
-    if (remoteCfg.SUPABASE_URL && remoteCfg.SUPABASE_ANON_KEY) app.config.useSupabase = true;
-    // re-init cloud client with the possibly-updated config
-    try { app.cloud.init(); } catch (e) { console.warn('Cloud re-init failed', e); }
     window.app = app;
-    app.boot();
+    
+    // Globális elérés a verzióhoz (debug)
+    window.getVersion = () => app.getVersionInfo();
+    
+    await app.start();
 });
+
+// Konzol segédlet
+console.log('💡 Költség Nyilvántartó v4.0');
+console.log('📌 Elérhető parancsok:');
+console.log('  window.app.getVersionInfo() - Verzió információ');
+console.log('  window.app.checkVersion()   - Frissítés ellenőrzés');
+console.log('  window.app.reload()         - Adatok újratöltése');
