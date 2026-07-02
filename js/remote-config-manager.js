@@ -100,30 +100,51 @@ export class RemoteConfigManager {
         this._saveToStorage(url, key, useCloud, eurRate);
 
         // === CLOUD KLIENS ÚJRAINICIALIZÁLÁSA ===
-        try {
-            if (this.app.cloud) {
-                this.app.cloud.init();
-                console.log('[CONFIG] Cloud client re-initialized');
-            }
-            if (this.app.syncService?.cloud) {
-                this.app.syncService.cloud.init();
-                console.log('[CONFIG] SyncService cloud re-initialized');
-            }
-        } catch (e) {
-            console.warn('[CONFIG] Cloud re-init failed:', e);
+     try {
+        if (this.app.cloud) {
+            this.app.cloud.init();
+            console.log('[CONFIG] Cloud client re-initialized');
         }
-
-        // === LOGGING ===
-        console.log('[CONFIG] Konfiguráció alkalmazva:', {
-            useCloud: useCloud,
-            hasUrl: !!url,
-            hasKey: !!key,
-            eurRate: eurRate,
-            source: cfg.SUPABASE_URL ? 'remote' : 'config'
-        });
-
-        return this.config;
+        if (this.app.syncService?.cloud) {
+            this.app.syncService.cloud.init();
+            console.log('[CONFIG] SyncService cloud re-initialized');
+        }
+        
+        // ========================================================
+        // === ÚJ: UI FRISSÍTÉS ===
+        // ========================================================
+        if (this.app.renderer?.updateFooterStatus) {
+            const status = useCloud ? '☁️ Felhő: aktív' : '☁️ Felhő: kikapcsolva';
+            this.app.renderer.updateFooterStatus(status, false);
+        }
+        
+        // Supabase státusz frissítés
+        if (this.app.updateOnlineStatus) {
+            this.app.updateOnlineStatus(navigator.onLine && useCloud);
+        }
+        
+        // Toast értesítés
+        if (this.app.hmiNotif?.showToast) {
+            this.app.hmiNotif.showToast(
+                useCloud ? '☁️ Felhőkapcsolat aktiválva' : '☁️ Felhőkapcsolat kikapcsolva',
+                useCloud ? 'success' : 'warning'
+            );
+        }
+        
+    } catch (e) {
+        console.warn('[CONFIG] Cloud re-init failed:', e);
     }
+
+    console.log('[CONFIG] Konfiguráció alkalmazva:', {
+        useCloud: useCloud,
+        hasUrl: !!url,
+        hasKey: !!key,
+        eurRate: eurRate,
+        source: cfg.SUPABASE_URL ? 'remote' : 'config'
+    });
+
+    return this.config;
+}
 
     /**
      * Beállítások mentése localStorage-ba (csak szükség esetén)

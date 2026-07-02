@@ -110,7 +110,21 @@ export class BootManager {
             console.log('[NETWORK] Offline állapot.');
             this.app.hmiNotif.showToast('Internetkapcsolat megszakadt!', 'error');
         });
-
+        
+        // === ÚJ: HÁTTÉRFOLYAMATOK INDÍTÁSA ===
+        try {
+            const { BackgroundTaskManager } = await import('./background-tasks.js');
+            this.app.backgroundTasks = new BackgroundTaskManager(this.app);
+            this.app.backgroundTasks.startAll();
+            console.log('[BOOT] Háttérfolyamatok sikeresen elindítva');
+        } catch (e) {
+            console.warn('[BOOT] Háttérfolyamatok indítása sikertelen:', e);
+        }
+       // Alkalmazás bezárás előtti cleanup
+        window.addEventListener('beforeunload', () => {
+            this.app.destroy();
+        });
+        
         console.log('[BOOT] ✅ Minden rendszer üzemkész.');
     }
 }

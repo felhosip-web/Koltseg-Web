@@ -19,6 +19,9 @@ export class BackupManager {
         }
         
         // Időzítő indítása
+        if (this.intervalId) {
+           clearInterval(this.intervalId);
+        }
         this.intervalId = setInterval(() => {
             this.performBackup();
         }, this.backupInterval);

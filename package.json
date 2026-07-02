@@ -1,0 +1,50 @@
+{
+  "name": "koltseg-nyilvantarto",
+  "version": "4.0.0",
+  "description": "Modern költség nyilvántartó webalkalmazás PWA támogatással",
+  "main": "index.html",
+  "type": "module",
+  "scripts": {
+    "start": "echo 'Nyisd meg az index.html-t a böngészőben'",
+    "dev": "echo 'Fejlesztés: használj Live Server-t vagy hasonlót'",
+    
+    "build": "node scripts/build.js patch",
+    "build:minor": "node scripts/build.js minor",
+    "build:major": "node scripts/build.js major",
+    "release": "node scripts/build.js patch --changelog 'Új kiadás'",
+    
+    "version": "node scripts/build.js patch",
+    "version:minor": "node scripts/build.js minor",
+    "version:major": "node scripts/build.js major",
+    
+    "test": "echo 'Nincsenek tesztek még'",
+    "clean": "rm -rf .cache dist",
+    "precommit": "echo 'Commit előtti ellenőrzések...'"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/felhosip-web/Koltseg-Web.git"
+  },
+  "keywords": [
+    "koltseg",
+    "nyilvantarto",
+    "pwa",
+    "offline",
+    "supabase",
+    "finance"
+  ],
+  "author": "felhosip-web",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/felhosip-web/Koltseg-Web/issues"
+  },
+  "homepage": "https://github.com/felhosip-web/Koltseg-Web#readme",
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "browserslist": [
+    "last 2 versions",
+    "not dead",
+    "> 0.5%"
+  ]
+}

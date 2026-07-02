@@ -1,140 +1,237 @@
-// service-worker.js - Költség Nyilvántartó v4.0 Dinamikus verzió
+// service-worker.js - Workbox-alapú verzió
+// Költség Nyilvántartó v4.0
+
+importScripts(
+    'https://storage.googleapis.com/workbox-cdn/releases/7.0.0/workbox-sw.js'
+);
+
+workbox.setConfig({
+    debug: false,
+    modulePathPrefix: 'https://storage.googleapis.com/workbox-cdn/releases/7.0.0/'
+});
+
+const { registerRoute } = workbox.routing;
+const { CacheFirst, StaleWhileRevalidate, NetworkFirst, NetworkOnly } = workbox.strategies;
+const { ExpirationPlugin } = workbox.expiration;
+const { CacheableResponsePlugin } = workbox.cacheableResponse;
+
 const CACHE_VERSION = 'v4';
-const BUILD_DATE = '2026-06-24';
-
-// VAGY: betöltés a version.json-ból (de SW nem tud async)
-// Ezért a cache nevet a verzióból generáljuk:
+const BUILD_DATE = '2026-06-28';
 const CACHE_NAME = `kny-${CACHE_VERSION}-cache`;
-const OFFLINE_PAGE = 'offline.html';
 
-// Offline oldal tartalma (beépítve, hogy ne kelljen külön fájl)
-const OFFLINE_HTML = `<!DOCTYPE html>
+// ===== FALLBACK OFFLINE HTML (beépítve) =====
+const FALLBACK_HTML = `<!DOCTYPE html>
 <html lang="hu">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Offline - Költség Nyilvántartó</title>
-    <style>
-        body { font-family: system-ui, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #f3f4f6; }
-        .card { background: white; padding: 2rem; border-radius: 24px; box-shadow: 0 20px 60px rgba(0,0,0,0.1); text-align: center; max-width: 400px; }
-        .icon { font-size: 4rem; margin-bottom: 1rem; }
-        h1 { color: #1e293b; margin-bottom: 0.5rem; }
-        p { color: #64748b; margin-bottom: 1.5rem; }
-        .retry-btn { background: #3b82f6; color: white; border: none; padding: 0.75rem 2rem; border-radius: 12px; font-size: 1rem; cursor: pointer; }
-        .retry-btn:hover { background: #2563eb; }
-    </style>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Offline</title>
+<style>
+body{font-family:system-ui,sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background:#f3f4f6;text-align:center;}
+.card{background:white;padding:2.5rem;border-radius:32px;box-shadow:0 20px 60px rgba(0,0,0,0.1);max-width:400px;}
+h1{color:#1e293b;margin-bottom:0.5rem;}
+p{color:#64748b;margin-bottom:1.5rem;}
+button{background:#3b82f6;color:white;border:none;padding:0.75rem 2rem;border-radius:12px;font-size:1rem;cursor:pointer;}
+button:hover{background:#2563eb;}
+</style>
 </head>
 <body>
-    <div class="card">
-        <div class="icon">📡</div>
-        <h1>Nincs internetkapcsolat</h1>
-        <p>Az alkalmazás offline módban van. Kérlek, csatlakozz az internethez a friss adatok eléréséhez.</p>
-        <button class="retry-btn" onclick="location.reload()">Újrapróbálkozás</button>
-    </div>
-</body>
-<footer class="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-4 py-2 text-xs text-gray-600 flex items-center justify-between z-40">
-    <div class="flex items-center gap-2">
-        <span id="saveLed" class="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-sm transition-all duration-300"></span>
-        <span id="saveStatusText" class="font-mono uppercase tracking-wider text-[10px] text-gray-500">Rendszer Online</span>
-    </div>
-    <div class="font-mono text-[10px] text-gray-400 flex items-center gap-2">
-        <span id="lastSaveTime">Soha</span>
-        <span class="text-gray-300">|</span>
-        <span id="versionDisplay" class="version-text cursor-pointer hover:text-blue-600 transition" onclick="window.app?.checkVersion?.()">v4.0.0</span>
-    </div>
-    <div class="text-gray-400">Költségnyilvántartó</div>
-</footer>
-</html>`;
+<div class="card">
+    <h1>📡 Nincs kapcsolat</h1>
+    <p>Kérlek, csatlakozz az internethez az alkalmazás használatához.</p>
+    <button onclick="location.reload()">Újrapróbálkozás</button>
+</div>
+</body></html>`;
 
-// Cache-elendő fájlok
-const ASSETS_TO_CACHE = [
-    './',
-    './index.html',
-    './css/style.css',
-    './manifest.json',
-    './favicon.ico',
-    './icons/icon-48.png',
-    './icons/icon-72.png',
-    './icons/icon-96.png',
-    './icons/icon-128.png',
-    './icons/icon-144.png',
-    './icons/icon-192.png',
-    './icons/icon-192-maskable.png',
-    './icons/icon-256.png',
-    './icons/icon-512.png',
-    './icons/icon-512-maskable.png',
-    './icons/icon.svg'
-];
+// =============================================
+// OFFLINE OLDAL - KÜLÖN FÁJL BETÖLTÉS
+// =============================================
+// Az offline.html-t külön fájlként kell elérhetővé tenni
+// A Service Worker ezt fogja betölteni, ha nincs hálózat
 
-// JS modulok (az összes fontos fájl)
-const JS_MODULES = [
-    './js/app.js',
-    './js/oop-core.js',
-    './js/sync-service.js',
-    './js/sync-manager.js',
-    './js/storage-manager.js',
-    './js/boot-manager.js',
-    './js/backup-manager.js',
-    './js/pwa-manager.js',
-    './js/remote-config-manager.js',
-    './js/offline-handler.js',
-    './js/ui-modal-controller.js',
-    './js/ui-renderer.js',
-    './js/ui-controller.js',
-    './js/data-operation-controller.js',
-    './js/cell-modal-controller.js',
-    './js/input-modal-controller.js',
-    './js/oop-charts.js',
-    './js/oop-reminders.js'
-];
+// CDN-ek (CacheFirst)
+registerRoute(
+    ({url}) => 
+        url.origin === 'https://cdn.tailwindcss.com' ||
+        url.origin === 'https://cdnjs.cloudflare.com' ||
+        url.origin === 'https://cdn.jsdelivr.net' ||
+        url.hostname.includes('cdn') ||
+        url.hostname.includes('cloudflare'),
+    new CacheFirst({
+        cacheName: 'cdn-cache',
+        plugins: [
+            new ExpirationPlugin({
+                maxEntries: 100,
+                maxAgeSeconds: 30 * 24 * 60 * 60,
+            }),
+            new CacheableResponsePlugin({
+                statuses: [0, 200],
+            }),
+        ]
+    })
+);
 
-// Külső CDN-ek (opcionális cache)
-const CDN_ASSETS = [
-    'https://cdn.tailwindcss.com',
-    'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',
-    'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js',
-    'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css',
-    'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2',
-    'https://cdn.jsdelivr.net/npm/chart.js',
-    'https://cdn.jsdelivr.net/npm/dayjs@1/dayjs.min.js'
-];
+// Saját JS/CSS (StaleWhileRevalidate)
+registerRoute(
+    ({url}) => 
+        url.pathname.startsWith('/js/') ||
+        url.pathname.startsWith('/css/') ||
+        url.pathname.endsWith('.js') ||
+        url.pathname.endsWith('.css'),
+    new StaleWhileRevalidate({
+        cacheName: 'static-assets',
+        plugins: [
+            new ExpirationPlugin({
+                maxEntries: 60,
+                maxAgeSeconds: 7 * 24 * 60 * 60,
+            }),
+        ]
+    })
+);
 
-// Összesített cache lista
-const ALL_ASSETS = [
-    ...ASSETS_TO_CACHE,
-    ...JS_MODULES
-];
+// Képek (CacheFirst)
+registerRoute(
+    ({request}) => request.destination === 'image',
+    new CacheFirst({
+        cacheName: 'images',
+        plugins: [
+            new ExpirationPlugin({
+                maxEntries: 50,
+                maxAgeSeconds: 30 * 24 * 60 * 60,
+            }),
+            new CacheableResponsePlugin({
+                statuses: [0, 200],
+            }),
+        ]
+    })
+);
 
-// Install esemény
+// HTML oldalak (NetworkFirst + offline fallback)
+registerRoute(
+    ({request}) => request.mode === 'navigate',
+    new NetworkFirst({
+        cacheName: 'pages',
+        networkTimeoutSeconds: 3,
+        plugins: [
+            new ExpirationPlugin({
+                maxEntries: 20,
+                maxAgeSeconds: 7 * 24 * 60 * 60,
+            }),
+            {
+                handlerDidError: async () => {
+                    // Ha nincs hálózat, az offline.html-t adjuk vissza
+                    const cache = await caches.open(CACHE_NAME);
+                    const offlineResponse = await cache.match('/offline.html');
+                    if (offlineResponse) {
+                        return offlineResponse;
+                    }
+                    // Fallback: beépített offline HTML
+                    return new Response(OFFLINE_FALLBACK, {
+                        headers: { 'Content-Type': 'text/html' }
+                    });
+                }
+            }
+        ]
+    })
+);
+
+// Supabase API (NetworkOnly)
+registerRoute(
+    ({url}) => url.hostname.includes('supabase.co'),
+    new NetworkOnly({
+        networkTimeoutSeconds: 5,
+    })
+);
+
+// Egyéb API-k (NetworkFirst)
+registerRoute(
+    ({url}) => 
+        url.pathname.startsWith('/api/') ||
+        url.pathname.includes('/api'),
+    new NetworkFirst({
+        cacheName: 'api-cache',
+        networkTimeoutSeconds: 3,
+        plugins: [
+            new ExpirationPlugin({
+                maxEntries: 50,
+                maxAgeSeconds: 5 * 60,
+            }),
+        ]
+    })
+);
+
+// Ikonok és manifest (CacheFirst)
+registerRoute(
+    ({url}) => 
+        url.pathname.includes('/icons/') ||
+        url.pathname === '/manifest.json' ||
+        url.pathname === '/favicon.ico',
+    new CacheFirst({
+        cacheName: 'icons',
+        plugins: [
+            new ExpirationPlugin({
+                maxEntries: 30,
+                maxAgeSeconds: 30 * 24 * 60 * 60,
+            }),
+        ]
+    })
+);
+
+// Font Awesome (CacheFirst)
+registerRoute(
+    ({url}) => 
+        url.hostname.includes('fontawesome.com') ||
+        url.pathname.includes('font-awesome'),
+    new CacheFirst({
+        cacheName: 'font-awesome',
+        plugins: [
+            new ExpirationPlugin({
+                maxEntries: 20,
+                maxAgeSeconds: 30 * 24 * 60 * 60,
+            }),
+        ]
+    })
+);
+
+// Default (StaleWhileRevalidate)
+registerRoute(
+    ({request}) => true,
+    new StaleWhileRevalidate({
+        cacheName: 'default-cache',
+        plugins: [
+            new ExpirationPlugin({
+                maxEntries: 100,
+                maxAgeSeconds: 7 * 24 * 60 * 60,
+            }),
+        ]
+    })
+);
+
+// ===== INSTALL: offline.html cache-elése =====
 self.addEventListener('install', event => {
     event.waitUntil(
         caches.open(CACHE_NAME)
             .then(cache => {
-                console.log('[SW] Cache építése...');
-                // Offline oldal hozzáadása
-                cache.put(OFFLINE_PAGE, new Response(OFFLINE_HTML, {
-                    headers: { 'Content-Type': 'text/html' }
-                }));
-                return cache.addAll(ALL_ASSETS);
+                return cache.addAll([
+                    '/',
+                    '/index.html',
+                    '/offline.html',   // ← EZ FONTOS!
+                    '/manifest.json',
+                    '/favicon.ico'
+                ]).catch(err => {
+                    console.warn('[SW] Néhány fájl nem cache-elhető:', err);
+                });
             })
-            .then(() => {
-                console.log('[SW] Cache kész!');
-                return self.skipWaiting();
-            })
-            .catch(err => {
-                console.warn('[SW] Cache hiba:', err);
-            })
+            .then(() => self.skipWaiting())
     );
 });
 
-// Activate esemény – régi cache-ek törlése
+
+// Régi cache törlés
 self.addEventListener('activate', event => {
     event.waitUntil(
         caches.keys()
             .then(keys => {
                 return Promise.all(
                     keys
-                        .filter(key => key !== CACHE_NAME)
+                        .filter(key => key !== CACHE_NAME && !key.startsWith('workbox-'))
                         .map(key => {
                             console.log('[SW] Régi cache törlése:', key);
                             return caches.delete(key);
@@ -148,105 +245,31 @@ self.addEventListener('activate', event => {
     );
 });
 
-// Fetch esemény – offline támogatás
-self.addEventListener('fetch', event => {
-    const url = new URL(event.request.url);
-    
-    // CDN kérések kihagyása a cache-ből (gyorsabb, mint cache-elni)
-    if (url.hostname.includes('cdn') || url.hostname.includes('cloudflare')) {
-        event.respondWith(fetch(event.request));
-        return;
-    }
-
-    // Supabase API kérések kihagyása
-    if (url.hostname.includes('supabase.co')) {
-        event.respondWith(fetch(event.request));
-        return;
-    }
-
-    // HTML oldalak esetén: cache + network stratégia
-    if (event.request.headers.get('accept')?.includes('text/html')) {
-        event.respondWith(
-            caches.match(event.request)
-                .then(cached => {
-                    if (cached) {
-                        // Háttérben frissítjük a cache-t
-                        fetch(event.request)
-                            .then(response => {
-                                if (response.ok) {
-                                    caches.open(CACHE_NAME)
-                                        .then(cache => cache.put(event.request, response));
-                                }
-                            })
-                            .catch(() => {});
-                        return cached;
-                    }
-                    return fetch(event.request)
-                        .then(response => {
-                            if (response.ok) {
-                                const clone = response.clone();
-                                caches.open(CACHE_NAME)
-                                    .then(cache => cache.put(event.request, clone));
-                            }
-                            return response;
-                        })
-                        .catch(() => {
-                            return caches.match(OFFLINE_PAGE);
-                        });
-                })
-        );
-        return;
-    }
-
-    // Egyéb fájlok: cache-first stratégia
-    event.respondWith(
-        caches.match(event.request)
-            .then(cached => {
-                if (cached) return cached;
-                
-                return fetch(event.request)
-                    .then(response => {
-                        if (response && response.ok) {
-                            const clone = response.clone();
-                            caches.open(CACHE_NAME)
-                                .then(cache => {
-                                    try {
-                                        cache.put(event.request, clone);
-                                    } catch (e) {}
-                                });
-                        }
-                        return response;
-                    })
-                    .catch(() => {
-                        // Ha a kérés kép vagy más média, visszaadhatunk egy placeholder-t
-                        if (event.request.url.match(/\.(png|jpg|jpeg|svg|gif|webp)$/)) {
-                            return caches.match('./icons/icon-192.png');
-                        }
-                        return new Response('Hálózati hiba', { status: 404 });
-                    });
-            })
-    );
-});
-
-// Üzenetek kezelése a fő alkalmazástól
+// Üzenetek kezelése
 self.addEventListener('message', event => {
     if (event.data === 'skipWaiting') {
         self.skipWaiting();
     }
     
-    // Cache frissítés kérése
     if (event.data === 'refreshCache') {
-        caches.open(CACHE_NAME)
-            .then(cache => {
-                ALL_ASSETS.forEach(url => {
-                    fetch(url, { cache: 'reload' })
-                        .then(response => {
-                            if (response.ok) {
-                                cache.put(url, response);
-                            }
-                        })
-                        .catch(() => {});
+        caches.keys()
+            .then(keys => {
+                keys.forEach(key => {
+                    if (key.startsWith('workbox-')) {
+                        caches.delete(key);
+                    }
                 });
             });
     }
+    
+    if (event.data === 'getVersion') {
+        event.ports[0].postMessage({
+            version: CACHE_VERSION,
+            buildDate: BUILD_DATE,
+            cacheName: CACHE_NAME
+        });
+    }
 });
+
+console.log('[SW] Workbox Service Worker betöltve!');
+console.log(`[SW] Verzió: ${CACHE_VERSION}, Építve: ${BUILD_DATE}`);

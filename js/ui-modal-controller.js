@@ -191,4 +191,122 @@ export class UIModalController {
             showCancel: true
         });
     }
+    
+/**
+ * Select modal megjelenítése
+ */
+showSelectModal(options) {
+    return new Promise((resolve) => {
+        const { title, options: items, placeholder = 'Válassz...' } = options;
+
+        const modal = document.createElement('div');
+        modal.className = 'fixed inset-0 bg-black/50 flex items-center justify-center z-50';
+        modal.innerHTML = `
+            <div class="bg-white rounded-3xl p-6 max-w-md w-full mx-4 shadow-2xl">
+                <h3 class="text-lg font-bold text-gray-800 mb-4">${title}</h3>
+                <select id="selectModalSelect" class="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="">${placeholder}</option>
+                    ${items.map(item => `<option value="${this._escapeHtml(item)}">${this._escapeHtml(item)}</option>`).join('')}
+                </select>
+                <div class="flex gap-2 mt-4">
+                    <button id="selectModalCancel" class="flex-1 py-3 bg-gray-100 text-gray-600 rounded-xl font-bold hover:bg-gray-200 transition">Mégse</button>
+                    <button id="selectModalConfirm" class="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition">Kiválaszt</button>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(modal);
+
+        const select = modal.querySelector('#selectModalSelect');
+        const confirmBtn = modal.querySelector('#selectModalConfirm');
+        const cancelBtn = modal.querySelector('#selectModalCancel');
+
+        const close = (result) => {
+            modal.remove();
+            resolve(result);
+        };
+
+        confirmBtn.addEventListener('click', () => {
+            const value = select.value;
+            close(value || null);
+        });
+
+        cancelBtn.addEventListener('click', () => close(null));
+
+        select.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') confirmBtn.click();
+            if (e.key === 'Escape') cancelBtn.click();
+        });
+
+        // Fókusz
+        setTimeout(() => select.focus(), 100);
+    });
+}  
+
+/**
+ * Input modal (bővítve)
+ */
+showInputModal(options) {
+    return new Promise((resolve) => {
+        const { 
+            title, label, value = '', placeholder = '', 
+            inputType = 'text', confirmText = 'Mentés', 
+            onConfirm = null 
+        } = options;
+
+        const modal = document.createElement('div');
+        modal.className = 'fixed inset-0 bg-black/50 flex items-center justify-center z-50';
+        modal.innerHTML = `
+            <div class="bg-white rounded-3xl p-6 max-w-md w-full mx-4 shadow-2xl">
+                <h3 class="text-lg font-bold text-gray-800 mb-1">${title}</h3>
+                <p class="text-sm text-gray-500 mb-4">${label}</p>
+                <input type="${inputType}" id="inputModalValue" 
+                       class="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                       value="${this._escapeHtml(String(value))}" 
+                       placeholder="${this._escapeHtml(placeholder)}" />
+                <div class="flex gap-2 mt-4">
+                    <button id="inputModalCancel" class="flex-1 py-3 bg-gray-100 text-gray-600 rounded-xl font-bold hover:bg-gray-200 transition">Mégse</button>
+                    <button id="inputModalConfirm" class="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition">${confirmText}</button>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(modal);
+
+        const input = modal.querySelector('#inputModalValue');
+        const confirmBtn = modal.querySelector('#inputModalConfirm');
+        const cancelBtn = modal.querySelector('#inputModalCancel');
+
+        const close = (result) => {
+            modal.remove();
+            resolve(result);
+        };
+
+        confirmBtn.addEventListener('click', () => {
+            const val = input.value.trim();
+            if (onConfirm) {
+                onConfirm(val);
+            }
+            close(val || null);
+        });
+
+        cancelBtn.addEventListener('click', () => close(null));
+
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') confirmBtn.click();
+            if (e.key === 'Escape') cancelBtn.click();
+        });
+
+        setTimeout(() => input.focus(), 100);
+        if (inputType !== 'date') input.select();
+    });
+}
+
+_escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+  
 }

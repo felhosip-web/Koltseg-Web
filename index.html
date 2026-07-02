@@ -4,25 +4,195 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Költség Nyilvántartó v4.0</title>
+    
+    <!-- ===== KÜLSŐ CDN-ek (cache-elve a Service Worker által) ===== -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dayjs@1/dayjs.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css">
-    <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#1e3a8a">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/dayjs@1/dayjs.min.js"></script>
+    
+    <!-- ===== PWA META ===== -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#1e3a8a">
     <link rel="apple-touch-icon" sizes="192x192" href="icons/icon-192.png">
     <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
     <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512.png">
     <link rel="apple-touch-icon" href="icons/icon.svg">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    
+    <!-- ===== SAJÁT STÍLUS ===== -->
     <link rel="stylesheet" href="css/style.css">
+    
+    <!-- ===== WORKBOX SERVICE WORKER REGISZTRÁCIÓ ===== -->
+    <script>
+        // Service Worker regisztráció Workbox-szal
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/service-worker.js', {
+                    scope: './'
+                })
+                .then(registration => {
+                    console.log('[App] SW regisztrálva:', registration);
+                    
+                    // Verzió ellenőrzés
+                    if (registration.active) {
+                        registration.active.postMessage('getVersion');
+                    }
+                    
+                    // Frissítés ellenőrzés
+                    registration.addEventListener('updatefound', () => {
+                        const newWorker = registration.installing;
+                        newWorker.addEventListener('statechange', () => {
+                            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                // Új verzió elérhető
+                                showUpdateNotification();
+                            }
+                        });
+                    });
+                })
+                .catch(error => {
+                    console.log('[App] SW regisztráció sikertelen:', error);
+                });
+            });
+        }
+
+        // Frissítés értesítés
+        function showUpdateNotification() {
+            // Ellenőrizzük, hogy már van-e értesítés
+            if (document.querySelector('.update-notification')) return;
+            
+            const toast = document.createElement('div');
+            toast.className = 'update-notification fixed bottom-24 left-4 right-4 md:left-auto md:right-4 md:max-w-sm bg-blue-600 text-white p-4 rounded-2xl shadow-2xl z-[9999] flex items-center justify-between animate-slide-up';
+            toast.innerHTML = `
+                <span class="flex items-center gap-2 text-sm font-medium">
+                    <i class="fas fa-sync-alt fa-spin"></i>
+                    Új verzió elérhető!
+                </span>
+                <button onclick="location.reload()" class="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-xl text-sm font-bold transition">
+                    Frissítés
+                </button>
+            `;
+            document.body.appendChild(toast);
+            
+            // Automatikus eltűnés 15 másodperc után
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateY(20px)';
+                toast.style.transition = 'all 0.5s ease';
+                setTimeout(() => toast.remove(), 500);
+            }, 15000);
+        }
+
+        // Animáció hozzáadása (ha még nincs)
+        (function addAnimationStyles() {
+            if (document.getElementById('update-animation-styles')) return;
+            const style = document.createElement('style');
+            style.id = 'update-animation-styles';
+            style.textContent = `
+                .animate-slide-up {
+                    animation: slideUp 0.5s ease forwards;
+                }
+                @keyframes slideUp {
+                    from {
+                        opacity: 0;
+                        transform: translateY(20px);
+                    }
+                    to {
+                        opacity: 1;
+                        transform: translateY(0);
+                    }
+                }
+            `;
+            document.head.appendChild(style);
+        })();
+
+        // ===== WORKBOX CACHE FRISSÍTÉS (opcionális) =====
+        // Ha a felhasználó manuálisan szeretné frissíteni a cache-t
+        window.refreshCache = function() {
+            if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+                navigator.serviceWorker.controller.postMessage('refreshCache');
+                console.log('[App] Cache frissítés kérelem elküldve');
+                showToast('Cache frissítés indítva', 'success');
+            }
+        };
+
+        // Egyszerű toast funkció (ha nincs más)
+        function showToast(message, type = 'info') {
+            const colors = {
+                info: 'bg-blue-600',
+                success: 'bg-emerald-600',
+                warning: 'bg-amber-600',
+                error: 'bg-red-600'
+            };
+            const toast = document.createElement('div');
+            toast.className = `fixed top-4 right-4 z-[9999] ${colors[type] || colors.info} text-white px-6 py-3 rounded-2xl shadow-xl text-sm font-medium animate-slide-up`;
+            toast.textContent = message;
+            document.body.appendChild(toast);
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateY(-20px)';
+                toast.style.transition = 'all 0.5s ease';
+                setTimeout(() => toast.remove(), 500);
+            }, 3000);
+        }
+    </script>
 </head>
+
+<!-- ===== REJTETT DEBUG PANEL ===== -->
+<div id="debugPanel" class="hidden fixed inset-0 bg-black/80 z-[99999] flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-2xl w-full max-h-[90vh] overflow-hidden shadow-2xl">
+        <div class="bg-gradient-to-r from-slate-800 to-slate-900 p-4 text-white flex items-center justify-between">
+            <h3 class="font-bold text-lg flex items-center gap-2">
+                <i class="fas fa-bug"></i> Debug Panel
+            </h3>
+            <button id="closeDebugPanel" class="text-white/80 hover:text-white text-2xl">×</button>
+        </div>
+        
+        <div class="p-6 overflow-y-auto max-h-[70vh] space-y-4">
+            <!-- Állapot -->
+            <div id="debugStatus" class="bg-gray-50 p-4 rounded-xl text-sm font-mono">
+                Betöltés...
+            </div>
+            
+            <!-- Gombok -->
+            <div class="grid grid-cols-2 gap-2">
+                <button class="debug-btn bg-emerald-600 text-white p-3 rounded-xl font-bold text-sm hover:bg-emerald-700 transition" data-action="loadData">
+                    📥 Tesztadatok (30)
+                </button>
+                <button class="debug-btn bg-amber-600 text-white p-3 rounded-xl font-bold text-sm hover:bg-amber-700 transition" data-action="loadReminders">
+                    ⏰ Határidők (10)
+                </button>
+                <button class="debug-btn bg-blue-600 text-white p-3 rounded-xl font-bold text-sm hover:bg-blue-700 transition" data-action="refreshAll">
+                    🔄 Minden frissítés
+                </button>
+                <button class="debug-btn bg-purple-600 text-white p-3 rounded-xl font-bold text-sm hover:bg-purple-700 transition" data-action="showData">
+                    📊 Adatok mutatása
+                </button>
+                <button class="debug-btn bg-red-600 text-white p-3 rounded-xl font-bold text-sm hover:bg-red-700 transition col-span-2" data-action="clearAll">
+                    🗑️ ÖSSZES TÖRLÉSE
+                </button>
+            </div>
+            
+            <!-- Logok -->
+            <div>
+                <p class="text-xs font-bold text-gray-500 uppercase mb-2">📋 Konzol logok</p>
+                <div id="debugLogs" class="bg-slate-900 text-slate-300 p-3 rounded-xl text-[11px] font-mono max-h-[200px] overflow-y-auto whitespace-pre-wrap leading-relaxed">
+                    Nincs log
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ===== DEBUG PANEL NYITÓ GOMB (LÁTHATATLAN) ===== -->
+<button id="debugToggleBtn" class="fixed bottom-4 right-4 w-6 h-6 bg-transparent border-none cursor-pointer z-[99998] rounded-full hover:bg-blue-500/10 transition"></button>
+
 <body class="bg-gray-50 min-h-screen pb-24">
 
     <div class="max-w-7xl mx-auto p-4 md:p-6">
@@ -60,6 +230,15 @@
                     <button id="btnDataControl" class="p-3 bg-amber-500 text-white rounded-2xl hover:bg-amber-600 transition shadow-sm">
                         <i class="fas fa-database"></i>
                     </button>
+                    
+                    <button id="btnDbAudit" class="w-full text-left px-4 py-3 hover:bg-gray-100 rounded-2xl flex items-center gap-3">
+                        <i class="fas fa-database text-amber-600"></i>
+                        <div>
+                          <div class="font-medium">IndexedDB Audit</div>
+                          <div class="text-xs text-gray-500">Diagnosztika + Index rebuild</div>
+                        </div>
+                    </button>
+                    
                     <button id="btnInstallApp" class="hidden px-4 py-2 bg-slate-900 text-white rounded-2xl text-sm font-bold flex items-center gap-2 hover:bg-slate-800 transition shadow-sm">
                         <i class="fas fa-arrow-to-bottom"></i> Telepítés
                     </button>
@@ -99,6 +278,18 @@
                         </button>
                     </div>
                 </div>
+                
+          <!-- ===== SZINKRONIZÁCIÓS QUEUE BADGE TOOLTIP ===== -->
+          <div id="syncQueueContainer" class="relative inline-block ml-2 cursor-pointer group" title="Függőben lévő szinkronizációs műveletek">
+              <i class="fas fa-cloud-upload-alt text-gray-400 text-lg hover:text-amber-500 transition"></i>
+              <span id="syncQueueBadge" class="absolute -top-1 -right-1 bg-amber-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center hidden">0</span>
+    
+              <!-- Tooltip -->
+              <div class="sync-queue-tooltip hidden group-hover:block absolute right-0 top-full mt-2 bg-white rounded-2xl shadow-2xl p-4 min-w-[220px] z-50 border border-gray-100">
+                <div class="text-xs font-bold text-gray-700 mb-2">🔄 Függő műveletek</div>
+                <div id="tooltipContent" class="text-xs text-gray-500">Nincs adat</div>
+              </div>
+          </div>
 
                 <!-- EUR státusz -->
                 <div class="flex items-center gap-2 px-4 py-2.5 bg-gray-50 rounded-2xl border border-gray-200 text-sm font-medium">
@@ -131,6 +322,35 @@
                     <label class="block text-xs font-semibold text-gray-600 mb-1">Anon Public API Key</label>
                     <input type="password" id="supabaseKeyInput" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:border-indigo-500 text-sm">
                 </div>
+<!-- Új: Háttérfolyamatok finomhangolása -->
+<div class="mt-8 pt-6 border-t border-gray-200">
+    <h3 class="font-semibold text-gray-800 mb-4 flex items-center gap-2">
+        <i class="fas fa-cogs"></i> Háttérfolyamatok
+    </h3>
+    
+    <div class="space-y-5">
+        <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Emlékeztető ellenőrzés (perc)</label>
+            <input type="number" id="bgReminderInterval" value="5" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+            <p class="text-xs text-gray-500 mt-1">Milyen gyakran ellenőrizze a lejárt határidőket</p>
+        </div>
+
+        <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Automatikus szinkronizáció (perc)</label>
+            <input type="number" id="bgSyncInterval" value="10" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+        </div>
+
+        <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Automatikus backup (perc)</label>
+            <input type="number" id="bgBackupInterval" value="25" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+        </div>
+
+        <div class="flex items-center gap-2">
+            <input type="checkbox" id="bgTasksEnabled" checked class="w-4 h-4">
+            <label for="bgTasksEnabled" class="text-sm text-gray-700">Háttérfolyamatok engedélyezve</label>
+        </div>
+    </div>
+</div>
                 <div>
                     <label class="block text-xs font-semibold text-gray-600 mb-1">Biztonsági EUR árfolyam (Ft)</label>
                     <input type="number" id="eurRateInput" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:border-indigo-500 text-sm font-semibold text-gray-700">
@@ -205,8 +425,11 @@
     <span id="hmiAlarmText">Nincs aktív esemény</span>
 </div>
 
-        <!-- ===== TABS NAVIGÁCIÓ ===== -->
+<!-- ===== TABS NAVIGÁCIÓ ===== -->
 <div class="flex gap-2 mb-4 overflow-x-auto pb-1">
+    <button class="tab-btn px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all bg-blue-600 text-white shadow-md" data-tab="dashboard">
+        <i class="fas fa-chart-pie mr-1"></i> Áttekintés
+    </button>
     <button class="tab-btn px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all bg-gray-100 text-gray-600 hover:bg-gray-200" data-tab="table">
         <i class="fas fa-table mr-1"></i> Táblázat
     </button>
@@ -216,13 +439,136 @@
     <button class="tab-btn px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all bg-gray-100 text-gray-600 hover:bg-gray-200" data-tab="reminders">
         <i class="fas fa-clock mr-1"></i> Határidők
     </button>
+    <button class="tab-btn px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all bg-gray-100 text-gray-600 hover:bg-gray-200" data-tab="incoming">
+        <i class="fas fa-arrow-down text-emerald-500 mr-1"></i> Bejövő utalás
+    </button>
     <button class="tab-btn px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all bg-gray-100 text-gray-600 hover:bg-gray-200" data-tab="stats">
-        <i class="fas fa-chart-pie mr-1"></i> Statisztika
+        <i class="fas fa-calculator mr-1"></i> Részletek
     </button>
 </div>
 
-        <!-- ===== TAB TARTALMAK ===== -->
+    <!-- ===== TAB TARTALMAK ===== -->
        <div id="tabContent">
+         
+         <!-- ===== 0. DASHBOARD (ÚJ) ===== -->
+<div id="tab-dashboard" class="tab-pane">
+    <!-- Összegző kártyák -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div class="bg-white p-5 rounded-2xl shadow border border-gray-100 hover:shadow-lg transition">
+            <p class="text-gray-500 text-xs font-medium uppercase tracking-wider">Összes kiadás</p>
+            <p id="dashTotal" class="text-2xl font-bold text-gray-800 mt-1">-</p>
+            <p id="dashTotalTrend" class="text-xs text-emerald-500 mt-1">↗︎ +12% az előző hónaphoz</p>
+        </div>
+        <div class="bg-white p-5 rounded-2xl shadow border border-gray-100 hover:shadow-lg transition">
+            <p class="text-gray-500 text-xs font-medium uppercase tracking-wider">E havi kiadás</p>
+            <p id="dashMonthly" class="text-2xl font-bold text-blue-600 mt-1">-</p>
+            <p id="dashMonthlyProgress" class="text-xs text-gray-400 mt-1">Havi keret: 70%</p>
+        </div>
+        <div class="bg-white p-5 rounded-2xl shadow border border-gray-100 hover:shadow-lg transition">
+            <p class="text-gray-500 text-xs font-medium uppercase tracking-wider">Napi átlag</p>
+            <p id="dashDailyAvg" class="text-2xl font-bold text-emerald-600 mt-1">-</p>
+            <p id="dashDailyTrend" class="text-xs text-gray-400 mt-1">30 nap alapján</p>
+        </div>
+        <div class="bg-white p-5 rounded-2xl shadow border border-gray-100 hover:shadow-lg transition">
+            <p class="text-gray-500 text-xs font-medium uppercase tracking-wider">Legnagyobb tétel</p>
+            <p id="dashTopCategory" class="text-2xl font-bold text-amber-600 mt-1 truncate">-</p>
+            <p id="dashTopAmount" class="text-xs text-gray-400 mt-1">-</p>
+        </div>
+    </div>
+
+<!-- ===== BEJÖVŐ UTALÁSOK KÁRTYÁK (ÚJ) ===== -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="bg-gradient-to-br from-emerald-50 to-emerald-100 p-5 rounded-2xl shadow border border-emerald-200 hover:shadow-lg transition">
+        <p class="text-gray-600 text-xs font-medium uppercase tracking-wider flex items-center gap-1">
+            <i class="fas fa-arrow-down text-emerald-500"></i> Összes bejövő
+        </p>
+        <p id="dashIncomingTotal" class="text-2xl font-bold text-emerald-700 mt-1">-</p>
+        <p class="text-xs text-emerald-500 mt-1">📈 Összes utalás</p>
+    </div>
+    <div class="bg-gradient-to-br from-emerald-50 to-emerald-100 p-5 rounded-2xl shadow border border-emerald-200 hover:shadow-lg transition">
+        <p class="text-gray-600 text-xs font-medium uppercase tracking-wider flex items-center gap-1">
+            <i class="fas fa-calendar-check text-emerald-500"></i> E havi bejövő
+        </p>
+        <p id="dashIncomingMonthly" class="text-2xl font-bold text-emerald-700 mt-1">-</p>
+        <p class="text-xs text-emerald-500 mt-1">📅 Jelenlegi hónap</p>
+    </div>
+    <div class="bg-gradient-to-br from-emerald-50 to-emerald-100 p-5 rounded-2xl shadow border border-emerald-200 hover:shadow-lg transition">
+        <p class="text-gray-600 text-xs font-medium uppercase tracking-wider flex items-center gap-1">
+            <i class="fas fa-user text-emerald-500"></i> Legtöbb utaló
+        </p>
+        <p id="dashTopSender" class="text-2xl font-bold text-emerald-700 mt-1 truncate">-</p>
+        <p id="dashTopSenderAmount" class="text-xs text-emerald-500 mt-1">-</p>
+    </div>
+    <div class="bg-gradient-to-br from-emerald-50 to-emerald-100 p-5 rounded-2xl shadow border border-emerald-200 hover:shadow-lg transition">
+        <p class="text-gray-600 text-xs font-medium uppercase tracking-wider flex items-center gap-1">
+            <i class="fas fa-exchange-alt text-emerald-500"></i> Egyenleg
+        </p>
+        <p id="dashBalance" class="text-2xl font-bold text-blue-700 mt-1">-</p>
+        <p class="text-xs text-gray-500 mt-1">💰 Kiadás - Bejövő</p>
+    </div>
+</div>
+
+    <!-- Havi trend + TOP 5 -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Havi trend (mini chart) -->
+        <div class="lg:col-span-2 bg-white p-6 rounded-2xl shadow border border-gray-100">
+            <h3 class="text-sm font-bold text-gray-700 mb-4 flex items-center gap-2">
+                <i class="fas fa-chart-area text-blue-500"></i> Havi kiadások alakulása
+            </h3>
+            <div class="relative h-[200px]">
+                <canvas id="dashboardTrendChart"></canvas>
+            </div>
+            <div class="flex justify-between text-xs text-gray-400 mt-2" id="dashMonthLabels"></div>
+        </div>
+
+        <!-- TOP 5 kategória -->
+        <div class="bg-white p-6 rounded-2xl shadow border border-gray-100">
+            <h3 class="text-sm font-bold text-gray-700 mb-4 flex items-center gap-2">
+                <i class="fas fa-trophy text-amber-500"></i> TOP 5 kategória
+            </h3>
+            <div id="dashTop5List" class="space-y-2">
+                <div class="text-center text-gray-400 text-sm py-4">Nincs elég adat</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Figyelmeztetések + EUR -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+        <!-- Figyelmeztetések -->
+        <div class="bg-white p-6 rounded-2xl shadow border border-gray-100">
+            <h3 class="text-sm font-bold text-gray-700 mb-4 flex items-center gap-2">
+                <i class="fas fa-bell text-amber-500"></i> Értesítések
+            </h3>
+            <div id="dashNotifications" class="space-y-2">
+                <div class="text-center text-gray-400 text-sm py-4">Minden rendben ✅</div>
+            </div>
+        </div>
+
+        <!-- EUR árfolyam + gyors információk -->
+        <div class="bg-white p-6 rounded-2xl shadow border border-gray-100">
+            <h3 class="text-sm font-bold text-gray-700 mb-4 flex items-center gap-2">
+                <i class="fas fa-info-circle text-blue-500"></i> Gyors információk
+            </h3>
+            <div class="space-y-3">
+                <div class="flex justify-between text-sm border-b border-gray-100 pb-2">
+                    <span class="text-gray-500">💶 EUR árfolyam</span>
+                    <span id="dashEurRate" class="font-bold text-gray-800">- Ft</span>
+                </div>
+                <div class="flex justify-between text-sm border-b border-gray-100 pb-2">
+                    <span class="text-gray-500">📊 Bejegyzések száma</span>
+                    <span id="dashEntryCount" class="font-bold text-gray-800">-</span>
+                </div>
+                <div class="flex justify-between text-sm border-b border-gray-100 pb-2">
+                    <span class="text-gray-500">📅 Aktív hónapok</span>
+                    <span id="dashMonthCount" class="font-bold text-gray-800">-</span>
+                </div>
+                <div class="flex justify-between text-sm">
+                    <span class="text-gray-500">🏷️ Kategóriák száma</span>
+                    <span id="dashItemCount" class="font-bold text-gray-800">-</span>
+                </div>
+            </div>
+        </div>
+    </div>
        
             <!-- 1. TÁBLÁZAT -->
             <div id="tab-table" class="tab-pane">
@@ -252,6 +598,17 @@
                         <div class="relative h-[250px] flex justify-center"><canvas id="currencyChart"></canvas></div>
                     </div>
                 </div>
+                <!-- ===== ÚJ: BEJÖVŐ UTALÁSOK TREND ===== -->
+<div class="mt-6 grid grid-cols-1 gap-6">
+    <div class="bg-white p-6 rounded-3xl shadow-xl border border-gray-100">
+        <h3 class="text-base font-semibold text-gray-700 mb-4 flex items-center gap-2">
+            <i class="fas fa-arrow-down text-emerald-500"></i> Bejövő utalások trendje
+        </h3>
+        <div class="relative h-[250px]">
+            <canvas id="incomingTrendChart"></canvas>
+        </div>
+    </div>
+</div>
                 <div class="mt-4 flex justify-end">
                     <select id="monthFilter" class="bg-white border border-gray-200 text-gray-700 px-4 py-2.5 rounded-2xl shadow-sm text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500">
                         <option value="all">Összes hónap</option>
@@ -338,6 +695,33 @@
                         <p id="statTransfer" class="text-3xl font-bold text-amber-600 mt-2">-</p>
                     </div>
                 </div>
+<!-- ===== BEJÖVŐ STATISZTIKA (ÚJ SOR) ===== -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+    <div class="bg-white p-6 rounded-3xl shadow border border-gray-100">
+        <p class="text-gray-500 text-sm flex items-center gap-1">
+            <i class="fas fa-arrow-down text-emerald-500"></i> Összes bejövő
+        </p>
+        <p id="statIncomingTotal" class="text-3xl font-bold text-emerald-600 mt-2">-</p>
+    </div>
+    <div class="bg-white p-6 rounded-3xl shadow border border-gray-100">
+        <p class="text-gray-500 text-sm flex items-center gap-1">
+            <i class="fas fa-user text-emerald-500"></i> Legtöbb utaló
+        </p>
+        <p id="statIncomingTopSender" class="text-xl font-bold text-gray-800 mt-2 truncate">-</p>
+    </div>
+    <div class="bg-white p-6 rounded-3xl shadow border border-gray-100">
+        <p class="text-gray-500 text-sm flex items-center gap-1">
+            <i class="fas fa-receipt text-emerald-500"></i> Bejövő tételek
+        </p>
+        <p id="statIncomingCount" class="text-3xl font-bold text-gray-800 mt-2">-</p>
+    </div>
+    <div class="bg-white p-6 rounded-3xl shadow border border-gray-100">
+        <p class="text-gray-500 text-sm flex items-center gap-1">
+            <i class="fas fa-scale-balanced text-blue-500"></i> Egyenleg
+        </p>
+        <p id="statBalance" class="text-2xl font-bold mt-2">-</p>
+    </div>
+</div>
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div class="bg-white p-6 rounded-3xl shadow border border-gray-100">
                         <p class="text-gray-500 text-sm">Kategóriák száma</p>
@@ -362,6 +746,20 @@
                     </div>
                 </div>
             </div>
+            <!-- ===== 5. BEJÖVŐ UTALÁSOK ===== -->
+<div id="tab-incoming" class="tab-pane hidden">
+    <div class="flex justify-between items-center mb-4">
+        <h3 class="text-sm font-bold text-gray-700 flex items-center gap-2">
+            <i class="fas fa-arrow-down text-emerald-500"></i> Bejövő utalások
+        </h3>
+        <button id="btnAddIncoming" class="px-4 py-2.5 bg-emerald-600 text-white rounded-2xl text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 transition shadow-sm">
+            <i class="fas fa-plus-circle"></i> Bejövő tétel
+        </button>
+    </div>
+    <div id="incomingTableContainer" class="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-x-auto p-4">
+        <!-- A renderer tölti fel -->
+    </div>
+</div>
 
         </div><!-- /tabContent -->
 
@@ -612,6 +1010,27 @@
             <button id="btnExecuteSync" class="flex-1 py-4 bg-indigo-600 text-white hover:bg-indigo-700 transition text-center font-black uppercase tracking-wider shadow-inner flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed" disabled>
                 <i class="fas fa-play"></i> Szinkronizáció indítása
             </button>
+        </div>
+    </div>
+</div>
+
+<!-- DB Audit Modal -->
+<div id="dbAuditModal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-[9999]">
+    <div class="bg-white rounded-3xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-hidden">
+        <div class="p-6 border-b flex items-center justify-between">
+            <h3 class="font-bold text-xl">🛠 IndexedDB Audit</h3>
+            <button onclick="document.getElementById('dbAuditModal').classList.add('hidden')" class="text-2xl">×</button>
+        </div>
+        
+        <div id="auditReportContainer" class="p-6 overflow-auto" style="max-height: 65vh;">
+            <!-- JS tölti meg -->
+        </div>
+
+        <div class="p-6 border-t flex gap-3">
+            <button onclick="document.getElementById('dbAuditModal').classList.add('hidden')" 
+                    class="flex-1 py-4 bg-gray-100 rounded-2xl font-semibold">Bezárás</button>
+            <button id="btnRebuildIndexes" 
+                    class="flex-1 py-4 bg-amber-600 text-white rounded-2xl font-semibold">Indexek újjáépítése</button>
         </div>
     </div>
 </div>

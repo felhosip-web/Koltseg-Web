@@ -14,7 +14,7 @@ export class VersionManager {
      */
     async load() {
         try {
-            const response = await fetch('/version.json');
+            const response = await fetch('./version.json');
             if (!response.ok) throw new Error('Version file not found');
             
             const data = await response.json();
