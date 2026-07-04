@@ -31,37 +31,9 @@
     
     <!-- ===== WORKBOX SERVICE WORKER REGISZTRÁCIÓ ===== -->
     <script>
-        // Service Worker regisztráció Workbox-szal
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/service-worker.js', {
-                    scope: './'
-                })
-                .then(registration => {
-                    console.log('[App] SW regisztrálva:', registration);
-                    
-                    // Verzió ellenőrzés
-                    if (registration.active) {
-                        registration.active.postMessage('getVersion');
-                    }
-                    
-                    // Frissítés ellenőrzés
-                    registration.addEventListener('updatefound', () => {
-                        const newWorker = registration.installing;
-                        newWorker.addEventListener('statechange', () => {
-                            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                                // Új verzió elérhető
-                                showUpdateNotification();
-                            }
-                        });
-                    });
-                })
-                .catch(error => {
-                    console.log('[App] SW regisztráció sikertelen:', error);
-                });
-            });
-        }
-
+        // A Service Worker regisztrációt a `PwaManager` kezeli (js/pwa-manager.js).
+        // Itt csak globális UI segédfüggvények vannak (update toast, cache refresh, stb.).
+    </script>
         // Frissítés értesítés
         function showUpdateNotification() {
             // Ellenőrizzük, hogy már van-e értesítés

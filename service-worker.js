@@ -123,7 +123,7 @@ registerRoute(
                         return offlineResponse;
                     }
                     // Fallback: beépített offline HTML
-                    return new Response(OFFLINE_FALLBACK, {
+                    return new Response(FALLBACK_HTML, {
                         headers: { 'Content-Type': 'text/html' }
                     });
                 }
@@ -162,7 +162,7 @@ registerRoute(
     ({url}) => 
         url.pathname.includes('/icons/') ||
         url.pathname === '/manifest.json' ||
-        url.pathname === '/favicon.ico',
+        url.pathname === '/icons/icon-192.png',
     new CacheFirst({
         cacheName: 'icons',
         plugins: [
@@ -214,7 +214,7 @@ self.addEventListener('install', event => {
                     '/index.html',
                     '/offline.html',   // ← EZ FONTOS!
                     '/manifest.json',
-                    '/favicon.ico'
+                    '/icons/icon-192.png'
                 ]).catch(err => {
                     console.warn('[SW] Néhány fájl nem cache-elhető:', err);
                 });

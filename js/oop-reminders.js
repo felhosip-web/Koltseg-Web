@@ -51,7 +51,7 @@ export class RemindersRenderer {
                 html += `
                     <tr class="border-b border-gray-100 hover:bg-gray-50 transition-all group ${isCompleted ? 'opacity-75' : ''}">
                         <td class="p-3">${statusHTML}</td>
-                        <td class="p-3 font-medium text-gray-800 \( {isCompleted ? 'line-through' : ''}"> \){rem.title}</td>
+                        <td class="p-3 font-medium text-gray-800 ${isCompleted ? 'line-through' : ''}">${rem.title}</td>
                         <td class="p-3 text-gray-600">${this._formatFrequency(rem.frequency)}</td>
                         <td class="p-3 font-mono text-sm">${rem.due_date}</td>
                         <td class="p-3 font-mono text-sm ${diffDays < 0 && !isCompleted ? 'text-red-600' : ''}">
@@ -144,7 +144,7 @@ export class RemindersRenderer {
         if (!("Notification" in window) || Notification.permission !== "granted") return;
 
         new Notification("Új határidő", {
-            body: `${reminder.title} - ${reminder.amount} \( {reminder.currency || 'HUF'}\n \){reminder.due_date}`,
+            body: `${reminder.title} - ${reminder.amount} ${reminder.currency || 'HUF'}\n${reminder.due_date}`,
             icon: "/icons/icon-192.png",
             tag: `reminder-${reminder.id}`
         });
@@ -203,8 +203,18 @@ export class RemindersApp {
         const due_date = document.getElementById('remDateInput').value;
         const frequency = document.getElementById('remFreqSelect').value;
 
-        if (!title || isNaN(amount) || !due_date) {
-            await this.hmiNotif.showInfo('Hiányzó adatok', 'Minden mezőt ki kell tölteni!');
+        if (!title || !title.length) {
+            await this.hmiNotif.showInfo('Hiányzó adatok', 'A határidő címe nem lehet üres!');
+            return;
+        }
+
+        if (isNaN(amount) || amount <= 0) {
+            await this.hmiNotif.showInfo('Hiányzó adatok', 'Az összegnek nagyobbnak kell lennie nullánál!');
+            return;
+        }
+
+        if (!due_date || Number.isNaN(new Date(due_date).getTime())) {
+            await this.hmiNotif.showInfo('Hiányzó adatok', 'Érvénytelen határidő dátum!');
             return;
         }
 
@@ -224,8 +234,18 @@ export class RemindersApp {
         const due_date = document.getElementById('editRemDate').value;
         const frequency = document.getElementById('editRemFreq').value;
 
-        if (!title || isNaN(amount) || !due_date) {
-            await this.hmiNotif.showInfo('Hiányzó adatok', 'Minden mezőt ki kell tölteni!');
+        if (!title || !title.length) {
+            await this.hmiNotif.showInfo('Hiányzó adatok', 'A határidő címe nem lehet üres!');
+            return;
+        }
+
+        if (isNaN(amount) || amount <= 0) {
+            await this.hmiNotif.showInfo('Hiányzó adatok', 'Az összegnek nagyobbnak kell lennie nullánál!');
+            return;
+        }
+
+        if (!due_date || Number.isNaN(new Date(due_date).getTime())) {
+            await this.hmiNotif.showInfo('Hiányzó adatok', 'Érvénytelen határidő dátum!');
             return;
         }
 

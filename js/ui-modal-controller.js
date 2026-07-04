@@ -113,6 +113,10 @@ export class UIModalController {
             this.modal.classList.remove('hidden');
 
             // Event listener-ek (egyszeri)
+            const removeEscapeListener = () => {
+                document.removeEventListener('keydown', handleEscape);
+            };
+
             const cleanup = () => {
                 this.modal.classList.add('hidden');
                 // Klónozás a duplikált listener-ek elkerülésére
@@ -120,16 +124,19 @@ export class UIModalController {
                 const newCancel = cancelBtn.cloneNode(true);
                 okBtn.parentNode.replaceChild(newOk, okBtn);
                 cancelBtn.parentNode.replaceChild(newCancel, cancelBtn);
+                removeEscapeListener();
                 resolve(false);
             };
 
             const handleOk = () => {
                 this.modal.classList.add('hidden');
+                removeEscapeListener();
                 resolve(true);
             };
 
             const handleCancel = () => {
                 this.modal.classList.add('hidden');
+                removeEscapeListener();
                 resolve(false);
             };
 
@@ -141,7 +148,6 @@ export class UIModalController {
             const handleEscape = (e) => {
                 if (e.key === 'Escape' && !this.modal.classList.contains('hidden')) {
                     handleCancel();
-                    document.removeEventListener('keydown', handleEscape);
                 }
             };
             document.addEventListener('keydown', handleEscape);

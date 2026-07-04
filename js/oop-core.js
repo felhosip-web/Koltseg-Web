@@ -401,6 +401,35 @@ export class ConfigManager {
             uiCallback(this.eurRate, 'fallback');
         }
     }
+
+    saveSettings(settings) {
+        if (!settings || typeof settings !== 'object') return false;
+        const { url, key, useCloud, eurRate } = settings;
+
+        if (url !== undefined) {
+            this.supabaseConfig.url = url;
+            localStorage.setItem('supabase_url', url);
+        }
+        if (key !== undefined) {
+            this.supabaseConfig.key = key;
+            localStorage.setItem('supabase_key', key);
+        }
+        if (useCloud !== undefined) {
+            this.useSupabase = Boolean(useCloud);
+            localStorage.setItem('supabase_use', this.useSupabase ? 'true' : 'false');
+        }
+        if (eurRate !== undefined) {
+            this.eurRate = Number(eurRate);
+            localStorage.setItem('default_eur_rate', String(this.eurRate));
+        }
+
+        return true;
+    }
+
+    setSupabaseEnabled(enabled) {
+        this.useSupabase = Boolean(enabled);
+        localStorage.setItem('supabase_use', this.useSupabase ? 'true' : 'false');
+    }
 }
 
 // ==================== 4. CLOUD SYNC SYSTEM ====================
@@ -684,9 +713,20 @@ export class IncomingManager {
      * @returns {Promise<object>} - A létrehozott tétel
      */
     async add(sender, date, amount) {
+        sender = String(sender || '').trim();
+        if (!sender) {
+            throw new Error('Az utaló neve nem lehet üres.');
+        }
+        const normalizedDate = String(date || '').trim();
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(normalizedDate) || Number.isNaN(new Date(normalizedDate).getTime())) {
+            throw new Error('Érvénytelen dátum formátum.');
+        }
+        if (isNaN(amount) || amount <= 0) {
+            throw new Error('Az összegnek nagyobbnak kell lennie nullánál.');
+        }
         // Ellenőrizzük, hogy van-e már ilyen tétel
         const existing = this.incomings.find(
-            entry => entry.sender === sender && entry.date === date
+            entry => entry.sender === sender && entry.date === normalizedDate
         );
         if (existing) {
             // Frissítjük a meglévőt
@@ -698,7 +738,7 @@ export class IncomingManager {
 
         const entry = {
             sender,
-            date,
+            date: normalizedDate,
             amount,
             updated_at: new Date().toISOString(),
             created_at: new Date().toISOString()
@@ -716,6 +756,25 @@ export class IncomingManager {
     async update(id, data) {
         const idx = this.incomings.findIndex(e => e.id === id);
         if (idx === -1) return null;
+        if (data.hasOwnProperty('amount')) {
+            if (isNaN(data.amount) || data.amount <= 0) {
+                throw new Error('Az összegnek nagyobbnak kell lennie nullánál.');
+            }
+        }
+        if (data.hasOwnProperty('sender')) {
+            const senderName = String(data.sender || '').trim();
+            if (!senderName) {
+                throw new Error('Az utaló neve nem lehet üres.');
+            }
+            data.sender = senderName;
+        }
+        if (data.hasOwnProperty('date')) {
+            const normalizedDate = String(data.date || '').trim();
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(normalizedDate) || Number.isNaN(new Date(normalizedDate).getTime())) {
+                throw new Error('Érvénytelen dátum formátum.');
+            }
+            data.date = normalizedDate;
+        }
         
         const entry = { ...this.incomings[idx], ...data, updated_at: new Date().toISOString() };
         await this.db.save('incomings', entry);

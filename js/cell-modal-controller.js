@@ -227,12 +227,12 @@ export class CellModalController {
             const oldEntry = this.app.entries.entries.find(e => e.id === this.editingEntryId);
             entryData = {
                 id: this.editingEntryId,
-                cellKey: oldEntry ? oldEntry.cellKey : `\( {this.currentCellBaseKey}_ \){Date.now()}`,
+                cellKey: oldEntry ? oldEntry.cellKey : `${this.currentCellBaseKey}_${Date.now()}`,
                 amount,
                 currency,
                 paymentMethod,
                 note,
-                color: this.selectedColor,
+                color: this._normalizeColor(this.selectedColor),
                 timestamp: new Date().toISOString(),
                 updated_at: new Date().toISOString()
             };
@@ -241,12 +241,12 @@ export class CellModalController {
         } else {
             // Új tétel
             entryData = {
-                cellKey: `\( {this.currentCellBaseKey}_ \){Date.now()}`,
+                cellKey: `${this.currentCellBaseKey}_${Date.now()}`,
                 amount,
                 currency,
                 paymentMethod,
                 note,
-                color: this.selectedColor,
+                color: this._normalizeColor(this.selectedColor),
                 timestamp: new Date().toISOString(),
                 updated_at: new Date().toISOString()
             };
@@ -263,6 +263,14 @@ export class CellModalController {
         // Fő táblázat és összegzés frissítése
         this.app.renderer.render();
         this.app.renderer.renderSummary?.();   // ha létezik
+    }
+
+    _normalizeColor(color) {
+        if (!color || typeof color !== 'string') return 'transparent';
+        const normalized = color.trim();
+        if (/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(normalized)) return normalized;
+        if (/^rgba?\(/i.test(normalized) || /^hsla?\(/i.test(normalized)) return normalized;
+        return 'transparent';
     }
 
     /**

@@ -12,26 +12,54 @@ export class BackgroundTaskManager {
     }
     
     pause() {
+        if (!this.isActive) return;
         this.isActive = false;
         console.log('[BACKGROUND] Paused due to visibilitychange');
     }
 
     resume() {
+        if (this.isActive) return;
         this.isActive = true;
         console.log('[BACKGROUND] Resumed');
-        // opcionális: azonnali check
+
+        if (!this.intervals.reminder && !this.intervals.sync && !this.intervals.backup && !this.intervals.eur) {
+            this.startAll();
+            return;
+        }
+
         this._checkOverdueReminders?.();
     }
     
     loadSettings() {
         const saved = localStorage.getItem('backgroundTaskSettings');
-        if (saved) {
-            this.settings = { ...this.settings, ...JSON.parse(saved) };
+        if (!saved) return;
+
+        try {
+            const parsed = JSON.parse(saved);
+            if (parsed && typeof parsed === 'object') {
+                const nextSettings = { ...this.settings };
+                if (Number.isFinite(parsed.reminderInterval) && parsed.reminderInterval > 0) {
+                    nextSettings.reminderInterval = parsed.reminderInterval;
+                }
+                if (Number.isFinite(parsed.syncInterval) && parsed.syncInterval > 0) {
+                    nextSettings.syncInterval = parsed.syncInterval;
+                }
+                if (Number.isFinite(parsed.backupInterval) && parsed.backupInterval > 0) {
+                    nextSettings.backupInterval = parsed.backupInterval;
+                }
+                this.settings = nextSettings;
+            }
+        } catch (error) {
+            console.warn('[BACKGROUND] backgroundTaskSettings parse error:', error);
         }
     }
 
     saveSettings() {
-        localStorage.setItem('backgroundTaskSettings', JSON.stringify(this.settings));
+        try {
+            localStorage.setItem('backgroundTaskSettings', JSON.stringify(this.settings));
+        } catch (error) {
+            console.warn('[BACKGROUND] saveSettings failed:', error);
+        }
     }
     
     startAll() {
@@ -50,7 +78,9 @@ export class BackgroundTaskManager {
         this.intervals.reminder = setInterval(() => {
             if (!this.isActive) return;
             this._checkOverdueReminders();
-        }, 5 * 60 * 1000); // 5 percenként
+        }, this.settings.reminderInterval * 60 * 1000);
+
+        this._checkOverdueReminders();
     }
 
     async _checkOverdueReminders() {
@@ -61,18 +91,18 @@ export class BackgroundTaskManager {
         reminders.forEach(rem => {
             if (rem.completed) return;
             const due = dayjs(rem.due_date);
+            if (!due.isValid()) return;
             if (due.isBefore(today, 'day')) overdue++;
         });
 
         if (overdue > 0) {
             this.app.updateReminderStatus?.();
             
-            // Értesítés
-            if ("Notification" in window && Notification.permission === "granted") {
+            if ('Notification' in window && Notification.permission === 'granted') {
                 new Notification(`${overdue} lejárt határidő!`, {
-                    body: "Kérjük, ellenőrizze a Határidők fület.",
-                    icon: "/icons/icon-192.png",
-                    tag: "overdue-reminders"
+                    body: 'Kérjük, ellenőrizze a Határidők fület.',
+                    icon: '/icons/icon-192.png',
+                    tag: 'overdue-reminders'
                 });
             }
         }
@@ -85,21 +115,19 @@ export class BackgroundTaskManager {
         this.intervals.sync = setInterval(async () => {
             if (!this.isActive || !navigator.onLine) return;
             
-            const config = this.app.config;
-            if (!config?.useSupabase) return;
+            if (!this.app.config?.useSupabase) return;
 
             try {
                 if (this.app.syncManager?.hasPendingChanges?.()) {
                     await this.app.syncManager.processPendingChanges();
                 }
-                // Teljes sync csak 30 percenként
                 if (Math.random() < 0.3) {
                     await this.app.syncManager?.sync?.();
                 }
             } catch (e) {
                 console.warn('[BACKGROUND] Auto-sync hiba:', e);
             }
-        }, 10 * 60 * 1000); // 10 percenként
+        }, this.settings.syncInterval * 60 * 1000);
     }
 
     // ==================== 3. Automatikus Backup ====================
@@ -109,7 +137,7 @@ export class BackgroundTaskManager {
         this.intervals.backup = setInterval(() => {
             if (!this.isActive) return;
             this.app.backupManager?.performBackup?.();
-        }, 25 * 60 * 1000); // 25 percenként
+        }, this.settings.backupInterval * 60 * 1000);
     }
 
     // ==================== 4. EUR Árfolyam figyelés ====================
@@ -121,28 +149,19 @@ export class BackgroundTaskManager {
             await this.app.config?.watchDogEur?.((rate, mode) => {
                 this.app.renderer?.updateLed?.(rate, mode);
             });
-        }, 60 * 60 * 1000); // óránként
+        }, 60 * 60 * 1000);
     }
 
     // ==================== Segédmetódusok ====================
     stopAll() {
         Object.values(this.intervals).forEach(id => clearInterval(id));
-        this.isActive = false;
         this.intervals = {};
+        this.isActive = false;
         console.log('[BACKGROUND] Minden háttérfolyamat leállítva');
     }
 
-    resume() {
-        this.isActive = true;
-        this.startAll();
-    }
-    
-        destroy() {
-        Object.values(this.intervals).forEach(id => {
-            if (id) clearInterval(id);
-        });
-        this.intervals = {};
-        this.isActive = false;
+    destroy() {
+        this.stopAll();
         console.log('[BackgroundTaskManager] Összes háttérfolyamat leállítva');
     }
 }

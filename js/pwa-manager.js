@@ -11,10 +11,29 @@ export class PwaManager {
             console.log('[PWA] Service Worker nem támogatott');
             return;
         }
-        
         navigator.serviceWorker.register('./service-worker.js')
             .then(reg => {
                 console.log('[PWA] Service Worker regisztrálva:', reg.scope);
+
+                // Verzió lekérése a SW-től
+                try {
+                    if (reg.active) reg.active.postMessage('getVersion');
+                } catch (e) {
+                    console.warn('[PWA] Verzió lekérése sikertelen:', e);
+                }
+
+                // Update handling: ha új worker települ, jelezzük a felhasználónak
+                reg.addEventListener('updatefound', () => {
+                    const newWorker = reg.installing;
+                    if (!newWorker) return;
+                    newWorker.addEventListener('statechange', () => {
+                        if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                            if (typeof window.showUpdateNotification === 'function') {
+                                window.showUpdateNotification();
+                            }
+                        }
+                    });
+                });
             })
             .catch(err => {
                 console.warn('[PWA] Service Worker regisztráció sikertelen:', err);

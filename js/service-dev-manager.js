@@ -49,6 +49,11 @@ export class ServiceDevManager {
             console.log('[SERVICE] 🛠️ Fejlesztői mód aktiválva (paraméter)');
         }
 
+        if (hasParam) {
+            // Expose a console-friendly handle
+            try { window.service = this; } catch (e) { /* ignore in strict contexts */ }
+        }
+
         if (this.isMobile) {
             this._setupMobileUnlocks();
         } else {
@@ -82,12 +87,45 @@ export class ServiceDevManager {
     }
 
     _setupThreeFingerSwipe() {
-        // ... (a korábbi verzióban már megvolt)
-        // Rövidítve, a teljes kódot lásd lent
+        if (this._isDestroyed) return;
+        let startY = null;
+        const handler = (e) => {
+            if (!e.touches || e.touches.length < 3) return;
+            startY = e.touches[0].clientY;
+        };
+        const move = (e) => {
+            if (!startY || !e.touches || e.touches.length < 3) return;
+            const cur = e.touches[0].clientY;
+            if (cur - startY > 120) {
+                // detected downward three-finger swipe
+                this._triggerUnlock('3-finger-swipe');
+                this.showMenu();
+                startY = null;
+            }
+        };
+        const end = () => { startY = null; };
+        document.addEventListener('touchstart', handler, { passive: true });
+        document.addEventListener('touchmove', move, { passive: true });
+        document.addEventListener('touchend', end, { passive: true });
+        this._boundHandlers.threeFinger = { handler, move, end };
     }
 
     _setupLogoDoubleTap() {
-        // ... (a korábbi verzióban már megvolt)
+        if (this._isDestroyed) return;
+        const el = document.querySelector('.app-title') || document.querySelector('header') || document.body;
+        let taps = 0, timer = null;
+        const onTap = (e) => {
+            taps++;
+            clearTimeout(timer);
+            if (taps >= 5) {
+                taps = 0;
+                this._triggerUnlock('5-tap-logo');
+                this.showMenu();
+            }
+            timer = setTimeout(() => { taps = 0; }, 1000);
+        };
+        el.addEventListener('touchend', onTap);
+        this._boundHandlers.logoTap = { el, onTap };
     }
 
     // ================================================================
@@ -104,7 +142,25 @@ export class ServiceDevManager {
     }
 
     _setupKonamiCode() {
-        // ... (a korábbi verzióban már megvolt)
+        if (this._isDestroyed) return;
+        const seq = ['ArrowUp','ArrowUp','ArrowDown','ArrowDown','ArrowLeft','ArrowRight','ArrowLeft','ArrowRight','b','a'];
+        let pos = 0;
+        const onKey = (e) => {
+            const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+            const expected = seq[pos];
+            if ((expected.length === 1 && key === expected) || key === expected) {
+                pos++;
+                if (pos === seq.length) {
+                    pos = 0;
+                    this._triggerUnlock('konami');
+                    this.showMenu();
+                }
+            } else {
+                pos = key === seq[0] ? 1 : 0;
+            }
+        };
+        window.addEventListener('keydown', onKey);
+        this._boundHandlers.konami = { onKey };
     }
 
     _setupConsoleCommand() {
@@ -710,6 +766,24 @@ export class ServiceDevManager {
         }
         this.logs = [];
         this.app = null;
+        // Remove any global helpers
+        try { if (window.service === this) delete window.service; } catch (e) {}
+        try { if (window.devMode) delete window.devMode; } catch (e) {}
+        try { if (window.unlockDev) delete window.unlockDev; } catch (e) {}
+        try { if (window.exitDev) delete window.exitDev; } catch (e) {}
+
+        // Remove bound event handlers
+        if (this._boundHandlers) {
+            const b = this._boundHandlers;
+            if (b.konami && b.konami.onKey) window.removeEventListener('keydown', b.konami.onKey);
+            if (b.threeFinger) {
+                document.removeEventListener('touchstart', b.threeFinger.handler);
+                document.removeEventListener('touchmove', b.threeFinger.move);
+                document.removeEventListener('touchend', b.threeFinger.end);
+            }
+            if (b.logoTap && b.logoTap.el && b.logoTap.onTap) b.logoTap.el.removeEventListener('touchend', b.logoTap.onTap);
+        }
+
         this._isDestroyed = true;
         console.log('[SERVICE] ✅ Takarítás kész');
     }

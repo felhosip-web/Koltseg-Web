@@ -34,7 +34,8 @@ export class InputModalController {
             // Alapértelmezett szín beállítása
             this.selectedColor = '#dbeafe';
             this._updateColorSelection();
-            
+            this.setupColorListeners();
+            inputEl.value = '';                    // Ürítés
         } else {
             // Hónap létrehozása
             titleEl.textContent = 'Új hónap megnyitása';
@@ -44,7 +45,6 @@ export class InputModalController {
             colorContainer?.classList.add('hidden');
         }
 
-        inputEl.value = '';                    // Ürítés
         document.getElementById('hmiInputModal').classList.remove('hidden');
         inputEl.focus();
         inputEl.select();
@@ -129,7 +129,7 @@ export class InputModalController {
             }
 
             // Szín használata (a felhasználó által kiválasztott)
-            const color = this.selectedColor || '#dbeafe';
+            const color = this._normalizeColor(this.selectedColor || '#dbeafe');
             
             await this.app.items.add(val, color);
             await this.app.items.load();
@@ -141,7 +141,7 @@ export class InputModalController {
             // === ÚJ HÓNAP ===
             
             // Formátum ellenőrzés (YYYY-MM)
-            if (!/^\d{4}-\d{2}$/.test(val)) {
+            if (!/^\d{4}-\d{2}$/.test(val) || Number.isNaN(new Date(val + '-01').getTime())) {
                 this.app.hmiNotif.showToast('Hibás dátumformátum! (ÉÉÉÉ-HH)', 'error');
                 return;
             }
@@ -165,6 +165,14 @@ export class InputModalController {
         }
         this.app.refreshAllTabs();
         this.close();
+    }
+
+    _normalizeColor(color) {
+        if (!color || typeof color !== 'string') return '#dbeafe';
+        const normalized = color.trim();
+        if (/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(normalized)) return normalized;
+        if (/^rgba?\(/i.test(normalized) || /^hsla?\(/i.test(normalized)) return normalized;
+        return '#dbeafe';
     }
 
     /**

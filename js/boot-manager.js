@@ -59,6 +59,11 @@ export class BootManager {
 
     async _initCloud() {
         this.app.cloud.init();
+        if (!this.app.syncManager) {
+            console.warn('[BOOT] SyncManager nem elérhető, kihagyva a felhő inicializálást');
+            return;
+        }
+
         this.app.syncManager.loadPendingChanges();
         
         // Függő változtatások feldolgozása
@@ -100,7 +105,7 @@ export class BootManager {
             console.log('[NETWORK] Online állapot helyreállt.');
             this.app.hmiNotif.showToast('Internetkapcsolat helyreállt!', 'info');
             
-            if (this.app.syncManager.hasPendingChanges()) {
+            if (this.app.syncManager && this.app.syncManager.hasPendingChanges()) {
                 await this.app.syncManager.processPendingChanges();
                 await this.app.syncManager.sync();
             }

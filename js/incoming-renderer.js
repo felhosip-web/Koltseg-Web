@@ -207,7 +207,11 @@ export class IncomingRenderer {
                 placeholder: 'Add meg az utaló nevét...',
                 confirmText: 'Hozzáadás'
             });
-            if (!sender) return;
+            sender = String(sender || '').trim();
+            if (!sender) {
+                this.app.hmiNotif.showToast('Az utaló neve nem lehet üres!', 'error');
+                return;
+            }
             // Ellenőrizzük, hogy nem létezik-e már
             if (senders.includes(sender)) {
                 this.app.hmiNotif.showToast('⚠️ Ez az utaló már létezik!', 'warning');
@@ -224,7 +228,11 @@ export class IncomingRenderer {
             inputType: 'date',
             confirmText: 'Tovább'
         });
-        if (!date) return;
+        const validDate = String(date || '').trim();
+        if (!validDate || Number.isNaN(new Date(validDate).getTime())) {
+            this.app.hmiNotif.showToast('Hibás dátum!', 'error');
+            return;
+        }
 
         // 3. Összeg megadása
         const amount = await this.app.hmiNotif.showInputModal({
@@ -244,7 +252,7 @@ export class IncomingRenderer {
 
         // 4. Mentés
         try {
-            await this.app.incomingManager.add(sender, date, parsedAmount);
+            await this.app.incomingManager.add(sender, validDate, parsedAmount);
             this.render();
             this.app.hmiNotif.showToast('✅ Bejövő utalás rögzítve!', 'success');
         } catch (e) {

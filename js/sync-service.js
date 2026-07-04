@@ -247,30 +247,6 @@ export class SyncService {
     /**
      * Push művelet (offline naplózással)
      */
-    async push(storeName, data, isDelete = false, customKey = 'id') {
-        // Offline ellenőrzés
-        if (!navigator.onLine) {
-            console.log(`[SYNC] Offline, változtatás naplózva: ${storeName}`);
-            this.offline.addPendingChange(storeName, isDelete ? 'delete' : 'update', data, customKey);
-            return;
-        }
-
-        if (!this.cloud.client || !this.config.useSupabase) return;
-
-        try {
-            if (isDelete) {
-                await this.cloud.delete(storeName, data, customKey);
-            } else {
-                await this.cloud.upsert(storeName, data, customKey);
-            }
-            console.log(`[SYNC] ${storeName} push successful`);
-        } catch (err) {
-            console.warn('[SYNC] Sync error, data preserved locally:', err);
-            this.offline.addPendingChange(storeName, isDelete ? 'delete' : 'update', data, customKey);
-            throw err;
-        }
-    }
-
     /**
      * Push művelet (offline naplózással + queue)
      */

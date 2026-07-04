@@ -31,6 +31,8 @@ export class VirtualTableRenderer {
         const months = this.app.months?.months || [];
         const entries = this.app.entries?.entries || [];
 
+        console.log('[VTABLE] render() called — items:', items.length, 'months:', months.length, 'entries:', entries.length);
+
         if (items.length === 0 || months.length === 0) {
             this._showEmptyState();
             return;
@@ -50,13 +52,23 @@ export class VirtualTableRenderer {
         return this.render();
     }
 
+    /**
+     * Compatibility method for legacy UI controller calls.
+     */
+    renderSummary() {
+        return this.render();
+    }
+
     // ================================================================
     // === KONTAINER INICIALIZÁLÁS ===
     // ================================================================
 
     _initContainer() {
         const container = document.getElementById('mainTableContainer');
-        if (!container) return;
+        if (!container) {
+            console.warn('[VTABLE] mainTableContainer not found');
+            return;
+        }
 
         container.innerHTML = `
             <div id="vtWrapper" class="overflow-auto rounded-3xl border border-gray-200 bg-white shadow-sm relative" 
@@ -69,6 +81,11 @@ export class VirtualTableRenderer {
 
         this.wrapper = document.getElementById('vtWrapper');
         this.tbody = document.getElementById('vtTbody');
+        // Ensure tbody can act as a positioned container for absolutely-positioned rows
+        if (this.tbody) {
+            this.tbody.style.position = 'relative';
+            this.tbody.style.width = '100%';
+        }
     }
 
     // ================================================================
@@ -97,8 +114,12 @@ export class VirtualTableRenderer {
     _renderVisibleRows(items, months, entries) {
         if (!this.tbody || !this.wrapper) return;
 
-        const startIdx = Math.floor(this.wrapper.scrollTop / this.rowHeight);
+        const startIdx = Math.max(0, Math.floor(this.wrapper.scrollTop / this.rowHeight));
         const endIdx = Math.min(startIdx + this.visibleRows + this.buffer, items.length);
+
+        // Make tbody occupy the full virtualized height so the wrapper can scroll
+        const totalHeight = items.length * this.rowHeight;
+        this.tbody.style.height = totalHeight + 'px';
 
         let html = '';
         const visibleMonths = months.slice(0, this.loadedMonths);
@@ -107,7 +128,8 @@ export class VirtualTableRenderer {
             const item = items[i];
             if (!item) break;
 
-            html += `<tr class="virtual-row" style="height: ${this.rowHeight}px; transform: translateY(${i * this.rowHeight}px);">`;
+            // Use absolute positioning for virtual rows so they don't affect flow
+            html += `<tr class="virtual-row" style="position:absolute; left:0; top:${i * this.rowHeight}px; height:${this.rowHeight}px; width:100%;">`;
             html += this._createCategoryCell(item);
 
             visibleMonths.forEach(month => {
@@ -221,9 +243,40 @@ export class VirtualTableRenderer {
         if (container) {
             container.innerHTML = `
                 <div class="p-12 text-center text-gray-400">
-                    Nincs megjeleníthető adat.<br>
-                    Nyiss meg hónapokat és adj hozzá kategóriákat.
+                    <div class="text-xl font-bold mb-2">Nincs még adat</div>
+                    <div class="mb-4">A táblázat üres — adj hozzá kategóriákat és hónapokat, vagy generálj tesztadatokat.</div>
+                    <div class="flex items-center justify-center gap-3">
+                        <button id="vtGenerateTestData" class="px-4 py-2 bg-emerald-600 text-white rounded-xl">Generálj tesztadatokat</button>
+                        <button id="vtClearMessage" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-xl">Bezárás</button>
+                    </div>
                 </div>`;
+
+            // Attach actions
+            const genBtn = document.getElementById('vtGenerateTestData');
+            if (genBtn) {
+                genBtn.addEventListener('click', async () => {
+                    try {
+                        console.log('[VTABLE] Generating test data...');
+                        if (window.app && typeof window.app.generateTestData === 'function') {
+                            const count = await window.app.generateTestData(30);
+                            console.log('[VTABLE] Test data generated:', count);
+                            await window.app.items.load();
+                            await window.app.months.load();
+                            await window.app.entries.load();
+                            window.app.renderer.renderTable();
+                            window.app.hmiNotif?.showToast('Tesztadatok létrehozva', 'success');
+                        } else {
+                            console.warn('[VTABLE] window.app.generateTestData not available');
+                        }
+                    } catch (e) {
+                        console.error('[VTABLE] Tesztadat generálás hiba', e);
+                        window.app.hmiNotif?.showToast('Tesztadat generálás sikertelen', 'error');
+                    }
+                });
+            }
+
+            const closeBtn = document.getElementById('vtClearMessage');
+            if (closeBtn) closeBtn.addEventListener('click', () => container.innerHTML = '');
         }
     }
 

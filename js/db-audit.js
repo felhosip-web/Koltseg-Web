@@ -75,8 +75,17 @@ export class DatabaseAudit {
         let orphans = 0;
         entries.forEach(e => {
             if (!e.cellKey) return;
-            const [itemIdStr, month] = e.cellKey.split('_');
-            if (!itemIds.has(parseInt(itemIdStr)) || !monthSet.has(month)) {
+            const parts = e.cellKey.split('_');
+            let itemIdStr = parts[0];
+            let month = parts[1];
+            // Support both formats: "itemId_month" and "month_itemId"
+            if (!/^[0-9]+$/.test(itemIdStr) && parts.length >= 2 && /^[0-9]{4}-[0-9]{2}$/.test(parts[0])) {
+                // month_itemId -> swap
+                month = parts[0];
+                itemIdStr = parts[1];
+            }
+            const itemId = e.itemId || parseInt(itemIdStr);
+            if (!itemIds.has(itemId) || !monthSet.has(month)) {
                 orphans++;
             }
         });

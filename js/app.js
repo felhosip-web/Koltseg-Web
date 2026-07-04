@@ -92,7 +92,8 @@ class App {
         this.visibilityHandler = null;
 
         // === 11. SYNC MANAGER ===
-        this._initSyncManager();
+        this.syncManager = null;
+        this._syncManagerPromise = this._initSyncManager();
 
         // === 12. ÁLLAPOTOK ===
         this.currentFilter = 'all';
@@ -219,6 +220,9 @@ class App {
                 console.warn('[APP] Megszakítva: másik példány már fut.');
                 return;
             }
+
+            // === VÁRUNK A SYNC MANAGERRE ===
+            await this._syncManagerPromise;
 
             // === VERZIÓ BETÖLTÉSE ===
             await this.version.load();
@@ -414,6 +418,7 @@ class App {
 
     _initTabs() {
         const tabButtons = document.querySelectorAll('.tab-btn');
+        console.log('[APP] _initTabs() — found tab buttons:', tabButtons.length);
         const tabPanes = {
             dashboard: document.getElementById('tab-dashboard'),
             table: document.getElementById('tab-table'),
@@ -469,8 +474,10 @@ class App {
         // Alapértelmezett fül: dashboard
         const defaultBtn = document.querySelector('[data-tab="dashboard"]');
         if (defaultBtn) {
+            console.log('[APP] _initTabs() — activating default dashboard tab');
             defaultBtn.click();
         } else {
+            console.log('[APP] _initTabs() — dashboard button missing, falling back to table tab');
             document.querySelector('[data-tab="table"]')?.click();
         }
     }
@@ -1160,6 +1167,105 @@ refreshAllTabs() {
 
     console.log('[APP] ✅ UI frissítés kész');
 }
+
+    async generateTestData(count = 30) {
+        const sampleItems = ['Kávé', 'Bérlet', 'Áram', 'Internet', 'Bevásárlás', 'Benzin', 'Mozijegy'];
+        const paymentMethods = ['Kártya', 'Utalás', 'Készpénz', 'Egyéb'];
+        const months = [
+            dayjs().format('YYYY-MM'),
+            dayjs().subtract(1, 'month').format('YYYY-MM'),
+            dayjs().subtract(2, 'month').format('YYYY-MM')
+        ];
+
+        for (const month of months) {
+            if (!this.months.months.includes(month)) {
+                await this.months.add(month);
+            }
+        }
+
+        for (const name of sampleItems) {
+            if (!this.items.items.some(i => i.name === name)) {
+                await this.items.add(name, '#dbeafe');
+            }
+        }
+
+        const itemIds = this.items.items.map(i => i.id).filter(Boolean);
+        let created = 0;
+
+        for (let i = 0; i < count; i++) {
+            const itemId = itemIds[Math.floor(Math.random() * itemIds.length)];
+            const month = months[Math.floor(Math.random() * months.length)];
+            const amount = Math.round(Math.random() * 49000 + 1000);
+            const currency = Math.random() < 0.15 ? 'EUR' : 'HUF';
+            const paymentMethod = paymentMethods[Math.floor(Math.random() * paymentMethods.length)];
+            const day = String(Math.floor(Math.random() * 28) + 1).padStart(2, '0');
+            const timestamp = dayjs(`${month}-${day}`).toISOString();
+            const cellKey = `${itemId}_${month}`;
+
+            await this.entries.saveEntry({
+                cellKey,
+                amount,
+                currency,
+                paymentMethod,
+                note: 'Teszt adat',
+                color: '#c7d2fe',
+                timestamp,
+                updated_at: new Date().toISOString()
+            });
+            created++;
+        }
+
+        await Promise.all([
+            this.items.load(),
+            this.months.load(),
+            this.entries.load()
+        ]);
+
+        return created;
+    }
+
+    async generateTestReminders(count = 10) {
+        const titles = ['Rezsi fizetés', 'Bérlés', 'Telefon számla', 'Bankkártya', 'Bevásárlás', 'Előfizetés', 'Adó befizetés'];
+        const frequencies = ['once', 'monthly', 'quarterly'];
+        let created = 0;
+
+        for (let i = 0; i < count; i++) {
+            const title = titles[i % titles.length] + ' ' + (i + 1);
+            const amount = Math.round(Math.random() * 9000 + 500);
+            const dueDate = dayjs().add(Math.floor(Math.random() * 30), 'day').format('YYYY-MM-DD');
+            const reminder = {
+                title,
+                amount,
+                currency: 'HUF',
+                due_date: dueDate,
+                frequency: frequencies[Math.floor(Math.random() * frequencies.length)],
+                updated_at: new Date().toISOString()
+            };
+            await this.reminderManager.add(reminder);
+            created++;
+        }
+
+        return created;
+    }
+
+    async clearAllData() {
+        const stores = ['entries', 'items', 'months', 'templates', 'reminders', 'incomings', 'incoming_senders'];
+        for (const store of stores) {
+            const rows = await this.db.getAll(store);
+            await Promise.all(rows.map(row => {
+                const key = row.id !== undefined ? row.id : row.month;
+                return this.db.delete(store, key);
+            }));
+        }
+
+        this.items.items = [];
+        this.months.months = [];
+        this.entries.entries = [];
+        this.templates.templates = [];
+        this.reminderManager.reminders = [];
+        this.incomingManager.incomings = [];
+        this.incomingManager.senders = [];
+    }
 }
 
 // ================================================================
@@ -1321,7 +1427,7 @@ function updateDebugStatus() {
             <div>📝 Bejegyzések: <strong class="text-rose-600">${entries}</strong></div>
             <div>⏰ Határidők: <strong class="text-amber-600">${reminders}</strong></div>
             <div>📥 Bejövő: <strong class="text-emerald-600">${incomings}</strong></div>
-            <div>📶 Hálózat: <span class="\( {isOnline ? 'text-emerald-600' : 'text-red-600'}"> \){isOnline ? '🟢 Online' : '🔴 Offline'}</span></div>
+            <div>📶 Hálózat: <span class="${isOnline ? 'text-emerald-600' : 'text-red-600'}">${isOnline ? '🟢 Online' : '🔴 Offline'}</span></div>
             <div class="col-span-2 text-gray-400 text-[10px] mt-1">Verzió: ${app.version?.toString() || 'v4.1'}</div>
         </div>
     `;

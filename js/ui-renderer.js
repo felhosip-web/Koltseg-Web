@@ -85,7 +85,7 @@ export class UIRenderer {
     _createCategoryCell(item) {
         return `
             <td class="px-6 py-4 font-bold text-gray-900 bg-gray-50 border-r border-gray-100 dblclick-row-purge cursor-pointer hover:bg-red-50 transition-colors"
-                data-itemid="\( {item.id}" data-itemname=" \){item.name}">
+                data-itemid="${item.id}" data-itemname="${item.name}">
                 <div class="flex items-center gap-3">
                     <span class="w-3.5 h-3.5 rounded-full flex-shrink-0" style="background-color: ${item.color || '#dbeafe'}"></span>
                     <span>${item.name}</span>
@@ -94,7 +94,7 @@ export class UIRenderer {
     }
 
     _createCellHTML(itemId, month, entries) {
-        const cellBaseKey = `\( {itemId}_ \){month}`;
+        const cellBaseKey = `${itemId}_${month}`;
         const cellEntries = entries.filter(e => e.cellKey && e.cellKey.startsWith(cellBaseKey));
         
         let huf = 0, eur = 0;
@@ -113,7 +113,7 @@ export class UIRenderer {
             `</div>`;
 
         return `<td class="px-4 py-4 text-center border-l border-gray-100 cell-interactive cursor-pointer" 
-                    data-cellbasekey="\( {cellBaseKey}" style=" \){style}">${content}</td>`;
+                    data-cellbasekey="${cellBaseKey}" style="${style}">${content}</td>`;
     }
 
     // ==================== SCROLL + requestAnimationFrame ====================

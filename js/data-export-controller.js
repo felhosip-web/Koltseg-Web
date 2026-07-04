@@ -223,12 +223,12 @@ export class DataExportController {
 
     // ==================== SEGÉD FÜGGVÉNYEK ====================
     _buildMainMatrix(items, months, entries, eurRate) {
-        const data = [['Kategória', ...months.flatMap(m => [`\( {m} HUF`, ` \){m} EUR`, `\( {m} Összesen Ft`, ` \){m} Tételek`])]];
+        const data = [['Kategória', ...months.flatMap(m => [`${m} HUF`, `${m} EUR`, `${m} Összesen Ft`, `${m} Tételek`])]];
 
         items.forEach(item => {
             const row = [item.name];
             months.forEach(month => {
-                const prefix = `\( {item.id}_ \){month}`;
+                const prefix = `${item.id}_${month}`;
                 const cellEntries = entries.filter(e => e.cellKey && e.cellKey.startsWith(prefix));
 
                 let huf = 0, eur = 0;

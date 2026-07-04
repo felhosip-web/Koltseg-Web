@@ -250,7 +250,10 @@ _setupSyncQueueBadge() {
         // ====================== FŐ GOMBOK ======================
         document.getElementById('btnNewItem')?.addEventListener('click', () => this.inputModal.open('item'));
         document.getElementById('btnNewMonth')?.addEventListener('click', () => this.inputModal.open('month'));
-        document.getElementById('btnSettings')?.addEventListener('click', () => this.togglePanel('settingsPanel'));
+        document.getElementById('btnSettings')?.addEventListener('click', () => {
+            this.populateSettingsForm();
+            this.togglePanel('settingsPanel');
+        });
         document.getElementById('btnDataControl')?.addEventListener('click', () => this.togglePanel('exportMenu'));
 
         // ====================== SZINKRONIZÁCIÓ ======================
@@ -315,7 +318,7 @@ _setupSyncQueueBadge() {
             btn.addEventListener('click', (e) => {
                 document.querySelectorAll('.color-selector-btn').forEach(b => b.classList.remove('ring-4', 'ring-black'));
                 e.currentTarget.classList.add('ring-4', 'ring-black');
-                this.cellModal.selectedColor = e.currentTarget.getAttribute('data-color');
+                this.cellModal.selectedColor = e.currentTarget.getAttribute('data-color') || 'transparent';
             });
         });
 
@@ -331,14 +334,24 @@ _setupSyncQueueBadge() {
 
     async _handleSettingsSave() {
         this.app.renderer.updateFooterStatus('Beállítások mentése...', false);
+        console.log('[SETTINGS] _handleSettingsSave invoked');
         try {
             const newUrl = document.getElementById('supabaseUrlInput')?.value?.trim() || '';
             const newKey = document.getElementById('supabaseKeyInput')?.value?.trim() || '';
             const newRate = Number(document.getElementById('eurRateInput')?.value || 400);
             const useCloud = document.getElementById('supabaseToggle')?.checked || false;
 
+            console.log('[SETTINGS] Collected values', { newUrl, hasKey: !!newKey, useCloud, newRate });
             if (this.app.config) {
-                this.app.config.saveSettings({ url: newUrl, key: newKey, useCloud, eurRate: newRate });
+                const saved = this.app.config.saveSettings({ url: newUrl, key: newKey, useCloud, eurRate: newRate });
+                console.log('[SETTINGS] saveSettings ->', saved);
+                console.log('[SETTINGS] Config after save', this.app.config.supabaseConfig, this.app.config.useSupabase, this.app.config.eurRate);
+            }
+
+            this.app.cloud?.init?.();
+            this.app.syncService?.cloud?.init?.();
+            if (typeof this.app.updateOnlineStatus === 'function') {
+                this.app.updateOnlineStatus(navigator.onLine && this.app.config.useSupabase);
             }
 
             this.app.hmiNotif?.showToast('Beállítások sikeresen rögzítve!', 'success');
@@ -354,6 +367,20 @@ _setupSyncQueueBadge() {
 
     togglePanel(id) {
         document.getElementById(id)?.classList.toggle('hidden');
+    }
+
+    populateSettingsForm() {
+        if (!this.app.config) return;
+
+        const urlEl = document.getElementById('supabaseUrlInput');
+        const keyEl = document.getElementById('supabaseKeyInput');
+        const rateEl = document.getElementById('eurRateInput');
+        const toggleEl = document.getElementById('supabaseToggle');
+
+        if (urlEl) urlEl.value = this.app.config.supabaseConfig?.url || '';
+        if (keyEl) keyEl.value = this.app.config.supabaseConfig?.key || '';
+        if (rateEl) rateEl.value = String(this.app.config.eurRate || 400);
+        if (toggleEl) toggleEl.checked = Boolean(this.app.config.useSupabase);
     }
 
     handleCellClick(cellElement) {
@@ -411,7 +438,7 @@ _setupSyncQueueBadge() {
 
         const confirmed = await this.app.hmiNotif.showConfirm({
            title: '⚠️ KRITIKUS: Kategóriasor törlése',
-           message: `Biztosan törölni szeretné a teljes "\( {itemName.toUpperCase()}" kategóriát az összes havi rész-tételével ( \){associatedEntries.length} db) együtt?`,
+           message: `Biztosan törölni szeretné a teljes "${itemName.toUpperCase()}" kategóriát az összes havi rész-tételével (${associatedEntries.length} db) együtt?`,
           type: 'danger',
            confirmText: 'SOR TÖRLÉSE'
          });
@@ -449,34 +476,43 @@ _setupSyncQueueBadge() {
     }
 
     async _runAuditAndShow() {
-    const container = document.getElementById('auditReportContainer');
-    if (!container) return;
+        const container = document.getElementById('auditReportContainer');
+        if (!container) return;
 
-    container.innerHTML = '<p class="text-center py-8 text-gray-400">Audit fut...</p>';
+        container.innerHTML = '<p class="text-center py-8 text-gray-400">Audit fut...</p>';
 
-    const result = await this.app.dbAudit.runFullAudit();
-    container.innerHTML = this.app.dbAudit.generateReportHTML();
+        const result = await this.app.dbAudit.runFullAudit();
+        container.innerHTML = this.app.dbAudit.generateReportHTML();
 
-    // Rebuild gomb
-    document.getElementById('btnRebuildIndexes')?.addEventListener('click', async () => {
-        const success = await this.app.dbAudit.rebuildIndexes();
-        if (success) {
-            setTimeout(() => this._runAuditAndShow(), 800);
+        // Rebuild gomb
+        const rebuildBtn = document.getElementById('btnRebuildIndexes');
+        if (rebuildBtn) {
+            rebuildBtn.onclick = async () => {
+                const success = await this.app.dbAudit.rebuildIndexes();
+                if (success) {
+                    setTimeout(() => this._runAuditAndShow(), 800);
+                }
+            };
         }
-     });
     }
 
     // ====================== SYNC MODAL (TELJES EREDETI) ======================
     openSyncModal() {
-    const modal = document.getElementById('syncModal');
-    const pullBtn = document.getElementById('btnPullData');
-    const pushBtn = document.getElementById('btnPushData');
-    const executeBtn = document.getElementById('btnExecuteSync');
-    const statusText = document.getElementById('syncStatusText');
-    const details = document.getElementById('syncDetails');
-    
-    // Modal megnyitása
-    modal.classList.remove('hidden');
+        const modal = document.getElementById('syncModal');
+        if (!modal) return;
+        if (!this.app.syncManager) {
+            this.app.hmiNotif?.showToast('Szinkronizáció nem elérhető', 'warning');
+            return;
+        }
+
+        const pullBtn = document.getElementById('btnPullData');
+        const pushBtn = document.getElementById('btnPushData');
+        const executeBtn = document.getElementById('btnExecuteSync');
+        const statusText = document.getElementById('syncStatusText');
+        const details = document.getElementById('syncDetails');
+        
+        // Modal megnyitása
+        modal.classList.remove('hidden');
     
     // Állapot visszaállítása
     statusText.textContent = 'Kattints a "Letöltés" vagy "Feltöltés" gombra az adatok ellenőrzéséhez.';
@@ -647,28 +683,29 @@ _setupSyncQueueBadge() {
  * Függő változtatások ellenőrzése
  */
 _checkPendingChanges() {
-    const container = document.getElementById('pendingChangesContainer');
-    const list = document.getElementById('pendingChangesList');
-    
-    const hasPending = this.app.syncManager.hasPendingChanges();
-    if (hasPending) {
-        container.classList.remove('hidden');
-        let html = '';
-        for (const table in this.app.syncManager.pendingChanges) {
-            const changes = this.app.syncManager.pendingChanges[table];
-            if (changes.length > 0) {
+        const container = document.getElementById('pendingChangesContainer');
+        const list = document.getElementById('pendingChangesList');
+        if (!container || !list) return;
+
+        const hasPending = this.app.syncManager?.hasPendingChanges?.() || false;
+        const detailsData = this.app.syncManager?.getPendingDetails?.() || {};
+
+        if (hasPending && Object.keys(detailsData).length > 0) {
+            container.classList.remove('hidden');
+            let html = '';
+            for (const [table, changes] of Object.entries(detailsData)) {
+                if (!changes || changes.length === 0) continue;
                 html += `<div class="flex justify-between text-amber-700"><span>${table}</span><span class="font-bold">${changes.length} függő</span></div>`;
                 changes.forEach(c => {
-                    html += `<div class="text-[9px] text-amber-600 ml-4">${c.operation}: ${JSON.stringify(c.data).substring(0, 40)}...</div>`;
+                    html += `<div class="text-[9px] text-amber-600 ml-4">${c.operation}: ${new Date(c.timestamp).toLocaleString('hu-HU')}</div>`;
                 });
             }
+            list.innerHTML = html;
+        } else {
+            container.classList.add('hidden');
+            list.innerHTML = '';
         }
-        list.innerHTML = html;
-    } else {
-        container.classList.add('hidden');
     }
-}
-
     destroy() {
         // Queue badge eltávolítása
         this.syncQueueContainer?.remove();

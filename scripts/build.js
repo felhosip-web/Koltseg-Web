@@ -1,9 +1,9 @@
-// scripts/build.js - Verzió automatikus növelése
-const fs = require('fs');
-const path = require('path');
-const { execSync } = require('child_process');
+// scripts/build.js - Verzió automatikus növelése (ESM)
+import fs from 'fs';
+import path from 'path';
+import { execSync } from 'child_process';
 
-const VERSION_FILE = path.join(__dirname, '../version.json');
+const VERSION_FILE = path.join(path.dirname(new URL(import.meta.url).pathname), '..', 'version.json');
 
 function getVersionBump(type = 'patch') {
     const data = JSON.parse(fs.readFileSync(VERSION_FILE, 'utf8'));
