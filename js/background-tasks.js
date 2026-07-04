@@ -66,9 +66,14 @@ export class BackgroundTaskManager {
         this.loadSettings();
         this.startReminderChecker();
         this.startAutoSync();
-        this.startAutoBackup();
+        // NOTE: Backup-ot a BackupManager indítja (boot-manager.js)
         this.startEURRateWatcher();
         console.log('[BACKGROUND] Minden háttérfolyamat elindítva');
+    }
+
+    startAutoBackup() {
+        // DEPRECATED: BackupManager indítja az auto-backup-ot (boot-manager.js)
+        console.log('[BACKGROUND] startAutoBackup() deprecated – BackupManager kezeli');
     }
 
     // ==================== 1. Emlékeztető ellenőrzés ====================

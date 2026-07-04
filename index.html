@@ -33,7 +33,7 @@
     <script>
         // A Service Worker regisztrációt a `PwaManager` kezeli (js/pwa-manager.js).
         // Itt csak globális UI segédfüggvények vannak (update toast, cache refresh, stb.).
-    </script>
+    
         // Frissítés értesítés
         function showUpdateNotification() {
             // Ellenőrizzük, hogy már van-e értesítés
@@ -172,7 +172,7 @@
         <!-- ===== HEADER ===== -->
         <header class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 border-b border-gray-100 pb-5">
             <div class="flex items-center gap-3">
-                <h1 class="text-2xl font-bold text-gray-800 flex items-center gap-2">
+                <h1 class="text-2xl font-bold text-gray-800 flex items-center gap-2 app-title">
                     <i class="fas fa-receipt text-blue-600"></i>
                     Költség Nyilvántartó
                 </h1>

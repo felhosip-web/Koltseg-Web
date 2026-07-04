@@ -104,6 +104,16 @@ class App {
         this._onlineHandler = null;
         this._offlineHandler = null;
         this._dashboardChart = null;
+
+        // === 13. TAB ÁLLAPOTGÉP ===
+        this.tabStateMachine = {
+            dashboard: () => this.renderDashboard(),
+            table: () => this.renderer.renderTable(),
+            charts: () => this.chartsRenderer.renderAll(this.currentFilter),
+            reminders: () => this.remindersRenderer.renderList(),
+            incoming: () => this.incomingRenderer.render(),
+            stats: () => this.renderStats()
+        };
     }
 
     // ================================================================
@@ -165,13 +175,7 @@ class App {
         }
         this.updateReminderStatus?.();
 
-        if (this.activeTab === 'table') {
-            this.renderer?.renderTable?.();
-        } else if (this.activeTab === 'charts') {
-            this.chartsRenderer?.renderAll?.(this.currentFilter);
-        } else if (this.activeTab === 'dashboard') {
-            this.renderDashboard?.();
-        }
+        this.tabStateMachine[this.activeTab]?.();
 
         if (this.syncManager?.hasPendingChanges?.() && navigator.onLine) {
             this.syncManager.processPendingChanges?.().catch(() => {});
@@ -416,25 +420,34 @@ class App {
     // === TAB KEZELÉS (6 TAB) ===
     // ================================================================
 
+    switchTab(tab) {
+        if (!this.tabStateMachine[tab]) {
+            console.warn(`[APP] Ismeretlen tab: ${tab}`);
+            return;
+        }
+
+        this.activeTab = tab;
+
+        // Pane-ek elrejtése
+        document.querySelectorAll('.tab-pane').forEach(p => p.classList.add('hidden'));
+
+        // Aktív pane megjelenítése
+        const pane = document.getElementById(`tab-${tab}`);
+        if (pane) pane.classList.remove('hidden');
+
+        // Renderer hívása
+        this.tabStateMachine[tab]();
+    }
+
     _initTabs() {
         const tabButtons = document.querySelectorAll('.tab-btn');
         console.log('[APP] _initTabs() — found tab buttons:', tabButtons.length);
-        const tabPanes = {
-            dashboard: document.getElementById('tab-dashboard'),
-            table: document.getElementById('tab-table'),
-            charts: document.getElementById('tab-charts'),
-            reminders: document.getElementById('tab-reminders'),
-            incoming: document.getElementById('tab-incoming'),
-            stats: document.getElementById('tab-stats')
-        };
-
-        if (!tabPanes.dashboard) {
-            console.warn('[APP] Dashboard tab nem található a HTML-ben');
-        }
 
         tabButtons.forEach(btn => {
             btn.addEventListener('click', () => {
-                // Stílusok
+                const tab = btn.dataset.tab;
+
+                // Gombstílusok
                 tabButtons.forEach(b => {
                     b.classList.remove('bg-blue-600', 'text-white', 'shadow-md');
                     b.classList.add('bg-gray-100', 'text-gray-600');
@@ -442,36 +455,11 @@ class App {
                 btn.classList.remove('bg-gray-100', 'text-gray-600');
                 btn.classList.add('bg-blue-600', 'text-white', 'shadow-md');
 
-                // Pane-ek
-                Object.values(tabPanes).forEach(pane => {
-                    if (pane) pane.classList.add('hidden');
-                });
-
-                const tab = btn.dataset.tab;
-                this.activeTab = tab;
-
-                if (tabPanes[tab]) {
-                    tabPanes[tab].classList.remove('hidden');
-
-                    // Frissítés szükség szerint
-                    if (tab === 'dashboard') {
-                        this.renderDashboard();
-                    } else if (tab === 'charts') {
-                        this.chartsRenderer.renderAll(this.currentFilter);
-                    } else if (tab === 'reminders') {
-                        this.remindersRenderer.renderList();
-                    } else if (tab === 'incoming') {
-                        this.incomingRenderer.render();
-                    } else if (tab === 'stats') {
-                        this.renderStats();
-                    } else if (tab === 'table') {
-                        this.renderer.renderTable();
-                    }
-                }
+                this.switchTab(tab);
             });
         });
 
-        // Alapértelmezett fül: dashboard
+        // Alapértelmezett tab
         const defaultBtn = document.querySelector('[data-tab="dashboard"]');
         if (defaultBtn) {
             console.log('[APP] _initTabs() — activating default dashboard tab');
@@ -481,6 +469,15 @@ class App {
             document.querySelector('[data-tab="table"]')?.click();
         }
     }
+
+    _cleanupTabs() {
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            const newBtn = btn.cloneNode(true);
+            btn.parentNode?.replaceChild(newBtn, btn);
+        });
+        console.log('[APP] Tab event listeners takarítva');
+    }
+
 
     // ================================================================
     // === DASHBOARD RENDER ===
@@ -980,6 +977,9 @@ class App {
 // ================================================================
 
 destroy() {
+    // === TAB KEZELÉS TAKARÍTÁSA ===
+    this._cleanupTabs?.();
+
     // === VISIBILITY HANDLER ELTÁVOLÍTÁSA ===
     if (this.visibilityHandler) {
         document.removeEventListener('visibilitychange', this.visibilityHandler);
@@ -1030,6 +1030,9 @@ destroy() {
         }
         if (this.backgroundTasks && typeof this.backgroundTasks.destroy === 'function') {
             this.backgroundTasks.destroy();
+        }
+        if (this.backupManager && typeof this.backupManager.destroy === 'function') {
+            this.backupManager.destroy();
         }
         if (this.uiController && typeof this.uiController.destroy === 'function') {
             this.uiController.destroy();

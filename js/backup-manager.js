@@ -37,22 +37,32 @@ export class BackupManager {
         }
     }
 
+    destroy() {
+        this.stopAutoBackup();
+        console.log('[BACKUP] BackupManager megsemmisítve');
+    }
+
     performBackup() {
         try {
+            if (!this.app.storage) {
+                console.warn('[BACKUP] Storage nem elérhető');
+                return;
+            }
+
             const backupData = {
                 version: 'v4.0',
                 timestamp: new Date().toISOString(),
-                items: this.app.items.items,
-                months: this.app.months.months,
-                entries: this.app.entries.entries,
+                items: this.app.items?.items || [],
+                months: this.app.months?.months || [],
+                entries: this.app.entries?.entries || [],
                 templates: this.app.templates?.templates || [],
                 reminders: this.app.reminderManager?.reminders || [],
                 supabaseConfig: {
-                    url: this.app.config.supabaseConfig.url,
-                    useCloud: this.app.config.useSupabase
+                    url: this.app.config?.supabaseConfig?.url || '',
+                    useCloud: this.app.config?.useSupabase || false
                 },
                 settings: {
-                    eurRate: this.app.config.eurRate
+                    eurRate: this.app.config?.eurRate || 400
                 }
             };
             
@@ -60,11 +70,12 @@ export class BackupManager {
             this.app.storage.set('lastBackupTime', Date.now());
             this.lastBackupTime = Date.now();
             
-            // Lábban jelzés
-            this.app.renderer.updateFooterStatus(
-                `💾 Auto-mentés: ${new Date().toLocaleTimeString('hu-HU')}`, 
-                false
-            );
+            if (this.app.renderer?.updateFooterStatus) {
+                this.app.renderer.updateFooterStatus(
+                    `💾 Auto-mentés: ${new Date().toLocaleTimeString('hu-HU')}`, 
+                    false
+                );
+            }
             
             console.log('[BACKUP] Automatikus mentés kész');
             
@@ -74,25 +85,33 @@ export class BackupManager {
     }
 
     async restoreFromBackup() {
+        if (!this.app.storage) {
+            this.app.hmiNotif.showToast('Storage nem elérhető!', 'error');
+            return;
+        }
+
         const backupData = this.app.storage.get('backup');
         if (!backupData) {
             this.app.hmiNotif.showToast('Nincs mentett backup!', 'error');
             return;
         }
         
-        const confirmed = await this.app.hmiNotif.showConfirm(
-            '🔙 Visszaállítás backupból',
-            `Biztosan visszaállítja a ${backupData.timestamp} időpontban készült backupot?\n\nEz felülírja az összes jelenlegi adatot!`,
-            true,
-            'Visszaállítás'
-        );
+        const confirmed = await this.app.hmiNotif.showConfirm({
+            title: '🔙 Visszaállítás backupból',
+            message: `Biztosan visszaállítja a ${new Date(backupData.timestamp).toLocaleString('hu-HU')} időpontban készült backupot?\n\nEz felülírja az összes jelenlegi adatot!`,
+            type: 'warning',
+            confirmText: 'Visszaállítás',
+            showCancel: true
+        });
         
         if (!confirmed) return;
         
         try {
-            this.app.renderer.updateFooterStatus('Backup visszaállítása...', false);
+            if (this.app.renderer?.updateFooterStatus) {
+                this.app.renderer.updateFooterStatus('Backup visszaállítása...', true);
+            }
             
-            const dbRaw = this.app.db.db || this.app.db._db;
+            const dbRaw = this.app.db?.db || this.app.db?._db;
             if (!dbRaw) throw new Error('Nincs adatbázis kapcsolat!');
             
             const tx = dbRaw.transaction(['items', 'months', 'entries', 'templates', 'reminders'], 'readwrite');
@@ -104,37 +123,45 @@ export class BackupManager {
             tx.objectStore('templates').clear();
             tx.objectStore('reminders').clear();
             
-            // Visszaírás
+            // Visszaírás - helyesen
             backupData.items?.forEach(item => tx.objectStore('items').put(item));
-            backupData.months?.forEach(m => tx.objectStore('months').put({ month: m }));
+            backupData.months?.forEach(m => {
+                const monthData = typeof m === 'object' ? m : { month: m };
+                tx.objectStore('months').put(monthData);
+            });
             backupData.entries?.forEach(entry => tx.objectStore('entries').put(entry));
             backupData.templates?.forEach(tpl => tx.objectStore('templates').put(tpl));
             backupData.reminders?.forEach(rem => tx.objectStore('reminders').put(rem));
             
-            await new Promise((resolve) => {
+            await new Promise((resolve, reject) => {
                 tx.oncomplete = resolve;
-                tx.onerror = resolve;
+                tx.onerror = () => reject(new Error(`DB restore hiba: ${tx.error}`));
             });
             
             // Memória és UI frissítés
             await Promise.all([
-                this.app.items.load(),
-                this.app.months.load(),
-                this.app.entries.load(),
+                this.app.items?.load?.(),
+                this.app.months?.load?.(),
+                this.app.entries?.load?.(),
                 this.app.templates?.load?.(),
                 this.app.reminderManager?.load?.()
             ]);
             
-            this.app.renderer.renderTable();
+            this.app.renderer?.renderTable?.();
             this.app.remindersRenderer?.renderList?.();
             this.app.renderStats?.();
             
             this.app.hmiNotif.showToast('✅ Backup sikeresen visszaállítva!', 'success');
-            this.app.renderer.updateFooterStatus('Backup restore kész', false);
+            if (this.app.renderer?.updateFooterStatus) {
+                this.app.renderer.updateFooterStatus('Backup restore kész', false);
+            }
             
         } catch (err) {
             console.error('[RESTORE ERROR]', err);
-            this.app.hmiNotif.showToast('❌ Visszaállítási hiba!', 'error');
+            this.app.hmiNotif.showToast(`❌ Visszaállítási hiba: ${err.message}`, 'error');
+            if (this.app.renderer?.updateFooterStatus) {
+                this.app.renderer.updateFooterStatus('Backup restore hiba!', true);
+            }
         }
     }
 }
