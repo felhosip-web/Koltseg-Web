@@ -4,6 +4,7 @@
 export class SyncManager {
     constructor(app) {
         this.app = app;
+        this.tables = ['items', 'months', 'entries', 'templates', 'reminders', 'incomings', 'incoming_senders'];
         // Használjuk a meglévő SyncService-t
         this.service = app.syncService;
         
@@ -39,8 +40,7 @@ export class SyncManager {
         if (!this.service) return;
         // Push csak akkor működik, ha van adat
         const app = this.app;
-        const tables = ['items', 'months', 'entries', 'templates', 'reminders'];
-        for (const table of tables) {
+        for (const table of this.tables) {
             const data = this._getTableData(table, app);
             if (data && data.length > 0) {
                 for (const item of data) {
@@ -59,16 +59,15 @@ export class SyncManager {
      */
     async getPullStats() {
         const stats = {};
-        const tables = ['items', 'months', 'entries', 'templates', 'reminders'];
         
         if (!this.service) {
             console.warn('[SyncManager] SyncService nem elérhető');
             // Üres statisztika
-            tables.forEach(table => stats[table] = 0);
+            this.tables.forEach(table => stats[table] = 0);
             return stats;
         }
 
-        for (const table of tables) {
+        for (const table of this.tables) {
             try {
                 // Ha a service-nek van pull metódusa
                 if (typeof this.service.pull === 'function') {
@@ -98,10 +97,9 @@ export class SyncManager {
      */
     async getPushStats() {
         const stats = {};
-        const tables = ['items', 'months', 'entries', 'templates', 'reminders'];
         const app = this.app;
 
-        for (const table of tables) {
+        for (const table of this.tables) {
             try {
                 const data = this._getTableData(table, app);
                 stats[table] = data?.length || 0;
@@ -163,6 +161,8 @@ export class SyncManager {
                 case 'entries': return app.entries?.entries || [];
                 case 'templates': return app.templates?.templates || [];
                 case 'reminders': return app.reminderManager?.reminders || [];
+                case 'incomings': return app.incomingManager?.incomings || [];
+                case 'incoming_senders': return app.incomingManager?.senders || [];
                 default: return [];
             }
         } catch (e) {

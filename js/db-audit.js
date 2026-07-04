@@ -29,7 +29,7 @@ export class DatabaseAudit {
     }
 
     async _auditAllStores() {
-        const storeNames = ['items', 'months', 'entries', 'templates', 'reminders'];
+        const storeNames = ['items', 'months', 'entries', 'templates', 'reminders', 'incomings', 'incoming_senders'];
         
         for (const storeName of storeNames) {
             const data = await this.app.db.getAll(storeName);
@@ -55,6 +55,19 @@ export class DatabaseAudit {
                         this.diagnostics.stores[storeName].issues.push(`Magas tételszám: ${key} (${cnt})`);
                     }
                 }
+            }
+
+            if (storeName === 'incomings' && count > 0) {
+                const uniqueKeys = new Set();
+                data.forEach(e => {
+                    if (e.sender && e.date) {
+                        const key = `${e.sender}__${e.date}`;
+                        if (uniqueKeys.has(key)) {
+                            this.diagnostics.stores[storeName].issues.push(`Duplikált utalás: ${e.sender} (${e.date})`);
+                        }
+                        uniqueKeys.add(key);
+                    }
+                });
             }
         }
     }
@@ -93,6 +106,20 @@ export class DatabaseAudit {
         this.diagnostics.consistency = {
             orphans,
             status: orphans > 0 ? 'warning' : 'ok'
+        };
+
+        const incomings = await this.app.db.getAll('incomings');
+        const senders = new Set((await this.app.db.getAll('incoming_senders')).map(s => s.name));
+        let missingIncomingSenders = 0;
+        incomings.forEach(entry => {
+            if (entry.sender && !senders.has(entry.sender)) {
+                missingIncomingSenders++;
+            }
+        });
+
+        this.diagnostics.incomingConsistency = {
+            missingSenders: missingIncomingSenders,
+            status: missingIncomingSenders > 0 ? 'warning' : 'ok'
         };
     }
 
@@ -167,6 +194,13 @@ export class DatabaseAudit {
             const c = this.diagnostics.consistency;
             html += `<div class="p-4 rounded-2xl ${c.orphans > 0 ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'}">`;
             html += c.orphans > 0 ? `⚠️ ${c.orphans} árva bejegyzés észlelve` : `✅ Adatbázis konzisztens`;
+            html += `</div>`;
+        }
+
+        if (this.diagnostics.incomingConsistency) {
+            const c = this.diagnostics.incomingConsistency;
+            html += `<div class="p-4 rounded-2xl mt-3 ${c.missingSenders > 0 ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'}">`;
+            html += c.missingSenders > 0 ? `⚠️ ${c.missingSenders} bejövő utalás hiányzó utaló-lista bejegyzéssel` : `✅ Bejövő utalások konzisztensen`;
             html += `</div>`;
         }
 

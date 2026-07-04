@@ -339,7 +339,7 @@ export class SyncService {
 
             // === 4. PULL: ADATOK LETÖLTÉSE A FELHŐBŐL ===
             console.log('[SYNC] ⬇️ Pull: Adatok letöltése a felhőből...');
-            const tables = ['items', 'months', 'entries', 'templates', 'reminders'];
+            const tables = ['items', 'months', 'entries', 'templates', 'reminders', 'incomings', 'incoming_senders'];
             const cloudData = {};
 
             for (const table of tables) {
@@ -363,7 +363,9 @@ export class SyncService {
                 months: this._getLocalData('months'),
                 entries: this._getLocalData('entries'),
                 templates: this._getLocalData('templates'),
-                reminders: this._getLocalData('reminders')
+                reminders: this._getLocalData('reminders'),
+                incomings: this._getLocalData('incomings'),
+                incoming_senders: this._getLocalData('incoming_senders')
             };
 
             const mergedData = {};
@@ -451,6 +453,8 @@ export class SyncService {
             case 'entries': return app.entries?.entries || [];
             case 'templates': return app.templates?.templates || [];
             case 'reminders': return app.reminderManager?.reminders || [];
+            case 'incomings': return app.incomingManager?.incomings || [];
+            case 'incoming_senders': return app.incomingManager?.senders || [];
             default: return [];
         }
     }
@@ -542,7 +546,9 @@ export class SyncService {
             { name: 'months', data: mergedData.months || [], key: 'month' },
             { name: 'entries', data: mergedData.entries || [], key: 'id' },
             { name: 'templates', data: mergedData.templates || [], key: 'id' },
-            { name: 'reminders', data: mergedData.reminders || [], key: 'id' }
+            { name: 'reminders', data: mergedData.reminders || [], key: 'id' },
+            { name: 'incomings', data: mergedData.incomings || [], key: 'id' },
+            { name: 'incoming_senders', data: mergedData.incoming_senders || [], key: 'id' }
         ];
 
         for (const { name, data, key } of tables) {
@@ -575,13 +581,16 @@ export class SyncService {
                 app.months?.load?.() || Promise.resolve(),
                 app.entries?.load?.() || Promise.resolve(),
                 app.templates?.load?.() || Promise.resolve(),
-                app.reminderManager?.load?.() || Promise.resolve()
+                app.reminderManager?.load?.() || Promise.resolve(),
+                app.incomingManager?.load?.() || Promise.resolve()
             ]);
 
             app.renderer?.renderTable?.();
             app.renderer?.renderSummary?.();
             app.remindersRenderer?.renderList?.();
+            app.incomingRenderer?.render?.();
             app.renderStats?.();
+            app.renderDashboard?.();
 
             // Ha a charts tab aktív, frissítsük
             if (app.activeTab === 'charts' && app.chartsRenderer) {

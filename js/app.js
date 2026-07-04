@@ -268,9 +268,6 @@ class App {
             this._setupVisibilityHandling();
             this.isBooted = true;
 
-            // === UI BETÖLTÉSE ===
-            this._initTabs();
-
             // Dashboard alapértelmezett render
             setTimeout(() => {
                 this.renderDashboard();

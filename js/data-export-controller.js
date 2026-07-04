@@ -8,7 +8,32 @@ export class DataExportController {
         return {
             entries: this.app.entries?.entries || [],
             items: this.app.items?.items || [],
-            months: this.app.months?.months || []
+            months: this.app.months?.months || [],
+            incomings: this.app.incomingManager?.incomings || [],
+            incoming_senders: this.app.incomingManager?.senders || []
+        };
+    }
+
+    _buildBackupData() {
+        return {
+            version: 'v4.0',
+            timestamp: new Date().toISOString(),
+            appVersion: 'Költség Nyilvántartó v4.0',
+            items: this.app.items?.items || [],
+            months: this.app.months?.months || [],
+            entries: this.app.entries?.entries || [],
+            templates: this.app.templates?.templates || [],
+            reminders: this.app.reminderManager?.reminders || [],
+            incomings: this.app.incomingManager?.incomings || [],
+            incoming_senders: this.app.incomingManager?.senders || [],
+            supabaseConfig: {
+                url: this.app.config?.supabaseConfig?.url || '',
+                key: this.app.config?.supabaseConfig?.key || '',
+                useCloud: this.app.config?.useSupabase || false
+            },
+            settings: {
+                eurRate: this.app.config?.eurRate || 400
+            }
         };
     }
 
@@ -108,24 +133,7 @@ export class DataExportController {
         this.app.renderer.updateFooterStatus('Teljes JSON backup készítése...', false);
 
         try {
-            const backupData = {
-                version: 'v4.0',
-                timestamp: new Date().toISOString(),
-                appVersion: 'Költség Nyilvántartó v4.0',
-                items: this.app.items.items || [],
-                months: this.app.months.months || [],
-                entries: this.app.entries.entries || [],
-                templates: this.app.templates?.templates || [],
-                reminders: this.app.reminderManager?.reminders || [],
-                supabaseConfig: {
-                    url: this.app.config?.supabaseConfig?.url || '',
-                    key: this.app.config?.supabaseConfig?.key || '',
-                    useCloud: this.app.config?.useSupabase || false
-                },
-                settings: {
-                    eurRate: this.app.config?.eurRate || 400
-                }
-            };
+            const backupData = this._buildBackupData();
 
             const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(backupData, null, 2));
             const anchor = document.createElement('a');
@@ -187,13 +195,23 @@ export class DataExportController {
         const dbRaw = this.app.db.db || this.app.db._db;
         if (!dbRaw) throw new Error('Nincs adatbázis kapcsolat!');
 
-        const tx = dbRaw.transaction(['items', 'months', 'entries', 'templates', 'reminders'], 'readwrite');
+        const tx = dbRaw.transaction([
+            'items',
+            'months',
+            'entries',
+            'templates',
+            'reminders',
+            'incomings',
+            'incoming_senders'
+        ], 'readwrite');
 
         tx.objectStore('items').clear();
         tx.objectStore('months').clear();
         tx.objectStore('entries').clear();
         tx.objectStore('templates').clear();
         tx.objectStore('reminders').clear();
+        tx.objectStore('incomings').clear();
+        tx.objectStore('incoming_senders').clear();
 
         data.items?.forEach(item => tx.objectStore('items').put(item));
         data.months?.forEach(m => {
@@ -203,20 +221,28 @@ export class DataExportController {
         data.entries?.forEach(entry => tx.objectStore('entries').put(entry));
         data.templates?.forEach(tpl => tx.objectStore('templates').put(tpl));
         data.reminders?.forEach(rem => tx.objectStore('reminders').put(rem));
+        data.incomings?.forEach(incoming => tx.objectStore('incomings').put(incoming));
+        data.incoming_senders?.forEach(sender => tx.objectStore('incoming_senders').put(sender));
 
-        await new Promise(resolve => tx.oncomplete = resolve);
+        await new Promise((resolve, reject) => {
+            tx.oncomplete = resolve;
+            tx.onerror = () => reject(tx.error || new Error('Import tranzakciós hiba'));
+        });
 
         await Promise.all([
             this.app.items.load(),
             this.app.months.load(),
             this.app.entries.load(),
             this.app.templates?.load?.(),
-            this.app.reminderManager?.load?.()
+            this.app.reminderManager?.load?.(),
+            this.app.incomingManager?.load?.()
         ]);
 
         this.app.renderer.renderTable();
         this.app.remindersRenderer?.renderList?.();
+        this.app.incomingRenderer?.render?.();
         this.app.renderStats?.();
+        this.app.renderDashboard?.();
 
         this.app.hmiNotif.showToast('✅ Backup sikeresen visszaállítva!', 'success');
     }

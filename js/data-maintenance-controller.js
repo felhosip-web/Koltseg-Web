@@ -4,6 +4,27 @@ export class DataMaintenanceController {
         this.app = app;
     }
 
+    _buildBackupData() {
+        return {
+            version: 'v4.0',
+            timestamp: new Date().toISOString(),
+            items: this.app.items?.items || [],
+            months: this.app.months?.months || [],
+            entries: this.app.entries?.entries || [],
+            templates: this.app.templates?.templates || [],
+            reminders: this.app.reminderManager?.reminders || [],
+            incomings: this.app.incomingManager?.incomings || [],
+            incoming_senders: this.app.incomingManager?.senders || [],
+            supabaseConfig: {
+                url: this.app.config?.supabaseConfig?.url || '',
+                useCloud: this.app.config?.useSupabase || false
+            },
+            settings: {
+                eurRate: this.app.config?.eurRate || 400
+            }
+        };
+    }
+
     // ==================== TELJES ADATBÁZIS TÖRLÉSE ====================
     async wipeDatabase() {
         const firstConfirm = await this.app.hmiNotif.showConfirm({
@@ -30,13 +51,23 @@ export class DataMaintenanceController {
             const dbRaw = this.app.db.db || this.app.db._db;
             if (!dbRaw) throw new Error('Nincs adatbázis kapcsolat!');
 
-            const tx = dbRaw.transaction(['items', 'months', 'entries', 'templates', 'reminders'], 'readwrite');
+            const tx = dbRaw.transaction([
+                'items',
+                'months',
+                'entries',
+                'templates',
+                'reminders',
+                'incomings',
+                'incoming_senders'
+            ], 'readwrite');
 
             tx.objectStore('items').clear();
             tx.objectStore('months').clear();
             tx.objectStore('entries').clear();
             tx.objectStore('templates').clear();
             tx.objectStore('reminders').clear();
+            tx.objectStore('incomings').clear();
+            tx.objectStore('incoming_senders').clear();
 
             await new Promise((resolve, reject) => {
                 tx.oncomplete = resolve;
@@ -49,12 +80,15 @@ export class DataMaintenanceController {
                 this.app.months.load(),
                 this.app.entries.load(),
                 this.app.templates?.load?.(),
-                this.app.reminderManager?.load?.()
+                this.app.reminderManager?.load?.(),
+                this.app.incomingManager?.load?.()
             ]);
 
             this.app.renderer.renderTable();
             this.app.remindersRenderer?.renderList?.();
+            this.app.incomingRenderer?.render?.();
             this.app.renderStats?.();
+            this.app.renderDashboard?.();
 
             this.app.hmiNotif.showToast('🗑️ Minden helyi adat törölve!', 'error');
             this.app.renderer.updateFooterStatus('Adatbázis kiürítve', false);
@@ -71,22 +105,7 @@ export class DataMaintenanceController {
         try {
             this.app.renderer.updateFooterStatus('Manuális backup készítése...', false);
 
-            const backupData = {
-                version: 'v4.0',
-                timestamp: new Date().toISOString(),
-                items: this.app.items.items || [],
-                months: this.app.months.months || [],
-                entries: this.app.entries.entries || [],
-                templates: this.app.templates?.templates || [],
-                reminders: this.app.reminderManager?.reminders || [],
-                supabaseConfig: {
-                    url: this.app.config?.supabaseConfig?.url || '',
-                    useCloud: this.app.config?.useSupabase || false
-                },
-                settings: {
-                    eurRate: this.app.config?.eurRate || 400
-                }
-            };
+            const backupData = this._buildBackupData();
 
             const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(backupData, null, 2));
             const anchor = document.createElement('a');

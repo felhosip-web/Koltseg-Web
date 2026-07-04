@@ -8,6 +8,27 @@ export class BackupManager {
         this.lastBackupTime = null;
     }
 
+    _buildBackupData() {
+        return {
+            version: 'v4.0',
+            timestamp: new Date().toISOString(),
+            items: this.app.items?.items || [],
+            months: this.app.months?.months || [],
+            entries: this.app.entries?.entries || [],
+            templates: this.app.templates?.templates || [],
+            reminders: this.app.reminderManager?.reminders || [],
+            incomings: this.app.incomingManager?.incomings || [],
+            incoming_senders: this.app.incomingManager?.senders || [],
+            supabaseConfig: {
+                url: this.app.config?.supabaseConfig?.url || '',
+                useCloud: this.app.config?.useSupabase || false
+            },
+            settings: {
+                eurRate: this.app.config?.eurRate || 400
+            }
+        };
+    }
+
     startAutoBackup() {
         // Utolsó mentés ellenőrzése
         this.lastBackupTime = this.app.storage.get('lastBackupTime');
@@ -49,22 +70,7 @@ export class BackupManager {
                 return;
             }
 
-            const backupData = {
-                version: 'v4.0',
-                timestamp: new Date().toISOString(),
-                items: this.app.items?.items || [],
-                months: this.app.months?.months || [],
-                entries: this.app.entries?.entries || [],
-                templates: this.app.templates?.templates || [],
-                reminders: this.app.reminderManager?.reminders || [],
-                supabaseConfig: {
-                    url: this.app.config?.supabaseConfig?.url || '',
-                    useCloud: this.app.config?.useSupabase || false
-                },
-                settings: {
-                    eurRate: this.app.config?.eurRate || 400
-                }
-            };
+            const backupData = this._buildBackupData();
             
             this.app.storage.set('backup', backupData);
             this.app.storage.set('lastBackupTime', Date.now());
@@ -114,7 +120,15 @@ export class BackupManager {
             const dbRaw = this.app.db?.db || this.app.db?._db;
             if (!dbRaw) throw new Error('Nincs adatbázis kapcsolat!');
             
-            const tx = dbRaw.transaction(['items', 'months', 'entries', 'templates', 'reminders'], 'readwrite');
+            const tx = dbRaw.transaction([
+                'items',
+                'months',
+                'entries',
+                'templates',
+                'reminders',
+                'incomings',
+                'incoming_senders'
+            ], 'readwrite');
             
             // Törlés
             tx.objectStore('items').clear();
@@ -122,6 +136,8 @@ export class BackupManager {
             tx.objectStore('entries').clear();
             tx.objectStore('templates').clear();
             tx.objectStore('reminders').clear();
+            tx.objectStore('incomings').clear();
+            tx.objectStore('incoming_senders').clear();
             
             // Visszaírás - helyesen
             backupData.items?.forEach(item => tx.objectStore('items').put(item));
@@ -132,6 +148,8 @@ export class BackupManager {
             backupData.entries?.forEach(entry => tx.objectStore('entries').put(entry));
             backupData.templates?.forEach(tpl => tx.objectStore('templates').put(tpl));
             backupData.reminders?.forEach(rem => tx.objectStore('reminders').put(rem));
+            backupData.incomings?.forEach(incoming => tx.objectStore('incomings').put(incoming));
+            backupData.incoming_senders?.forEach(sender => tx.objectStore('incoming_senders').put(sender));
             
             await new Promise((resolve, reject) => {
                 tx.oncomplete = resolve;
@@ -144,12 +162,15 @@ export class BackupManager {
                 this.app.months?.load?.(),
                 this.app.entries?.load?.(),
                 this.app.templates?.load?.(),
-                this.app.reminderManager?.load?.()
+                this.app.reminderManager?.load?.(),
+                this.app.incomingManager?.load?.()
             ]);
             
             this.app.renderer?.renderTable?.();
             this.app.remindersRenderer?.renderList?.();
+            this.app.incomingRenderer?.render?.();
             this.app.renderStats?.();
+            this.app.renderDashboard?.();
             
             this.app.hmiNotif.showToast('✅ Backup sikeresen visszaállítva!', 'success');
             if (this.app.renderer?.updateFooterStatus) {

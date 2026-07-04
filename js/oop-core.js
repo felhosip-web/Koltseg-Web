@@ -20,6 +20,15 @@ export class SecurityManager {
                 return /^\d{4}-\d{2}$/.test(data.month);
             case 'reminders':
                 return typeof data.title === 'string' && !isNaN(data.amount) && typeof data.due_date === 'string';
+            case 'incomings':
+                return typeof data.sender === 'string' &&
+                    data.sender.trim() !== '' &&
+                    /^\d{4}-\d{2}-\d{2}$/.test(data.date) &&
+                    !isNaN(data.amount);
+            case 'incoming_senders':
+                return typeof data.id !== 'undefined' &&
+                    typeof data.name === 'string' &&
+                    data.name.trim() !== '';
             default:
                 return true;
         }
@@ -628,7 +637,7 @@ export class CloudSync {
      * Pull minden táblából
      */
     async pullAll() {
-        const tables = ['items', 'months', 'entries', 'templates', 'reminders'];
+        const tables = ['items', 'months', 'entries', 'templates', 'reminders', 'incomings', 'incoming_senders'];
         const result = {};
 
         for (const table of tables) {
@@ -658,7 +667,9 @@ export class CloudSync {
                 entries: cloudData.entries?.length || 0,
                 months: cloudData.months?.length || 0,
                 templates: cloudData.templates?.length || 0,
-                reminders: cloudData.reminders?.length || 0
+                reminders: cloudData.reminders?.length || 0,
+                incomings: cloudData.incomings?.length || 0,
+                incoming_senders: cloudData.incoming_senders?.length || 0
             });
 
             return { status: 'success', data: cloudData };
@@ -685,24 +696,29 @@ export class IncomingManager {
         this.incomings = await this.db.getAll('incomings') || [];
         this.senders = await this.db.getAll('incoming_senders') || [];
         // Senders lista frissítése a bejegyzésekből
-        this._updateSendersFromEntries();
+        await this._updateSendersFromEntries();
     }
 
     /**
      * Senders lista frissítése a bejegyzésekből
      */
-    _updateSendersFromEntries() {
+    async _updateSendersFromEntries() {
         const senderSet = new Set();
         this.incomings.forEach(entry => {
             if (entry.sender) senderSet.add(entry.sender);
         });
         // Meglévő senders-eket megtartjuk, de újat is hozzáadunk
         const existingSenders = new Set(this.senders.map(s => s.name));
+        const newSenders = [];
         senderSet.forEach(name => {
             if (!existingSenders.has(name)) {
-                this.senders.push({ id: Date.now() + '_' + name, name, createdAt: new Date().toISOString() });
+                const sender = { id: Date.now() + '_' + name, name, createdAt: new Date().toISOString() };
+                this.senders.push(sender);
+                newSenders.push(sender);
             }
         });
+
+        await Promise.all(newSenders.map(sender => this.db.save('incoming_senders', sender)));
     }
 
     /**
@@ -745,7 +761,7 @@ export class IncomingManager {
         };
         entry.id = await this.db.save('incomings', entry);
         this.incomings.push(entry);
-        this._updateSendersFromEntries();
+        await this._updateSendersFromEntries();
         await this.syncService.push('incomings', entry);
         return entry;
     }
@@ -837,6 +853,7 @@ export class IncomingManager {
         const sender = { id: Date.now() + '_' + name, name, createdAt: new Date().toISOString() };
         this.senders.push(sender);
         this.db.save('incoming_senders', sender);
+        this.syncService.push('incoming_senders', sender);
         return sender;
     }
 
@@ -848,9 +865,12 @@ export class IncomingManager {
         if (hasEntries) {
             throw new Error('Nem törölhető, mert vannak hozzá tartozó tételek!');
         }
-        this.senders = this.senders.filter(s => s.name !== name);
         const sender = this.senders.find(s => s.name === name);
-        if (sender) this.db.delete('incoming_senders', sender.id);
+        this.senders = this.senders.filter(s => s.name !== name);
+        if (sender) {
+            this.db.delete('incoming_senders', sender.id);
+            this.syncService.push('incoming_senders', sender.id, true);
+        }
     }
 
     /**

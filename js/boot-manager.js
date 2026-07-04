@@ -42,7 +42,8 @@ export class BootManager {
             this.app.items.load(),
             this.app.months.load(),
             this.app.entries.load(),
-            this.app.templates.load()
+            this.app.templates.load(),
+            this.app.incomingManager?.load?.()
         ]);
         this.app.hmiNotif?.showToast('Adatok betöltve', 'success');
     }
