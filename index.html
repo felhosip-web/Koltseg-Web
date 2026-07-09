@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Költség Nyilvántartó v4.0</title>
+    <title>Költség Nyilvántartó v4.3.3</title>
     
     <!-- ===== KÜLSŐ CDN-ek (cache-elve a Service Worker által) ===== -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -118,52 +118,125 @@
 
 <!-- ===== REJTETT DEBUG PANEL ===== -->
 <div id="debugPanel" class="hidden fixed inset-0 bg-black/80 z-[99999] flex items-center justify-center p-4">
-    <div class="bg-white rounded-3xl max-w-2xl w-full max-h-[90vh] overflow-hidden shadow-2xl">
-        <div class="bg-gradient-to-r from-slate-800 to-slate-900 p-4 text-white flex items-center justify-between">
+    <div class="bg-white rounded-3xl max-w-2xl w-full max-h-[90vh] overflow-hidden shadow-2xl flex flex-col">
+        <div class="bg-gradient-to-r from-slate-800 to-slate-900 p-4 text-white flex items-center justify-between flex-shrink-0">
             <h3 class="font-bold text-lg flex items-center gap-2">
-                <i class="fas fa-bug"></i> Debug Panel
+                <i class="fas fa-bug text-rose-500 animate-pulse"></i> HMI Fejlesztői & Debug Panel
             </h3>
-            <button id="closeDebugPanel" class="text-white/80 hover:text-white text-2xl">×</button>
+            <button id="closeDebugPanel" class="text-white/80 hover:text-white text-2xl font-bold p-1 px-3 bg-white/10 rounded-xl hover:bg-white/20 transition">×</button>
         </div>
         
-        <div class="p-6 overflow-y-auto max-h-[70vh] space-y-4">
-            <!-- Állapot -->
-            <div id="debugStatus" class="bg-gray-50 p-4 rounded-xl text-sm font-mono">
-                Betöltés...
+        <!-- Tab választó -->
+        <div class="flex border-b border-gray-200 bg-gray-50 p-2 gap-1 flex-shrink-0">
+            <button class="flex-1 py-2 text-xs font-bold rounded-xl bg-white text-slate-800 shadow-sm transition" id="tabBtnDebugActions">⚙️ Műveletek</button>
+            <button class="flex-1 py-2 text-xs font-bold rounded-xl text-slate-500 hover:text-slate-800 hover:bg-white/50 transition" id="tabBtnDebugSupabase">⚡ Supabase Felhő</button>
+            <button class="flex-1 py-2 text-xs font-bold rounded-xl text-slate-500 hover:text-slate-800 hover:bg-white/50 transition" id="tabBtnDebugReminders">⏰ Határidők</button>
+        </div>
+        
+        <div class="p-6 overflow-y-auto flex-1 space-y-4 text-left">
+            <!-- TAB 1: MŰVELETEK -->
+            <div id="debugTabActions" class="space-y-4">
+                <!-- Állapot -->
+                <div id="debugStatus" class="bg-gray-50 p-4 rounded-xl text-sm font-mono">
+                    Betöltés...
+                </div>
+                
+                <!-- Gombok -->
+                <div class="grid grid-cols-2 gap-2">
+                    <button class="debug-btn bg-emerald-600 text-white p-3 rounded-xl font-bold text-sm hover:bg-emerald-700 transition" data-action="loadData">
+                        📥 Tesztadatok (30)
+                    </button>
+                    <button class="debug-btn bg-amber-600 text-white p-3 rounded-xl font-bold text-sm hover:bg-amber-700 transition" data-action="loadReminders">
+                        ⏰ Határidők (10)
+                    </button>
+                    <button class="debug-btn bg-blue-600 text-white p-3 rounded-xl font-bold text-sm hover:bg-blue-700 transition" data-action="refreshAll">
+                        🔄 Minden frissítés
+                    </button>
+                    <button class="debug-btn bg-purple-600 text-white p-3 rounded-xl font-bold text-sm hover:bg-purple-700 transition" data-action="showData">
+                        📊 Adatok mutatása
+                    </button>
+                    <button class="debug-btn bg-red-600 text-white p-3 rounded-xl font-bold text-sm hover:bg-red-700 transition col-span-2" data-action="clearAll">
+                        🗑️ ÖSSZES TÖRLÉSE
+                    </button>
+                </div>
+                
+                <!-- Logok -->
+                <div>
+                    <div class="flex items-center justify-between mb-2">
+                        <p class="text-xs font-bold text-gray-500 uppercase">📋 Konzol logok</p>
+                        <button id="btnClearDebugLogs" class="text-[10px] font-bold text-red-500 hover:underline">Logok törlése</button>
+                    </div>
+                    <div id="debugLogs" class="bg-slate-900 text-slate-300 p-3 rounded-xl text-[11px] font-mono max-h-[160px] overflow-y-auto whitespace-pre-wrap leading-relaxed">
+                        Nincs log
+                    </div>
+                </div>
             </div>
-            
-            <!-- Gombok -->
-            <div class="grid grid-cols-2 gap-2">
-                <button class="debug-btn bg-emerald-600 text-white p-3 rounded-xl font-bold text-sm hover:bg-emerald-700 transition" data-action="loadData">
-                    📥 Tesztadatok (30)
-                </button>
-                <button class="debug-btn bg-amber-600 text-white p-3 rounded-xl font-bold text-sm hover:bg-amber-700 transition" data-action="loadReminders">
-                    ⏰ Határidők (10)
-                </button>
-                <button class="debug-btn bg-blue-600 text-white p-3 rounded-xl font-bold text-sm hover:bg-blue-700 transition" data-action="refreshAll">
-                    🔄 Minden frissítés
-                </button>
-                <button class="debug-btn bg-purple-600 text-white p-3 rounded-xl font-bold text-sm hover:bg-purple-700 transition" data-action="showData">
-                    📊 Adatok mutatása
-                </button>
-                <button class="debug-btn bg-red-600 text-white p-3 rounded-xl font-bold text-sm hover:bg-red-700 transition col-span-2" data-action="clearAll">
-                    🗑️ ÖSSZES TÖRLÉSE
-                </button>
+
+            <!-- TAB 2: SUPABASE -->
+            <div id="debugTabSupabase" class="hidden space-y-4">
+                <div class="bg-blue-50 border border-blue-200 p-4 rounded-2xl">
+                    <h4 class="font-bold text-blue-800 text-sm mb-1 flex items-center gap-1.5">
+                        <i class="fas fa-circle-info"></i> Supabase Éles Üzem Ellenőrzés
+                    </h4>
+                    <p class="text-xs text-blue-700 leading-relaxed">
+                        A Supabase-hez való csatlakozáshoz a Beállításokban megadott adatokon kívül az adatbázis tábláknak is létezniük kell a szerveren. Alább ellenőrizheted a kapcsolatot és kimásolhatod az SQL szkriptet.
+                    </p>
+                </div>
+
+                <div class="bg-gray-50 p-4 rounded-xl space-y-3">
+                    <div class="flex items-center justify-between text-xs font-mono">
+                        <div>URL megadva: <span id="debugSupaUrlStatus" class="font-bold text-gray-500">Nincs</span></div>
+                        <div>Kulcs megadva: <span id="debugSupaKeyStatus" class="font-bold text-gray-500">Nincs</span></div>
+                    </div>
+                    <button id="btnTestSupabaseConn" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-2">
+                        <i class="fas fa-plug-circle-check"></i> Kapcsolat Tesztelése (Ping)
+                    </button>
+                    <div id="debugSupabaseConnResult" class="hidden p-3 rounded-lg text-xs font-mono"></div>
+                </div>
+
+                <div class="space-y-2">
+                    <div class="flex items-center justify-between">
+                        <p class="text-xs font-bold text-gray-500 uppercase">🛠️ Supabase SQL Sémagenerátor</p>
+                        <button id="btnCopySupabaseSQL" class="px-2.5 py-1 bg-gray-200 hover:bg-gray-300 text-gray-800 text-[10px] rounded-lg font-bold transition flex items-center gap-1">
+                            <i class="fas fa-copy"></i> Másolás vágólapra
+                        </button>
+                    </div>
+                    <textarea id="debugSupabaseSQL" readonly class="w-full h-[180px] bg-slate-900 text-emerald-400 p-3 rounded-xl text-[10px] font-mono leading-relaxed select-all" style="resize: none;"></textarea>
+                </div>
             </div>
-            
-            <!-- Logok -->
-            <div>
-                <p class="text-xs font-bold text-gray-500 uppercase mb-2">📋 Konzol logok</p>
-                <div id="debugLogs" class="bg-slate-900 text-slate-300 p-3 rounded-xl text-[11px] font-mono max-h-[200px] overflow-y-auto whitespace-pre-wrap leading-relaxed">
-                    Nincs log
+
+            <!-- TAB 3: REMINDERS -->
+            <div id="debugTabReminders" class="hidden space-y-4">
+                <div class="bg-amber-50 border border-amber-200 p-4 rounded-2xl">
+                    <h4 class="font-bold text-amber-800 text-sm mb-1 flex items-center gap-1.5">
+                        <i class="fas fa-bell"></i> Értesítési Rendszer Diagnosztika
+                    </h4>
+                    <p class="text-xs text-amber-700 leading-relaxed">
+                        A rendszer a háttérben figyeli a lejáró határidőket és Push Notification értesítésekben jelez. Ehhez böngészős engedély szükséges.
+                    </p>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2">
+                    <div class="bg-gray-50 p-3 rounded-xl text-center">
+                        <p class="text-[10px] font-bold text-gray-400 uppercase">Engedély állapota</p>
+                        <p class="text-sm font-black text-gray-800 mt-1" id="debugNotificationPermission">Lekérés...</p>
+                    </div>
+                    <button id="btnRequestNotificationPerm" class="py-3 bg-amber-500 hover:bg-amber-600 text-gray-900 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5">
+                        <i class="fas fa-key"></i> Engedély Kérése
+                    </button>
+                </div>
+
+                <div class="bg-gray-50 p-4 rounded-xl space-y-3">
+                    <h5 class="text-xs font-bold text-gray-700">Azonnali értesítés teszt</h5>
+                    <button id="btnTriggerTestNotification" class="w-full py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-2">
+                        <i class="fas fa-paper-plane"></i> Teszt Értesítés Kiküldése
+                    </button>
+                    <p class="text-[10px] text-gray-400 text-center leading-relaxed">Kattints a gombra, és ha megadtad az engedélyt, azonnal meg kell jelennie egy rendszer-értesítésnek.</p>
                 </div>
             </div>
         </div>
     </div>
 </div>
-
-<!-- ===== DEBUG PANEL NYITÓ GOMB (LÁTHATATLAN) ===== -->
-<button id="debugToggleBtn" class="fixed bottom-4 right-4 w-6 h-6 bg-transparent border-none cursor-pointer z-[99998] rounded-full hover:bg-blue-500/10 transition"></button>
 
 <body class="bg-gray-50 min-h-screen pb-24">
 
@@ -183,7 +256,7 @@
 
             <!-- Gombok és státuszok -->
             <div class="flex flex-wrap items-center gap-3 w-full md:w-auto">
-                <!-- Új tétel + Hónap -->
+                <!-- Új tétel + Hónap + AI -->
                 <div class="flex gap-2">
                     <button id="btnNewItem" class="px-5 py-2.5 bg-blue-600 text-white rounded-2xl text-sm font-bold flex items-center gap-2 hover:bg-blue-700 transition shadow-sm">
                         <i class="fas fa-plus-circle"></i> Tétel
@@ -191,24 +264,23 @@
                     <button id="btnNewMonth" class="px-5 py-2.5 bg-emerald-600 text-white rounded-2xl text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 transition shadow-sm">
                         <i class="fas fa-calendar-plus"></i> Hónap
                     </button>
+                    <button id="btnAiMagic" class="px-5 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-2xl text-sm font-bold flex items-center gap-2 hover:from-purple-700 hover:to-indigo-700 transition shadow-sm" title="AI Gyorsfelvitel">
+                        <i class="fas fa-magic"></i> AI
+                    </button>
                 </div>
 
                 <!-- Beállítások + Adatkezelés -->
                <div class="flex gap-2 relative">   <!-- ← IDE KELL A relative -->
-                    <button id="btnSettings" class="p-3 bg-white border border-gray-200 rounded-2xl text-gray-600 hover:bg-gray-50 transition">
+                    <button id="btnHelp" class="p-3 bg-white border border-gray-200 rounded-2xl text-indigo-600 hover:bg-indigo-50 transition font-semibold w-11 h-11 flex items-center justify-center shadow-sm" title="Súgó / Útmutató">
+                        <i class="fas fa-question text-lg"></i>
+                    </button>
+
+                    <button id="btnSettings" class="p-3 bg-white border border-gray-200 rounded-2xl text-gray-600 hover:bg-gray-50 transition w-11 h-11 flex items-center justify-center shadow-sm" title="Belépés & Beállítások">
                         <i class="fas fa-sliders-h"></i>
                     </button>
                     
-                    <button id="btnDataControl" class="p-3 bg-amber-500 text-white rounded-2xl hover:bg-amber-600 transition shadow-sm">
+                    <button id="btnDataControl" class="p-3 bg-amber-500 text-white rounded-2xl hover:bg-amber-600 transition w-11 h-11 flex items-center justify-center shadow-sm" title="Adatbázis & Export">
                         <i class="fas fa-database"></i>
-                    </button>
-                    
-                    <button id="btnDbAudit" class="w-full text-left px-4 py-3 hover:bg-gray-100 rounded-2xl flex items-center gap-3">
-                        <i class="fas fa-database text-amber-600"></i>
-                        <div>
-                          <div class="font-medium">IndexedDB Audit</div>
-                          <div class="text-xs text-gray-500">Diagnosztika + Index rebuild</div>
-                        </div>
                     </button>
                     
                     <button id="btnInstallApp" class="hidden px-4 py-2 bg-slate-900 text-white rounded-2xl text-sm font-bold flex items-center gap-2 hover:bg-slate-800 transition shadow-sm">
@@ -231,6 +303,9 @@
                         </button>
                         <button id="btnImportJson" class="w-full text-left px-3 py-2.5 hover:bg-gray-50 flex items-center gap-2 text-gray-700">
                             <i class="fas fa-folder-open text-amber-500"></i> JSON betöltés
+                        </button>
+                        <button id="btnDbAudit" class="w-full text-left px-3 py-2.5 hover:bg-gray-50 flex items-center gap-2 text-gray-700">
+                            <i class="fas fa-database text-amber-600"></i> IndexedDB Audit
                         </button>
                         <div class="border-t border-gray-100 my-1"></div>
                         <button id="btnForceSync" class="w-full text-left px-3 py-2.5 hover:bg-gray-50 flex items-center gap-2 text-indigo-600">
@@ -279,119 +354,314 @@
         </header>
 
 
-        <!-- ===== BEÁLLÍTÁSOK PANEL ===== -->
-        <div id="settingsPanel" class="hidden mb-6 bg-white p-6 rounded-3xl border border-gray-200 shadow-xl transition-all">
-            <h3 class="text-lg font-bold text-gray-800 mb-4 flex items-center justify-between">
-                <span class="flex items-center gap-2"><i class="fas fa-sliders-h text-indigo-600"></i> Alkalmazás Beállítások</span>
-                <span id="dbVersionBadge" class="text-[10px] font-mono bg-gray-100 text-gray-500 px-2 py-0.5 rounded-md border border-gray-200">v4.0</span>
-            </h3>
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
-                <div>
-                    <label class="block text-xs font-semibold text-gray-600 mb-1">Supabase URL</label>
-                    <input type="text" id="supabaseUrlInput" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:border-indigo-500 text-sm" placeholder="https://xyz.supabase.co">
-                </div>
-                <div>
-                    <label class="block text-xs font-semibold text-gray-600 mb-1">Anon Public API Key</label>
-                    <input type="password" id="supabaseKeyInput" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:border-indigo-500 text-sm">
-                </div>
-<!-- Új: Háttérfolyamatok finomhangolása -->
-<div class="mt-8 pt-6 border-t border-gray-200">
-    <h3 class="font-semibold text-gray-800 mb-4 flex items-center gap-2">
-        <i class="fas fa-cogs"></i> Háttérfolyamatok
-    </h3>
-    
-    <div class="space-y-5">
-        <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Emlékeztető ellenőrzés (perc)</label>
-            <input type="number" id="bgReminderInterval" value="5" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
-            <p class="text-xs text-gray-500 mt-1">Milyen gyakran ellenőrizze a lejárt határidőket</p>
-        </div>
+         <!-- ===== BELÉPTETŐ ÉS BEÁLLÍTÁSOK PANEL (Egyesített) ===== -->
+         <div id="settingsPanel" class="hidden mb-6 bg-white p-6 rounded-3xl border border-gray-200 shadow-xl transition-all">
+             <h3 class="text-lg font-bold text-gray-800 mb-6 flex items-center justify-between border-b border-gray-100 pb-4">
+                 <span class="flex items-center gap-2"><i class="fas fa-user-shield text-indigo-600"></i> Belépés, Felhő & Beállítások</span>
+                 <span id="dbVersionBadge" class="text-[10px] font-mono bg-indigo-50 text-indigo-600 px-2.5 py-1 rounded-md border border-indigo-100 font-bold app-version-label">v4.3.3</span>
+             </h3>
+             
+             <!-- ===== BEÁLLÍTÁSOK BELSŐ TABS ===== -->
+             <div class="flex flex-wrap gap-2 mb-6 border-b border-gray-100 pb-3">
+                 <button type="button" class="settings-tab-btn px-4 py-2 rounded-xl text-xs font-bold transition-all bg-indigo-600 text-white shadow-sm" data-settings-tab="general">
+                     <i class="fas fa-sliders-h mr-1.5"></i> Alapbeállítások & Szinkronizáció
+                 </button>
+                 <button type="button" class="settings-tab-btn px-4 py-2 rounded-xl text-xs font-bold transition-all bg-gray-100 text-gray-600 hover:bg-gray-200" data-settings-tab="templates">
+                     <i class="fas fa-arrows-rotate mr-1.5"></i> Állandó Költségek
+                 </button>
+                 <button type="button" class="settings-tab-btn px-4 py-2 rounded-xl text-xs font-bold transition-all bg-gray-100 text-gray-600 hover:bg-gray-200" data-settings-tab="appearance">
+                     <i class="fas fa-paint-brush mr-1.5"></i> Megjelenés & Téma
+                 </button>
+                 <button type="button" class="settings-tab-btn px-4 py-2 rounded-xl text-xs font-bold transition-all bg-gray-100 text-gray-600 hover:bg-gray-200" data-settings-tab="logs">
+                     <i class="fas fa-history mr-1.5"></i> Eseménynapló
+                 </button>
+             </div>
+             
+             <!-- 1. Alapbeállítások tartalom -->
+             <div id="settingsContentGeneral" class="settings-tab-content block space-y-6">
 
-        <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Automatikus szinkronizáció (perc)</label>
-            <input type="number" id="bgSyncInterval" value="10" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
-        </div>
+             
+             <!-- FŐ GRID: Beléptetés (Google & Supabase) -->
+             <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+                 <!-- 1. Google Fiók Kapcsolat kártya -->
+                 <div class="bg-slate-50 p-5 rounded-2xl border border-slate-200/80 flex flex-col justify-between">
+                     <div>
+                         <div class="flex items-center justify-between mb-3">
+                             <h4 class="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
+                                 <i class="fab fa-google text-red-500 text-sm"></i> Google Fiók Szinkronizáció
+                             </h4>
+                             <span id="googleStatusBadge" class="text-[9px] font-bold px-2 py-0.5 rounded-full bg-slate-200 text-slate-500 uppercase">Nincs belépve</span>
+                         </div>
+                         <p class="text-xs text-slate-500 leading-relaxed mb-4">
+                             Kapcsold össze a rendszert Google-fiókoddal! Így mobiltelefonodon (Chrome, Safari, PWA) és asztali böngésződben is automatikusan elérheted és mentheted az összes adatodat.
+                         </p>
+                     </div>
+                     
+                     <div class="space-y-3">
+                         <!-- Bejelentkezés gomb (alapértelmezett, ha nincs belépve) -->
+                         <button id="btnGoogleSignIn" class="flex items-center gap-3 px-4 py-3 border border-slate-300 rounded-xl bg-white hover:bg-slate-50 transition-all w-full justify-center text-sm font-semibold text-slate-700 shadow-sm hover:shadow-md">
+                             <svg class="w-4 h-4" viewBox="0 0 24 24">
+                                 <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v3.92h6.69c-.29 1.5-.14 3.01-1.3 4a7.62 7.62 0 0 1-5.39 2.1c-4.42 0-8-3.58-8-8s3.58-8 8-8c1.97 0 3.77.7 5.17 2l3-3A11.83 11.83 0 0 0 12 0C5.37 0 0 5.37 0 12s5.37 12 12 12c6.33 0 11.745-4.5 11.745-11.73z"/>
+                             </svg>
+                             Bejelentkezés Google Fiókkal
+                         </button>
 
-        <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Automatikus backup (perc)</label>
-            <input type="number" id="bgBackupInterval" value="25" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
-        </div>
+                         <!-- Összekapcsolt Google Felhasználó Kártya (alapértelmezetten rejtett) -->
+                         <div id="googleSessionCard" class="hidden bg-white p-4 rounded-xl border border-indigo-100 flex items-center justify-between shadow-sm animate-fade-in">
+                             <div class="flex items-center gap-3">
+                                 <div id="googleUserAvatar" class="w-10 h-10 rounded-full bg-indigo-600 text-white font-bold flex items-center justify-center shadow-inner text-sm border-2 border-indigo-100">
+                                     FS
+                                 </div>
+                                 <div class="text-left">
+                                     <div class="text-xs font-bold text-slate-800" id="googleUserName">Felhasználó</div>
+                                     <div class="text-[10px] text-slate-400" id="googleUserEmail">felhosip@gmail.com</div>
+                                 </div>
+                             </div>
+                             <button id="btnGoogleSignOut" class="text-xs font-bold text-red-600 hover:text-red-800 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg transition">
+                                 <i class="fas fa-sign-out-alt"></i> Kilépés
+                             </button>
+                         </div>
+                     </div>
+                 </div>
 
-        <div class="flex items-center gap-2">
-            <input type="checkbox" id="bgTasksEnabled" checked class="w-4 h-4">
-            <label for="bgTasksEnabled" class="text-sm text-gray-700">Háttérfolyamatok engedélyezve</label>
-        </div>
-    </div>
-</div>
-                <div>
-                    <label class="block text-xs font-semibold text-gray-600 mb-1">Biztonsági EUR árfolyam (Ft)</label>
-                    <input type="number" id="eurRateInput" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:border-indigo-500 text-sm font-semibold text-gray-700">
-                </div>
-                <div class="flex items-end gap-3">
-                    <div class="flex items-center gap-2 bg-gray-50 p-2.5 rounded-xl border border-gray-200 w-full justify-between">
-                        <span class="text-sm font-medium text-gray-700">Felhő használata:</span>
-                        <input type="checkbox" id="supabaseToggle" class="w-5 h-5 accent-indigo-600 cursor-pointer">
-                    </div>
-                </div>
-            </div>
-            <div class="flex justify-end gap-2 border-b border-gray-100 pb-4 mb-4">
-                <button id="btnSaveSettings" class="px-5 py-2 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700 transition">Mentés és Alkalmazás</button>
-            </div>
-            <!-- Sablonok -->
-            <div class="mt-6">
-                <h4 class="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2 uppercase tracking-wider">
-                    <i class="fas fa-arrows-rotate text-emerald-500"></i> Állandó (Fix) Költségek Sablonjai
-                </h4>
-                <div id="templateCloudWarning" class="bg-amber-50 border border-amber-200 p-4 rounded-2xl flex items-start gap-3 mb-4">
-                    <i class="fas fa-exclamation-triangle text-amber-500 text-lg mt-0.5"></i>
-                    <div>
-                        <h5 class="text-sm font-bold text-amber-800">A sablonkezelés nem elérhető</h5>
-                        <p class="text-xs text-amber-700 mt-0.5">A fix költségek automatikus havi generálásához aktív, működő Supabase felhőkapcsolat szükséges!</p>
-                    </div>
-                </div>
-                <div id="templateManagerContainer" class="hidden">
-                    <div class="grid grid-cols-1 md:grid-cols-5 gap-3 bg-gray-50 p-4 rounded-2xl border border-gray-200 mb-4 items-end">
-                        <div>
-                            <label class="block text-xs font-semibold text-gray-600 mb-1">Tétel</label>
-                            <select id="tplItemSelect" class="w-full px-3 py-2 border border-gray-200 rounded-xl bg-white text-sm focus:outline-none focus:border-emerald-500"></select>
-                        </div>
-                        <div>
-                            <label class="block text-xs font-semibold text-gray-600 mb-1">Összeg</label>
-                            <input type="number" id="tplAmountInput" class="w-full px-3 py-2 border border-gray-200 rounded-xl bg-white text-sm focus:outline-none focus:border-emerald-500 font-semibold" placeholder="0">
-                        </div>
-                        <div>
-                            <label class="block text-xs font-semibold text-gray-600 mb-1">Pénznem</label>
-                            <select id="tplCurrencySelect" class="w-full px-3 py-2 border border-gray-200 rounded-xl bg-white text-sm focus:outline-none focus:border-emerald-500 font-medium">
-                                <option value="HUF">HUF</option>
-                                <option value="EUR">EUR</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label class="block text-xs font-semibold text-gray-600 mb-1">Fizetési mód</label>
-                            <select id="tplMethodSelect" class="w-full px-3 py-2 border border-gray-200 rounded-xl bg-white text-sm focus:outline-none focus:border-emerald-500">
-                                <option value="Utalás">Utalás</option>
-                                <option value="Bankkártya">Bankkártya</option>
-                                <option value="Készpénz">Készpénz</option>
-                                <option value="Egyéb">Egyéb</option>
-                            </select>
-                        </div>
-                        <button id="btnTemplateAdd" class="w-full py-2 bg-emerald-600 text-white rounded-xl text-sm font-semibold hover:bg-emerald-700 transition flex items-center justify-center gap-1.5 shadow-sm">
-                            <i class="fas fa-plus"></i> Sablon hozzáadása
-                        </button>
-                    </div>
-                    <div class="overflow-x-auto">
-                        <table class="w-full text-xs text-left text-gray-600">
-                            <thead class="bg-gray-100 text-gray-700 uppercase font-bold text-[10px]">
-                                <tr><th class="p-3 rounded-l-xl">Tétel</th><th class="p-3">Fix Összeg</th><th class="p-3">Fizetési mód</th><th class="p-3 text-right rounded-r-xl">Művelet</th></tr>
-                            </thead>
-                            <tbody id="templatesTableBody"></tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>   
-        
-        <!-- ===== RIASZTÁS BANNER ===== -->
+                 <!-- 2. Supabase Beállítás kártya -->
+                 <div class="bg-slate-50 p-5 rounded-2xl border border-slate-200/80 flex flex-col justify-between">
+                     <div>
+                         <div class="flex items-center justify-between mb-3">
+                             <h4 class="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
+                                 <i class="fas fa-cloud text-indigo-600 text-sm"></i> Supabase Felhő Adatbázis (Fejlett)
+                             </h4>
+                             <div class="flex items-center gap-1.5 bg-white p-1 rounded-lg border border-slate-200">
+                                 <span class="text-[10px] font-bold text-slate-500 px-1.5">Felhő aktív:</span>
+                                 <input type="checkbox" id="supabaseToggle" class="w-4 h-4 accent-indigo-600 cursor-pointer">
+                             </div>
+                         </div>
+                         <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+                             <div>
+                                 <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">Supabase URL</label>
+                                 <input type="text" id="supabaseUrlInput" class="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-indigo-500 text-xs font-semibold" placeholder="https://xyz.supabase.co">
+                             </div>
+                             <div>
+                                 <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">Anon Public API Key</label>
+                                 <input type="password" id="supabaseKeyInput" class="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-indigo-500 text-xs">
+                             </div>
+                         </div>
+                     </div>
+
+                     <div class="flex flex-wrap gap-2 pt-2">
+                         <button id="btnTestSupabaseConn" class="flex-1 px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2">
+                             <i class="fas fa-plug"></i> Kapcsolat Tesztelése
+                         </button>
+                         <button id="btnHelpInline" class="px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl text-xs font-bold transition flex items-center justify-center" title="Hogyan kell beállítani?">
+                             <i class="fas fa-question-circle text-sm"></i>
+                         </button>
+                     </div>
+                 </div>
+             </div>
+
+             <!-- ÁLTALÁNOS ÉS HÁTTÉRFOLYAMATOK SZEKCIÓ -->
+             <div class="bg-slate-50/50 p-5 rounded-2xl border border-slate-100 mb-6">
+                 <h4 class="text-xs font-bold text-slate-700 mb-4 flex items-center gap-2 uppercase tracking-wider">
+                     <i class="fas fa-cogs text-indigo-500"></i> Általános & Háttérfolyamatok Beállításai
+                 </h4>
+                 <div class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                     <div>
+                         <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">Biztonsági EUR árfolyam (Ft)</label>
+                         <input type="number" id="eurRateInput" class="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl bg-white focus:outline-none focus:border-indigo-500 text-xs font-bold text-gray-700">
+                     </div>
+                     <div>
+                         <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">Emlékeztetők (perc)</label>
+                         <input type="number" id="bgReminderInterval" value="5" class="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl bg-white focus:outline-none focus:border-indigo-500 text-xs font-bold text-gray-700">
+                     </div>
+                     <div>
+                         <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">Auto-szinkron (perc)</label>
+                         <input type="number" id="bgSyncInterval" value="10" class="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl bg-white focus:outline-none focus:border-indigo-500 text-xs font-bold text-gray-700">
+                     </div>
+                     <div>
+                         <div class="flex items-center gap-2 bg-white p-2.5 rounded-xl border border-gray-200 w-full justify-between h-[42px]">
+                             <span class="text-xs font-bold text-slate-600">Műveletek aktívak:</span>
+                             <input type="checkbox" id="bgTasksEnabled" checked class="w-5 h-5 accent-indigo-600 cursor-pointer">
+                         </div>
+                     </div>
+                 </div>
+                 
+                 <!-- Rejtett paraméterek az oop-core kompatibilitáshoz -->
+                 <input type="number" id="bgBackupInterval" value="25" class="hidden">
+             </div>
+
+             <div class="flex justify-end gap-2 border-b border-gray-100 pb-5 mb-5">
+                 <button id="btnSaveSettings" class="px-6 py-3 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition flex items-center gap-2 shadow-md">
+                     <i class="fas fa-save"></i> Változtatások Mentése és Alkalmazása
+                 </button>
+             </div>
+
+             </div> <!-- /settingsContentGeneral -->
+             
+             <!-- 2. Állandó Költségek Sablonjai tartalom -->
+             <div id="settingsContentTemplates" class="settings-tab-content hidden">
+<!-- Sablonok szekció -->
+             <div class="mt-4">
+                 <h4 class="text-xs font-bold text-slate-700 mb-3 flex items-center gap-2 uppercase tracking-wider">
+                     <i class="fas fa-arrows-rotate text-emerald-500"></i> Állandó (Fix) Költségek Sablonjai
+                 </h4>
+                 <div id="templateCloudWarning" class="bg-amber-50 border border-amber-200 p-4 rounded-2xl flex items-start gap-3 mb-4">
+                     <i class="fas fa-exclamation-triangle text-amber-500 text-lg mt-0.5"></i>
+                     <div>
+                         <h5 class="text-sm font-bold text-amber-800">A sablonkezelés nem elérhető</h5>
+                         <p class="text-xs text-amber-700 mt-0.5">A fix költségek automatikus havi generálásához aktív, működő Supabase felhőkapcsolat szükséges!</p>
+                     </div>
+                 </div>
+                 <div id="templateManagerContainer" class="hidden">
+                     <div class="grid grid-cols-1 md:grid-cols-5 gap-3 bg-gray-50 p-4 rounded-2xl border border-gray-200 mb-4 items-end">
+                         <div>
+                             <label class="block text-xs font-semibold text-gray-600 mb-1">Tétel</label>
+                             <select id="tplItemSelect" class="w-full px-3 py-2 border border-gray-200 rounded-xl bg-white text-sm focus:outline-none focus:border-emerald-500"></select>
+                         </div>
+                         <div>
+                             <label class="block text-xs font-semibold text-gray-600 mb-1">Összeg</label>
+                             <input type="number" id="tplAmountInput" class="w-full px-3 py-2 border border-gray-200 rounded-xl bg-white text-sm focus:outline-none focus:border-emerald-500 font-semibold" placeholder="0">
+                         </div>
+                         <div>
+                             <label class="block text-xs font-semibold text-gray-600 mb-1">Pénznem</label>
+                             <select id="tplCurrencySelect" class="w-full px-3 py-2 border border-gray-200 rounded-xl bg-white text-sm focus:outline-none focus:border-emerald-500 font-medium">
+                                 <option value="HUF">HUF</option>
+                                 <option value="EUR">EUR</option>
+                             </select>
+                         </div>
+                         <div>
+                             <label class="block text-xs font-semibold text-gray-600 mb-1">Fizetési mód</label>
+                             <select id="tplMethodSelect" class="w-full px-3 py-2 border border-gray-200 rounded-xl bg-white text-sm focus:outline-none focus:border-emerald-500">
+                                 <option value="Utalás">Utalás</option>
+                                 <option value="Bankkártya">Bankkártya</option>
+                                 <option value="Készpénz">Készpénz</option>
+                                 <option value="Egyéb">Egyéb</option>
+                             </select>
+                         </div>
+                         <button id="btnTemplateAdd" class="w-full py-2 bg-emerald-600 text-white rounded-xl text-sm font-semibold hover:bg-emerald-700 transition flex items-center justify-center gap-1.5 shadow-sm">
+                             <i class="fas fa-plus"></i> Sablon hozzáadása
+                         </button>
+                     </div>
+                     <div class="overflow-x-auto">
+                         <table class="w-full text-xs text-left text-gray-600">
+                             <thead class="bg-gray-100 text-gray-700 uppercase font-bold text-[10px]">
+                                 <tr><th class="p-3 rounded-l-xl">Tétel</th><th class="p-3">Fix Összeg</th><th class="p-3">Fizetési mód</th><th class="p-3 text-right rounded-r-xl">Művelet</th></tr>
+                             </thead>
+                             <tbody id="templatesTableBody"></tbody>
+                         </table>
+                     </div>
+                 </div>
+             </div>
+        </div> <!-- /settingsContentTemplates -->
+              
+              <!-- 3. Megjelenés & Téma tartalom -->
+              <div id="settingsContentAppearance" class="settings-tab-content hidden space-y-6 animate-fade-in">
+                  <div class="bg-slate-50 p-5 rounded-2xl border border-slate-200/80">
+                      <h4 class="text-xs font-bold text-slate-700 mb-4 flex items-center gap-2 uppercase tracking-wider">
+                          <i class="fas fa-paint-brush text-indigo-500"></i> Megjelenés & Testreszabás
+                      </h4>
+                      <p class="text-xs text-slate-500 leading-relaxed mb-6">
+                          Szabd testre az alkalmazás felületét a saját igényeid szerint! Választhatsz szemkímélő sötét módot, vagy finom, nem teljesen fehér háttérárnyalatokat a jobb olvashatóságért.
+                      </p>
+
+                      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <!-- Sötét Mód Kártya -->
+                          <div class="bg-white p-5 rounded-xl border border-slate-100 shadow-sm flex flex-col justify-between">
+                              <div>
+                                  <div class="flex items-center justify-between mb-3">
+                                      <span class="text-sm font-bold text-slate-800 flex items-center gap-2">
+                                          <i class="fas fa-moon text-indigo-500"></i> Sötét Mód (Dark Mode)
+                                      </span>
+                                      <!-- iOS-style Switch Toggle -->
+                                      <label class="relative inline-flex items-center cursor-pointer">
+                                          <input type="checkbox" id="darkModeToggle" class="sr-only peer">
+                                          <div class="w-11 h-6 bg-slate-200 rounded-full peer peer-focus:ring-2 peer-focus:ring-indigo-300 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                                      </label>
+                                  </div>
+                                  <p class="text-xs text-slate-500 leading-relaxed">
+                                      Szemkímélő sötét színvilág (kozmikus pala és mélykék tónusok) esti vagy éjszakai használathoz.
+                                  </p>
+                              </div>
+                              <div id="darkModeStatusText" class="text-[10px] font-mono text-slate-400 mt-4">
+                                  Aktív állapot: Kikapcsolva
+                              </div>
+                          </div>
+
+                          <!-- Háttérszín Választó Kártya -->
+                          <div class="bg-white p-5 rounded-xl border border-slate-100 shadow-sm">
+                              <span class="text-sm font-bold text-slate-800 flex items-center gap-2 mb-3">
+                                  <i class="fas fa-palette text-indigo-500"></i> Háttér Árnyalata
+                              </span>
+                              <p class="text-xs text-slate-500 leading-relaxed mb-4">
+                                  Ha a tiszta fehér háttér túl vakító, válassz egy lágy, meleg vagy hűvös háttérszínt (világos módban érvényes):
+                              </p>
+
+                              <!-- Szín gombok -->
+                              <div class="flex flex-wrap gap-3" id="themeBgSelectorContainer">
+                                  <!-- White -->
+                                  <button type="button" data-bg-theme="white" class="w-10 h-10 rounded-xl bg-white border-2 border-indigo-600 shadow-sm focus:outline-none relative transition-all hover:scale-105" title="Pure White">
+                                      <span class="absolute inset-0 flex items-center justify-center text-indigo-600 check-icon"><i class="fas fa-check text-xs"></i></span>
+                                  </button>
+                                  <!-- Cream -->
+                                  <button type="button" data-bg-theme="cream" class="w-10 h-10 rounded-xl bg-[#faf7f0] border-2 border-gray-200 shadow-sm focus:outline-none relative transition-all hover:scale-105" title="Warm Cream">
+                                      <span class="absolute inset-0 flex items-center justify-center text-indigo-600 hidden check-icon"><i class="fas fa-check text-xs"></i></span>
+                                  </button>
+                                  <!-- Sage -->
+                                  <button type="button" data-bg-theme="sage" class="w-10 h-10 rounded-xl bg-[#f4f6f4] border-2 border-gray-200 shadow-sm focus:outline-none relative transition-all hover:scale-105" title="Pastel Sage">
+                                      <span class="absolute inset-0 flex items-center justify-center text-indigo-600 hidden check-icon"><i class="fas fa-check text-xs"></i></span>
+                                  </button>
+                                  <!-- Ice Blue -->
+                                  <button type="button" data-bg-theme="ice" class="w-10 h-10 rounded-xl bg-[#f0f4f8] border-2 border-gray-200 shadow-sm focus:outline-none relative transition-all hover:scale-105" title="Ice Blue">
+                                      <span class="absolute inset-0 flex items-center justify-center text-indigo-600 hidden check-icon"><i class="fas fa-check text-xs"></i></span>
+                                  </button>
+                                  <!-- Lavender -->
+                                  <button type="button" data-bg-theme="lavender" class="w-10 h-10 rounded-xl bg-[#f5f3f7] border-2 border-gray-200 shadow-sm focus:outline-none relative transition-all hover:scale-105" title="Soft Lavender">
+                                      <span class="absolute inset-0 flex items-center justify-center text-indigo-600 hidden check-icon"><i class="fas fa-check text-xs"></i></span>
+                                  </button>
+                                  <!-- Slate -->
+                                  <button type="button" data-bg-theme="slate" class="w-10 h-10 rounded-xl bg-[#f1f5f9] border-2 border-gray-200 shadow-sm focus:outline-none relative transition-all hover:scale-105" title="Slate Gray">
+                                      <span class="absolute inset-0 flex items-center justify-center text-indigo-600 hidden check-icon"><i class="fas fa-check text-xs"></i></span>
+                                  </button>
+                              </div>
+                          </div>
+                      </div>
+
+                      <div class="mt-6 pt-4 border-t border-slate-200 flex justify-between items-center text-[10px] text-slate-400">
+                          <span>💡 A beállítások azonnal érvénybe lépnek és automatikusan elmentésre kerülnek a helyi tárolóba.</span>
+                          <button id="btnResetAppearance" class="px-2.5 py-1 bg-slate-200 hover:bg-slate-300 text-slate-600 font-bold rounded-lg transition">Visszaállítás alapértelmezettre</button>
+                      </div>
+                  </div>
+              </div>
+             
+             <!-- 3. Eseménynapló tartalom -->
+             <div id="settingsContentLogs" class="settings-tab-content hidden space-y-4">
+                 <div class="flex flex-col md:flex-row md:items-center justify-between bg-slate-50 p-4 rounded-2xl border border-slate-100 gap-3">
+                     <div>
+                         <h4 class="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
+                             <i class="fas fa-history text-indigo-500"></i> Fontosabb Rendszeresemények
+                         </h4>
+                         <p class="text-[11px] text-slate-500 mt-1">
+                             Az alkalmazás és a háttérfolyamatok legfontosabb műveletei és szinkronizációs ütközései időbélyeggel ellátva.
+                         </p>
+                     </div>
+                     <div class="flex gap-2 shrink-0">
+                         <button id="btnSaveLogs" class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm">
+                             <i class="fas fa-download"></i> Letöltés
+                         </button>
+                         <button id="btnClearLogs" class="px-3.5 py-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl text-xs font-bold transition flex items-center gap-1.5">
+                             <i class="fas fa-trash-alt"></i> Törlés
+                         </button>
+                     </div>
+                 </div>
+                 
+                 <div class="border border-gray-100 rounded-2xl overflow-hidden bg-gray-50/50">
+                     <div class="max-h-[350px] overflow-y-auto p-3 space-y-2 text-xs font-mono" id="settingsLogsList">
+                         <div class="text-center py-8 text-gray-400 italic">Nincsenek események rögzítve</div>
+                     </div>
+                 </div>
+             </div>
+         </div> <!-- /settingsPanel -->
+         
+         <!-- ===== RIASZTÁS BANNER ===== -->
 <div id="hmiAlarmBanner" class="hidden mb-3 bg-amber-50 border border-amber-200 text-amber-800 p-2 rounded-xl flex items-center gap-2 text-xs font-medium">
     <i class="fas fa-exclamation-triangle text-amber-500"></i>
     <span id="hmiAlarmText">Nincs aktív esemény</span>
@@ -541,10 +811,11 @@
             </div>
         </div>
     </div>
+</div>
        
             <!-- 1. TÁBLÁZAT -->
             <div id="tab-table" class="tab-pane">
-                <div id="mainTableContainer" class="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-x-auto p-2"></div>
+                <div id="mainTableContainer" class="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-visible p-0 md:p-2"></div>
                <!-- <div class="grid grid-cols-2 md:grid-cols-4 gap-6" id="summary"></div>-->
             </div>
 
@@ -634,9 +905,17 @@
                     </div>
                     <!-- Lista -->
                     <div class="lg:col-span-2 bg-white p-5 rounded-2xl border border-gray-200 shadow-sm overflow-x-auto">
-                        <h3 class="text-sm font-bold text-gray-700 mb-4 uppercase tracking-wide border-b pb-2 flex items-center gap-2">
-                            <i class="fas fa-list text-blue-500"></i> Aktív határidők
-                        </h3>
+                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 border-b pb-2">
+                            <h3 class="text-sm font-bold text-gray-700 uppercase tracking-wide flex items-center gap-2">
+                                <i class="fas fa-list text-blue-500"></i> Határidők Listája
+                            </h3>
+                            <!-- Szűrő gombok -->
+                            <div class="flex bg-gray-100 p-1 rounded-xl text-[11px]" id="reminderFilterGroup">
+                                <button class="px-3 py-1.5 rounded-lg font-bold bg-white text-gray-800 shadow-sm transition-all" data-filter="all">Mind</button>
+                                <button class="px-3 py-1.5 rounded-lg font-bold text-gray-500 hover:text-gray-800 transition-all" data-filter="active">Aktív</button>
+                                <button class="px-3 py-1.5 rounded-lg font-bold text-gray-500 hover:text-gray-800 transition-all" data-filter="completed">Teljesített</button>
+                            </div>
+                        </div>
                         <table class="w-full text-xs text-left border-collapse">
                             <thead class="bg-gray-100 text-gray-700 uppercase font-black tracking-wider text-[10px] border-b border-gray-200">
                                 <tr><th class="p-3">Státusz</th><th class="p-3">Esemény</th><th class="p-3">Gyakoriság</th><th class="p-3">Határidő</th><th class="p-3">Hátralévő</th><th class="p-3">Összeg</th><th class="p-3 text-right">Művelet</th></tr>
@@ -986,6 +1265,55 @@
     </div>
 </div>
 
+<!-- ===== SÚGÓ / TUDÁSBÁZIS MODAL ===== -->
+<div id="helpModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[9999] modal">
+    <div class="bg-white rounded-3xl max-w-4xl w-full max-h-[85vh] overflow-hidden flex flex-col shadow-2xl border border-slate-100 transform scale-95 opacity-0 transition-all duration-300">
+        <!-- Modal fejléc keresővel -->
+        <div class="p-5 border-b border-gray-100 flex flex-wrap items-center justify-between gap-4 bg-slate-50">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-2xl bg-indigo-100 text-indigo-600 flex items-center justify-center text-lg shadow-inner">
+                    <i class="fas fa-book-open"></i>
+                </div>
+                <div class="text-left">
+                    <h3 class="font-black text-slate-800 text-base leading-tight">Súgó & Tudásbázis</h3>
+                    <p class="text-[10px] text-indigo-600 uppercase tracking-widest font-mono font-bold">Felhasználói Útmutató</p>
+                </div>
+            </div>
+            
+            <!-- Élő kereső mező -->
+            <div class="flex-1 max-w-xs relative">
+                <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400 text-xs">
+                    <i class="fas fa-search"></i>
+                </span>
+                <input type="text" id="helpSearchInput" class="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-xl focus:outline-none focus:border-indigo-500 text-xs bg-white shadow-inner" placeholder="Keresés a témák között...">
+            </div>
+
+            <button id="btnCloseHelpModal" class="w-9 h-9 flex items-center justify-center bg-gray-200 hover:bg-red-500 hover:text-white rounded-xl text-gray-600 transition font-bold text-lg">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        
+        <!-- Modal belső tartalom (Kétoszlopos elrendezés) -->
+        <div class="flex-1 flex flex-col md:flex-row overflow-hidden min-h-[400px]">
+            <!-- Bal oldalsáv: Kategória választó -->
+            <div class="w-full md:w-80 bg-slate-50 border-r border-gray-100 p-4 overflow-y-auto space-y-2 select-none" id="helpCategoriesContainer">
+                <!-- JS tölti meg dinamikusan -->
+            </div>
+            
+            <!-- Jobb oldalsáv: Cikkek listája és részletei -->
+            <div class="flex-1 p-6 overflow-y-auto bg-white" id="helpContentContainer">
+                <!-- JS tölti meg dinamikusan -->
+            </div>
+        </div>
+        
+        <!-- Modal lábléc -->
+        <div class="p-4 border-t border-gray-100 bg-slate-50 flex items-center justify-between text-[11px] text-slate-400">
+            <span class="flex items-center gap-1"><i class="fas fa-info-circle text-indigo-500"></i> Tipp: Az adatok szinkronizálásához legyen aktív a felhőkapcsolat!</span>
+            <span class="font-bold app-version-label">v4.3.3</span>
+        </div>
+    </div>
+</div>
+
 <!-- DB Audit Modal -->
 <div id="dbAuditModal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center z-[9999]">
     <div class="bg-white rounded-3xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-hidden">
@@ -1019,7 +1347,10 @@
             <div class="font-mono text-[10px] text-gray-400">
                 Utolsó mentés: <span id="lastSaveTime">Soha</span>
             </div>
-            <div class="text-gray-400">Költségnyilvántartó v4.0</div>
+            <div class="text-gray-400 relative p-1" id="debugToggleBtnContainer">
+                Költségnyilvántartó <span class="app-version-label">v4.3.3</span>
+                <button id="debugToggleBtn" class="absolute inset-0 w-full h-full bg-transparent border-none cursor-pointer z-50 focus:outline-none" title="Debug panel megnyitása (5x kattintás)"></button>
+            </div>
         </footer>
 
     </div><!-- /max-w-7xl -->

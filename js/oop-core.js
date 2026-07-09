@@ -36,8 +36,18 @@ export class SecurityManager {
 }
 
 export class Database {
-    constructor(dbName = 'KoltsegNyilvantarto', version = 6) {  // ← verzió 6-ra emelve
-        this.dbName = dbName;
+    constructor(dbName = 'KoltsegNyilvantarto', version = 8) {  // ← verzió 8-ra emelve
+        let finalDbName = dbName;
+        try {
+            const path = window.location.pathname;
+            const cleanPath = path.replace(/^\/|\/$/g, '').replace(/[^a-zA-Z0-9_-]/g, '_');
+            if (cleanPath && cleanPath !== 'index.html' && cleanPath !== 'src') {
+                finalDbName = `${dbName}_${cleanPath}`;
+            }
+        } catch (e) {
+            console.warn('[DB] Nem sikerült egyedi adatbázis nevet generálni:', e);
+        }
+        this.dbName = finalDbName;
         this.version = version;
         this.db = null;
     }
@@ -48,11 +58,11 @@ export class Database {
             
             request.onupgradeneeded = (e) => {
                 try {
-                    this._handleUpgrade(e.target.result, e.oldVersion);
+                    const transaction = e.target.transaction;
+                    this._handleUpgrade(e.target.result, e.oldVersion, transaction);
                 } catch (err) {
                     console.error('[DB] Upgrade hiba:', err);
-                    // A hibát továbbítjuk, hogy az onerror elkapja
-                    request.onerror?.(err);
+                    // Az onupgradeneeded-ben dobott hiba automatikusan abortálja a tranzakciót és kiváltja az onerror-t.
                 }
             };
             
@@ -63,13 +73,14 @@ export class Database {
             };
             
             request.onerror = (e) => {
-                console.error('[DB] Kapcsolódási hiba:', e.target.error);
-                reject(e.target.error);
+                const errObj = e?.target?.error || e || new Error('Ismeretlen adatbázis hiba');
+                console.error('[DB] Kapcsolódási hiba:', errObj);
+                reject(errObj);
             };
         });
     }
 
-    _handleUpgrade(db, oldVersion) {
+    _handleUpgrade(db, oldVersion, transaction) {
         console.log(`[DB] Upgrade: ${oldVersion} → ${this.version}`);
 
         // === Entries tábla ===
@@ -80,6 +91,17 @@ export class Database {
             });
             store.createIndex('cellKey', 'cellKey', { unique: false });
             store.createIndex('updated_at', 'updated_at', { unique: false });
+        } else if (transaction) {
+            const store = transaction.objectStore('entries');
+            try {
+                if (store.indexNames.contains('cellKey')) store.deleteIndex('cellKey');
+                if (store.indexNames.contains('updated_at')) store.deleteIndex('updated_at');
+                store.createIndex('cellKey', 'cellKey', { unique: false });
+                store.createIndex('updated_at', 'updated_at', { unique: false });
+                console.log('[DB] Entries indexek sikeresen újjáépítve upgrade során');
+            } catch (err) {
+                console.warn('[DB] Entries index újjáépítési hiba:', err);
+            }
         }
 
         // === Items tábla ===
@@ -110,8 +132,37 @@ export class Database {
             });
             store.createIndex('sender', 'sender', { unique: false });
             store.createIndex('date', 'date', { unique: false });
-            store.createIndex('sender_date', ['sender', 'date'], { unique: true });
+            try {
+                store.createIndex('sender_date', ['sender', 'date'], { unique: true });
+            } catch (e) {
+                console.warn('[DB] Duplikált bejövő utalások miatt nem-egyedi indexet hozunk létre a(z) sender_date mezőhöz:', e);
+                store.createIndex('sender_date', ['sender', 'date'], { unique: false });
+            }
             store.createIndex('updated_at', 'updated_at', { unique: false });
+        } else if (transaction) {
+            const store = transaction.objectStore('incomings');
+            try {
+                if (store.indexNames.contains('sender')) store.deleteIndex('sender');
+                if (store.indexNames.contains('date')) store.deleteIndex('date');
+                if (store.indexNames.contains('sender_date')) store.deleteIndex('sender_date');
+                if (store.indexNames.contains('updated_at')) store.deleteIndex('updated_at');
+                
+                store.createIndex('sender', 'sender', { unique: false });
+                store.createIndex('date', 'date', { unique: false });
+                
+                // Különleges védelem az egyediségi hiba miatti tranzakció-abortálás ellen
+                try {
+                    store.createIndex('sender_date', ['sender', 'date'], { unique: true });
+                } catch (e) {
+                    console.warn('[DB] Nem-egyedi index fallback a sender_date mezőhöz:', e);
+                    store.createIndex('sender_date', ['sender', 'date'], { unique: false });
+                }
+                
+                store.createIndex('updated_at', 'updated_at', { unique: false });
+                console.log('[DB] Incomings indexek sikeresen újjáépítve upgrade során');
+            } catch (err) {
+                console.warn('[DB] Incomings index újjáépítési hiba:', err);
+            }
         }
 
         // === Incoming senders tábla ===
@@ -119,7 +170,24 @@ export class Database {
             const store = db.createObjectStore('incoming_senders', { 
                 keyPath: 'id' 
             });
-            store.createIndex('name', 'name', { unique: true });
+            try {
+                store.createIndex('name', 'name', { unique: true });
+            } catch (e) {
+                store.createIndex('name', 'name', { unique: false });
+            }
+        } else if (transaction) {
+            const store = transaction.objectStore('incoming_senders');
+            try {
+                if (store.indexNames.contains('name')) store.deleteIndex('name');
+                try {
+                    store.createIndex('name', 'name', { unique: true });
+                } catch (e) {
+                    store.createIndex('name', 'name', { unique: false });
+                }
+                console.log('[DB] Incoming senders indexek sikeresen újjáépítve upgrade során');
+            } catch (err) {
+                console.warn('[DB] Incoming senders index újjáépítési hiba:', err);
+            }
         }
     }
 
@@ -274,6 +342,35 @@ export class ReminderManager {
         await this.db.delete('reminders', id);
         this.reminders = this.reminders.filter(r => r.id !== id);
         await this.syncService.push('reminders', id, true);
+    }
+
+    async markAsCompleted(id) {
+        const rem = this.reminders.find(r => r.id === id);
+        if (!rem) return;
+
+        rem.completed = true;
+        rem.updated_at = new Date().toISOString();
+
+        await this.db.save('reminders', rem);
+        await this.syncService.push('reminders', rem);
+
+        // Ha ismétlődő határidő, akkor léptetjük a dátumot a következő alkalomra
+        if (rem.frequency && rem.frequency !== 'once') {
+            let dueDate = dayjs(rem.due_date);
+            if (rem.frequency === 'monthly') dueDate = dueDate.add(1, 'month');
+            else if (rem.frequency === 'quarterly') dueDate = dueDate.add(3, 'month');
+            else if (rem.frequency === 'yearly') dueDate = dueDate.add(1, 'year');
+
+            // Létrehozunk egy új (vagyis visszaállított) határidőt a jövőbeli dátumra
+            rem.completed = false;
+            rem.due_date = dueDate.format('YYYY-MM-DD');
+            rem.updated_at = new Date().toISOString();
+            
+            await this.db.save('reminders', rem);
+            await this.syncService.push('reminders', rem);
+        }
+
+        this.reminders = await this.db.getAll('reminders');
     }
 }
 

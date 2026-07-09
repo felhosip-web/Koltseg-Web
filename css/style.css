@@ -258,3 +258,128 @@ header {
         right: -10px;
     }
 }
+
+/* ===== HÁTTÉRSZÍN ÉS TÉMA RENDSZER ===== */
+:root {
+  --app-bg: #f9fafb; /* Alapértelmezett finom szürke */
+  --card-bg: #ffffff;
+  --text-main: #1f2937;
+  --text-muted: #4b5563;
+  --border-color: #e5e7eb;
+}
+
+body.theme-custom-bg {
+  background-color: var(--app-bg) !important;
+}
+
+/* Háttér variációk */
+body.bg-theme-cream { --app-bg: #faf7f0 !important; background-color: var(--app-bg) !important; }
+body.bg-theme-sage { --app-bg: #f4f6f4 !important; background-color: var(--app-bg) !important; }
+body.bg-theme-ice { --app-bg: #f0f4f8 !important; background-color: var(--app-bg) !important; }
+body.bg-theme-lavender { --app-bg: #f5f3f7 !important; background-color: var(--app-bg) !important; }
+body.bg-theme-slate { --app-bg: #f1f5f9 !important; background-color: var(--app-bg) !important; }
+
+/* Sötét mód (Dark Mode) */
+body.dark-mode {
+  --app-bg: #0f172a !important; /* Slate 900 */
+  --card-bg: #1e293b !important; /* Slate 800 */
+  --text-main: #f8fafc !important; /* Slate 50 */
+  --text-muted: #cbd5e1 !important; /* Slate 300 */
+  --border-color: #334155 !important; /* Slate 700 */
+  
+  background-color: var(--app-bg) !important;
+  color: var(--text-main) !important;
+}
+
+body.dark-mode .bg-white {
+  background-color: var(--card-bg) !important;
+  color: var(--text-main) !important;
+}
+
+body.dark-mode .bg-slate-50,
+body.dark-mode .bg-gray-50,
+body.dark-mode .bg-slate-100,
+body.dark-mode .bg-gray-100 {
+  background-color: #1e293b !important; /* Slate 800 */
+  color: var(--text-main) !important;
+}
+
+body.dark-mode .text-gray-900,
+body.dark-mode .text-gray-800,
+body.dark-mode .text-gray-700,
+body.dark-mode .text-slate-800,
+body.dark-mode .text-slate-700,
+body.dark-mode h1,
+body.dark-mode h2,
+body.dark-mode h3,
+body.dark-mode h4,
+body.dark-mode h5 {
+  color: var(--text-main) !important;
+}
+
+body.dark-mode .text-gray-600,
+body.dark-mode .text-gray-500,
+body.dark-mode .text-slate-500,
+body.dark-mode .text-slate-600 {
+  color: var(--text-muted) !important;
+}
+
+body.dark-mode .border-gray-200,
+body.dark-mode .border-slate-200,
+body.dark-mode .border-gray-100,
+body.dark-mode .border-slate-100,
+body.dark-mode .border-indigo-100 {
+  border-color: var(--border-color) !important;
+}
+
+body.dark-mode input,
+body.dark-mode select,
+body.dark-mode textarea {
+  background-color: #334155 !important; /* Slate 700 */
+  color: #f8fafc !important;
+  border-color: #475569 !important;
+}
+
+body.dark-mode input::placeholder {
+  color: #94a3b8 !important;
+}
+
+body.dark-mode table thead,
+body.dark-mode .bg-slate-50Header {
+  background-color: #1e293b !important;
+}
+
+body.dark-mode table td,
+body.dark-mode table th {
+  color: var(--text-main) !important;
+  border-color: var(--border-color) !important;
+}
+
+body.dark-mode table td.bg-gray-50,
+body.dark-mode table th.bg-gray-50 {
+  background-color: #334155 !important;
+  color: #f8fafc !important;
+}
+
+body.dark-mode .shadow-xl,
+body.dark-mode .shadow-lg,
+body.dark-mode .shadow-md,
+body.dark-mode .shadow-sm {
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5), 0 2px 4px -1px rgba(0, 0, 0, 0.3) !important;
+}
+
+body.dark-mode header {
+  background-color: #1e293b !important;
+  border-bottom: 1px solid var(--border-color) !important;
+}
+
+body.dark-mode .modal .bg-white {
+  background-color: #1e293b !important;
+  border-color: var(--border-color) !important;
+}
+
+body.dark-mode footer {
+  background-color: #1e293b !important;
+  border-color: var(--border-color) !important;
+  color: var(--text-muted) !important;
+}

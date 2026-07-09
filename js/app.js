@@ -1,4 +1,5 @@
-// js/app.js – v4.1 – Dashboard + 6 tabos felület verziókezeléssel
+// js/app.js – v4.3.3 – Dashboard + 6 tabos felület verziókezeléssel
+import './local-storage-sandbox.js';
 // ================================================================
 // 1. RÉSZ: Importok, Konstruktor, Segédfüggvények
 // ================================================================
@@ -11,8 +12,9 @@ import {
 import { SyncService } from './sync-service.js';
 import { UIModalController } from './ui-modal-controller.js';
 import { UIController } from './ui-controller.js';
+import { AiModalController } from './ai-modal-controller.js';
 import { ChartsRenderer } from './oop-charts.js';
-import { RemindersRenderer } from './oop-reminders.js';
+import { RemindersRenderer, RemindersApp } from './oop-reminders.js';
 import { StorageManager } from './storage-manager.js';
 import { BootManager } from './boot-manager.js';
 import { BackupManager } from './backup-manager.js';
@@ -28,6 +30,7 @@ import { DataExportController } from './data-export-controller.js';
 import { DataMaintenanceController } from './data-maintenance-controller.js';
 import { ServiceDevManager } from './service-dev-manager.js';
 import { IncomingRenderer } from './incoming-renderer.js';
+import { LogManager } from './log-manager.js';
 
 // ================================================================
 // === APP OSZTÁLY ===
@@ -41,6 +44,7 @@ class App {
         this.hmiNotif = new UIModalController();
         this.storage = new StorageManager();
         this.singletonLock = new SingletonLock(this);
+        this.logger = new LogManager(this);
 
         // === 2. VERZIÓKEZELÉS ===
         this.version = getVersionManager();
@@ -70,8 +74,10 @@ class App {
         // === 7. UI RENDEREREK ===
         this.renderer = new VirtualTableRenderer(this);
         this.uiController = new UIController(this);
+        this.aiModal = new AiModalController(this);
         this.chartsRenderer = new ChartsRenderer(this);
         this.remindersRenderer = new RemindersRenderer(this, this.hmiNotif);
+        this.remindersApp = new RemindersApp();
 
         // === 8. TOVÁBBI MENEDZSEREK ===
         this.backupManager = new BackupManager(this);
@@ -241,6 +247,7 @@ class App {
 
             // === RENDSZER INDÍTÁSA ===
             await this.bootManager.boot();
+            this.logger?.log('system', 'success', `Alkalmazás sikeresen elindult. Verzió: ${this.version.toString()}`);
 
             // === BEJÖVŐ ADATOK BETÖLTÉSE ===
             await this.incomingManager.load();
@@ -301,6 +308,9 @@ class App {
         if (badgeEl) {
             badgeEl.textContent = `${info.label} (${new Date(info.build).toLocaleDateString('hu-HU')})`;
         }
+        document.querySelectorAll('.app-version-label').forEach(el => {
+            el.textContent = info.short;
+        });
         document.title = `Költség Nyilvántartó ${info.short}`;
     }
 
@@ -346,16 +356,23 @@ class App {
         const statusText = document.getElementById('statusText');
         if (!statusBadge || !statusText) return;
 
-        const effectiveOnline = isOnline && !this.isOfflineMode;
+        const hasInternet = isOnline && !this.isOfflineMode;
+        const useSupabase = this.config?.useSupabase;
+        const isLoggedIn = localStorage.getItem('googleUser') !== null;
 
-        if (!effectiveOnline) {
+        if (!hasInternet) {
             statusBadge.className = 'text-[10px] px-2 py-0.5 rounded-full bg-red-100 text-red-600 font-medium flex items-center gap-1';
             statusText.textContent = 'Offline';
             const eurLed = document.getElementById('eurLed');
             if (eurLed) eurLed.className = 'w-3 h-3 rounded-full bg-red-400';
+        } else if (!useSupabase || !isLoggedIn) {
+            statusBadge.className = 'text-[10px] px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700 font-medium flex items-center gap-1';
+            statusText.textContent = 'Online (Helyi)';
+            const eurLed = document.getElementById('eurLed');
+            if (eurLed) eurLed.className = 'w-3 h-3 rounded-full bg-yellow-400';
         } else {
             statusBadge.className = 'text-[10px] px-2 py-0.5 rounded-full bg-green-100 text-green-600 font-medium flex items-center gap-1';
-            statusText.textContent = 'Online';
+            statusText.textContent = 'Szerver Online';
             const eurLed = document.getElementById('eurLed');
             if (eurLed) eurLed.className = 'w-3 h-3 rounded-full bg-green-400';
         }
@@ -382,6 +399,7 @@ class App {
                         this.config.setSupabaseEnabled(true);
                         this.updateOnlineStatus(true);
                         this.hmiNotif.showToast('✅ Online mód aktiválva', 'success');
+                        this.logger?.log('system', 'success', 'Internetkapcsolat helyreállt. Felhasználó jóváhagyásával kiléptünk az offline módból.');
                         this.syncService?.sync?.().catch(() => {});
                     } else {
                         this.updateOnlineStatus(false);
@@ -390,6 +408,7 @@ class App {
             } else {
                 this.updateOnlineStatus(true);
                 this.hmiNotif.showToast('Internetkapcsolat helyreállt', 'success');
+                this.logger?.log('system', 'info', 'Internetkapcsolat helyreállt. A rendszer online módba lépett.');
                 this.syncService?.sync?.().catch(() => {});
             }
         };
@@ -402,6 +421,7 @@ class App {
             this.updateOnlineStatus(false);
             this.offline.showBanner();
             this.hmiNotif.showToast('📡 Internetkapcsolat megszakadt – offline mód', 'warning');
+            this.logger?.log('system', 'warn', 'Internetkapcsolat megszakadt. A rendszer offline módba kényszerült.');
         };
 
         window.addEventListener('online', this._onlineHandler);
@@ -1314,7 +1334,8 @@ function initDebugPanel() {
     let clickCount = 0;
     let clickTimer = null;
     
-    toggleBtn.addEventListener('click', () => {
+    toggleBtn.addEventListener('click', (e) => {
+        e.preventDefault();
         clickCount++;
         clearTimeout(clickTimer);
         if (clickCount >= 5) {
@@ -1323,6 +1344,8 @@ function initDebugPanel() {
             if (!panel.classList.contains('hidden')) {
                 updateDebugStatus();
                 updateDebugLogs();
+                updateSupabaseDebugInfo();
+                updateNotificationPermissionStatus();
             }
         }
         clickTimer = setTimeout(() => { clickCount = 0; }, 800);
@@ -1332,10 +1355,67 @@ function initDebugPanel() {
         panel.classList.add('hidden');
     });
 
+    // Delegált kattintásfigyelő a Súgóból nyitható fejlesztői és debug panelhez
+    document.addEventListener('click', (e) => {
+        const btn = e.target.closest('#helpOpenDevPanelBtn');
+        if (btn) {
+            e.preventDefault();
+            panel.classList.remove('hidden');
+            updateDebugStatus();
+            updateDebugLogs();
+            updateSupabaseDebugInfo();
+            updateNotificationPermissionStatus();
+        }
+
+        const srvBtn = e.target.closest('#helpOpenServicePanelBtn');
+        if (srvBtn) {
+            e.preventDefault();
+            if (window.app?.serviceDev) {
+                window.app.serviceDev.showMenu();
+            } else {
+                console.warn('[APP] ServiceDevManager not found on window.app');
+            }
+        }
+    });
+
+    // --- TAB VÁLASZTÓ LOGIKA ---
+    const tabBtnActions = document.getElementById('tabBtnDebugActions');
+    const tabBtnSupabase = document.getElementById('tabBtnDebugSupabase');
+    const tabBtnReminders = document.getElementById('tabBtnDebugReminders');
+
+    const tabActions = document.getElementById('debugTabActions');
+    const tabSupabase = document.getElementById('debugTabSupabase');
+    const tabReminders = document.getElementById('debugTabReminders');
+
+    const switchTab = (activeBtn, activeTab) => {
+        [tabBtnActions, tabBtnSupabase, tabBtnReminders].forEach(btn => {
+            if (btn) {
+                btn.className = "flex-1 py-2 text-xs font-bold rounded-xl text-slate-500 hover:text-slate-800 hover:bg-white/50 transition";
+            }
+        });
+        [tabActions, tabSupabase, tabReminders].forEach(tab => {
+            if (tab) tab.classList.add('hidden');
+        });
+
+        if (activeBtn) activeBtn.className = "flex-1 py-2 text-xs font-bold rounded-xl bg-white text-slate-800 shadow-sm transition";
+        if (activeTab) activeTab.classList.remove('hidden');
+    };
+
+    tabBtnActions?.addEventListener('click', () => switchTab(tabBtnActions, tabActions));
+    tabBtnSupabase?.addEventListener('click', () => {
+        switchTab(tabBtnSupabase, tabSupabase);
+        updateSupabaseDebugInfo();
+    });
+    tabBtnReminders?.addEventListener('click', () => {
+        switchTab(tabBtnReminders, tabReminders);
+        updateNotificationPermissionStatus();
+    });
+
     // Debug gombok
     document.querySelectorAll('.debug-btn').forEach(btn => {
         btn.addEventListener('click', async () => {
             const action = btn.dataset.action;
+            const originalText = btn.textContent;
             btn.textContent = '⏳ ...';
             btn.disabled = true;
             
@@ -1347,14 +1427,107 @@ function initDebugPanel() {
                 console.error('[DEBUG] Hiba:', e);
                 alert('❌ Hiba: ' + e.message);
             } finally {
-                btn.textContent = btn.dataset.action === 'loadData' ? '📥 Tesztadatok (30)' :
-                                  btn.dataset.action === 'loadReminders' ? '⏰ Határidők (10)' :
-                                  btn.dataset.action === 'refreshAll' ? '🔄 Minden frissítés' :
-                                  btn.dataset.action === 'showData' ? '📊 Adatok mutatása' :
-                                  '🗑️ ÖSSZES TÖRLÉSE';
+                btn.textContent = originalText;
                 btn.disabled = false;
             }
         });
+    });
+
+    // Logok törlése gomb
+    const btnClearLogs = document.getElementById('btnClearDebugLogs');
+    btnClearLogs?.addEventListener('click', () => {
+        localStorage.removeItem('debug_logs');
+        updateDebugLogs();
+    });
+
+    // Supabase SQL másolás
+    const btnCopySQL = document.getElementById('btnCopySupabaseSQL');
+    const sqlTextarea = document.getElementById('debugSupabaseSQL');
+    if (sqlTextarea) {
+        sqlTextarea.value = getSupabaseSQLScript();
+    }
+    btnCopySQL?.addEventListener('click', () => {
+        if (sqlTextarea) {
+            navigator.clipboard.writeText(sqlTextarea.value);
+            window.app?.hmiNotif?.showToast('SQL séma másolva a vágólapra!', 'success');
+        }
+    });
+
+    // Supabase Ping / Kapcsolati teszt
+    const btnTestSupa = document.getElementById('btnTestSupabaseConn');
+    btnTestSupa?.addEventListener('click', async () => {
+        const app = window.app;
+        if (!app) return;
+
+        const config = app.config;
+        const url = config?.supabaseConfig?.url;
+        const key = config?.supabaseConfig?.key;
+        const resultDiv = document.getElementById('debugSupabaseConnResult');
+
+        if (!resultDiv) return;
+        resultDiv.classList.remove('hidden');
+        resultDiv.className = "p-3 rounded-lg text-xs font-mono bg-amber-50 text-amber-800 border border-amber-200";
+        resultDiv.textContent = "Kapcsolódás folyamatban...";
+
+        if (!url || !key) {
+            resultDiv.className = "p-3 rounded-lg text-xs font-mono bg-red-50 text-red-800 border border-red-200";
+            resultDiv.textContent = "Hiba: Supabase URL és Key megadása kötelező a Beállításokban!";
+            return;
+        }
+
+        try {
+            // Ping a Supabase REST API-nak a kategóriák (items) tábla lekérésével, limit 1
+            const response = await fetch(`${url}/rest/v1/items?select=id&limit=1`, {
+                headers: {
+                    'apikey': key,
+                    'Authorization': `Bearer ${key}`
+                }
+            });
+
+            if (response.ok) {
+                resultDiv.className = "p-3 rounded-lg text-xs font-mono bg-emerald-50 text-emerald-800 border border-emerald-200";
+                resultDiv.textContent = `🟢 SIKERES KAPCSOLAT!\nA Supabase szerver elérhető és válaszol.\nA Kategóriák (items) tábla ellenőrzése rendben.\nStátusz: ${response.status} (${response.statusText})`;
+            } else {
+                const text = await response.text();
+                resultDiv.className = "p-3 rounded-lg text-xs font-mono bg-rose-50 text-rose-800 border border-rose-200";
+                resultDiv.textContent = `🔴 KAPCSOLATI HIBA!\nA szerver válaszolt, de hibát jelzett.\n\nStátusz: ${response.status} (${response.statusText})\nRészletek: ${text}\n\nJavaslat: Ellenőrizd, hogy lefuttattad-e az SQL sémát és nincsenek-e elgépelve a kulcsok!`;
+            }
+        } catch(err) {
+            resultDiv.className = "p-3 rounded-lg text-xs font-mono bg-rose-50 text-rose-800 border border-rose-200";
+            resultDiv.textContent = `🔴 HÁLÓZATI HIBA!\nNem sikerült elérni a megadott Supabase címet.\n\nRészletek: ${err.message}\n\nJavaslat: Ellenőrizd az URL formátumát (pl. https://xxx.supabase.co)!`;
+        }
+    });
+
+    // Értesítés kérése gomb
+    const btnReqNotif = document.getElementById('btnRequestNotificationPerm');
+    btnReqNotif?.addEventListener('click', async () => {
+        if (!('Notification' in window)) {
+            alert('A böngésző nem támogatja az értesítéseket.');
+            return;
+        }
+        const perm = await Notification.requestPermission();
+        updateNotificationPermissionStatus();
+        window.app?.hmiNotif?.showToast(`Értesítések állapota: ${perm}`, 'info');
+    });
+
+    // Értesítés teszt
+    const btnTestNotif = document.getElementById('btnTriggerTestNotification');
+    btnTestNotif?.addEventListener('click', () => {
+        const title = 'Költségnyilvántartó Diagnosztika';
+        const body = 'Sikeresen tesztelted az értesítéseket! A határidők emlékeztetői is így fognak megjelenni.';
+        const icon = 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png';
+
+        // 1. Mindig futtatjuk a csodás belső szimulált Push Notification-t!
+        window.app?.hmiNotif?.showSimulatedPushNotification(title, body);
+
+        // 2. Ha engedélyezve van és támogatott, megpróbáljuk a valódi natív értesítést is
+        if ('Notification' in window && Notification.permission === 'granted') {
+            try {
+                new Notification(title, { body, icon });
+            } catch (e) {
+                console.warn('[NOTIF] Natív értesítés sikertelen (lehet, hogy sandbox-olt iframe):', e);
+            }
+        }
     });
 
     // Időzítők
@@ -1366,7 +1539,7 @@ function initDebugPanel() {
         if (!panel.classList.contains('hidden')) updateDebugLogs();
     }, 3000);
 
-    console.log('[DEBUG] Debug panel inicializálva (5x kattintás a toggle gombra)');
+    console.log('[DEBUG] Fejlesztői debug panel inicializálva (5x kattintás a verzió feliratra)');
 }
 
 async function handleDebugAction(action) {
@@ -1376,15 +1549,17 @@ async function handleDebugAction(action) {
     switch(action) {
         case 'loadData':
             await app.generateTestData(30);
-            alert('✅ 30 teszt bejegyzés generálva!');
+            app.hmiNotif?.showToast('30 teszt bejegyzés generálva!', 'success');
+            await app.reload();
             break;
         case 'loadReminders':
             await app.generateTestReminders(10);
-            alert('✅ 10 teszt határidő generálva!');
+            app.hmiNotif?.showToast('10 teszt határidő generálva!', 'success');
+            await app.reload();
             break;
         case 'refreshAll':
             await app.reload();
-            alert('✅ Minden frissítve!');
+            app.hmiNotif?.showToast('Minden adat sikeresen frissítve!', 'success');
             break;
         case 'showData':
             const items = app.items?.items?.length || 0;
@@ -1392,12 +1567,25 @@ async function handleDebugAction(action) {
             const entries = app.entries?.entries?.length || 0;
             const reminders = app.reminderManager?.reminders?.length || 0;
             const incomings = app.incomingManager?.incomings?.length || 0;
-            alert(`📊 Adatbázis állapot:\n\n📦 Kategóriák: ${items}\n📅 Hónapok: ${months}\n📝 Bejegyzések: ${entries}\n⏰ Határidők: ${reminders}\n📥 Bejövő: ${incomings}`);
+            app.hmiNotif?.showConfirm({
+                title: '📊 Adatbázis statisztikák',
+                message: `Adatok az IndexedDB-ben:\n\n📦 Kategóriák: ${items} db\n📅 Hónapok: ${months} db\n📝 Bejegyzések: ${entries} db\n⏰ Határidők: ${reminders} db\n📥 Bejövő tételek: ${incomings} db`,
+                type: 'info',
+                confirmText: 'Rendben',
+                showCancel: false
+            });
             break;
         case 'clearAll':
-            if (confirm('Biztosan törölsz mindent?')) {
+            const confirmed = await app.hmiNotif?.showConfirm({
+                title: '⚠️ Összes adat törlése?',
+                message: 'Biztosan törölni szeretnéd a Költségnyilvántartó összes helyi bejegyzését, kategóriáját és határidejét? Ez a művelet nem vonható vissza!',
+                type: 'danger',
+                confirmText: 'Igen, mindent törölj',
+                cancelText: 'Mégse'
+            });
+            if (confirmed) {
                 await app.clearAllData();
-                alert('✅ Összes adat törölve!');
+                app.hmiNotif?.showToast('Összes helyi adat törölve!', 'success');
                 await app.reload();
             }
             break;
@@ -1421,16 +1609,75 @@ function updateDebugStatus() {
     const isOnline = navigator.onLine;
 
     el.innerHTML = `
-        <div class="grid grid-cols-2 gap-1 text-xs">
-            <div>📦 Kategóriák: <strong class="text-blue-600">${items}</strong></div>
-            <div>📅 Hónapok: <strong class="text-purple-600">${months}</strong></div>
-            <div>📝 Bejegyzések: <strong class="text-rose-600">${entries}</strong></div>
-            <div>⏰ Határidők: <strong class="text-amber-600">${reminders}</strong></div>
-            <div>📥 Bejövő: <strong class="text-emerald-600">${incomings}</strong></div>
-            <div>📶 Hálózat: <span class="${isOnline ? 'text-emerald-600' : 'text-red-600'}">${isOnline ? '🟢 Online' : '🔴 Offline'}</span></div>
-            <div class="col-span-2 text-gray-400 text-[10px] mt-1">Verzió: ${app.version?.toString() || 'v4.1'}</div>
+        <div class="grid grid-cols-2 gap-2 text-xs">
+            <div>📦 Kategóriák: <strong class="text-blue-600">${items} db</strong></div>
+            <div>📅 Hónapok: <strong class="text-purple-600">${months} db</strong></div>
+            <div>📝 Bejegyzések: <strong class="text-rose-600">${entries} db</strong></div>
+            <div>⏰ Határidők: <strong class="text-amber-600">${reminders} db</strong></div>
+            <div>📥 Bejövő: <strong class="text-emerald-600">${incomings} db</strong></div>
+            <div>📶 Hálózat: <span class="${isOnline ? 'text-emerald-600 font-bold' : 'text-rose-600 font-bold'}">${isOnline ? '🟢 Online (Van net)' : '🔴 Offline (Nincs net)'}</span></div>
+            <div class="col-span-2 text-gray-400 text-[10px] mt-1 border-t pt-2 flex justify-between">
+                <span>Rendszer verzió: ${app.version?.toString() || 'v4.3.3'}</span>
+                <span>Időbélyeg: ${new Date().toLocaleTimeString('hu-HU')}</span>
+            </div>
         </div>
     `;
+}
+
+function updateSupabaseDebugInfo() {
+    const app = window.app;
+    if (!app) return;
+
+    const config = app.config;
+    const url = config?.supabaseConfig?.url;
+    const key = config?.supabaseConfig?.key;
+    const hasSupa = config?.useSupabase === true;
+
+    const urlSpan = document.getElementById('debugSupaUrlStatus');
+    const keySpan = document.getElementById('debugSupaKeyStatus');
+
+    if (urlSpan) {
+        if (url) {
+            urlSpan.className = "text-emerald-600 font-bold";
+            urlSpan.textContent = "Kitöltve";
+        } else {
+            urlSpan.className = "text-amber-500 font-bold";
+            urlSpan.textContent = "Nincs megadva";
+        }
+    }
+
+    if (keySpan) {
+        if (key) {
+            keySpan.className = "text-emerald-600 font-bold";
+            keySpan.textContent = "Kitöltve";
+        } else {
+            keySpan.className = "text-amber-500 font-bold";
+            keySpan.textContent = "Nincs megadva";
+        }
+    }
+}
+
+function updateNotificationPermissionStatus() {
+    const permSpan = document.getElementById('debugNotificationPermission');
+    if (!permSpan) return;
+
+    if (!('Notification' in window)) {
+        permSpan.className = "text-rose-600 font-black uppercase";
+        permSpan.textContent = "NEM TÁMOGATOTT";
+        return;
+    }
+
+    const perm = Notification.permission;
+    if (perm === 'granted') {
+        permSpan.className = "text-emerald-600 font-black uppercase";
+        permSpan.textContent = "ENGEDÉLYEZVE";
+    } else if (perm === 'denied') {
+        permSpan.className = "text-rose-600 font-black uppercase";
+        permSpan.textContent = "ELUTASÍTVA";
+    } else {
+        permSpan.className = "text-amber-500 font-black uppercase";
+        permSpan.textContent = "ALAPÉRTELMEZETT";
+    }
 }
 
 function updateDebugLogs() {
@@ -1442,6 +1689,99 @@ function updateDebugLogs() {
     } catch(e) {
         el.textContent = 'Hiba a logok betöltésekor';
     }
+}
+
+function getSupabaseSQLScript() {
+    return `-- Költségnyilvántartó v4.1 - Teljes Supabase SQL Táblaséma
+-- Futtasd le ezt a szkriptet a Supabase SQL Editor-jában!
+
+-- 1. ITEMS (Kategóriák)
+CREATE TABLE IF NOT EXISTS items (
+    id BIGINT PRIMARY KEY,
+    name TEXT NOT NULL,
+    color TEXT,
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE items ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Mindenki elérheti" ON items;
+CREATE POLICY "Mindenki elérheti" ON items FOR ALL USING (true) WITH CHECK (true);
+
+-- 2. MONTHS (Aktív Hónapok)
+CREATE TABLE IF NOT EXISTS months (
+    month TEXT PRIMARY KEY,
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE months ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Mindenki elérheti" ON months;
+CREATE POLICY "Mindenki elérheti" ON months FOR ALL USING (true) WITH CHECK (true);
+
+-- 3. ENTRIES (Bejegyzések / Rész-tételek)
+CREATE TABLE IF NOT EXISTS entries (
+    id TEXT PRIMARY KEY,
+    "cellKey" TEXT NOT NULL,
+    amount NUMERIC NOT NULL,
+    currency TEXT DEFAULT 'HUF',
+    "paymentMethod" TEXT DEFAULT 'Kártya',
+    note TEXT,
+    color TEXT,
+    timestamp TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE entries ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Mindenki elérheti" ON entries;
+CREATE POLICY "Mindenki elérheti" ON entries FOR ALL USING (true) WITH CHECK (true);
+
+-- 4. TEMPLATES (Sablonok)
+CREATE TABLE IF NOT EXISTS templates (
+    id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    title TEXT NOT NULL,
+    amount NUMERIC,
+    currency TEXT DEFAULT 'HUF',
+    comment TEXT,
+    category TEXT,
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE templates ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Mindenki elérheti" ON templates;
+CREATE POLICY "Mindenki elérheti" ON templates FOR ALL USING (true) WITH CHECK (true);
+
+-- 5. REMINDERS (Határidők)
+CREATE TABLE IF NOT EXISTS reminders (
+    id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    title TEXT NOT NULL,
+    amount NUMERIC NOT NULL,
+    currency TEXT DEFAULT 'HUF',
+    due_date TEXT NOT NULL,
+    frequency TEXT DEFAULT 'once',
+    completed BOOLEAN DEFAULT FALSE,
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE reminders ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Mindenki elérheti" ON reminders;
+CREATE POLICY "Mindenki elérheti" ON reminders FOR ALL USING (true) WITH CHECK (true);
+
+-- 6. INCOMINGS (Bejövő utalások)
+CREATE TABLE IF NOT EXISTS incomings (
+    id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    sender TEXT NOT NULL,
+    date TEXT NOT NULL,
+    amount NUMERIC NOT NULL,
+    comment TEXT,
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE incomings ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Mindenki elérheti" ON incomings;
+CREATE POLICY "Mindenki elérheti" ON incomings FOR ALL USING (true) WITH CHECK (true);
+
+-- 7. INCOMING_SENDERS (Bejövő küldők)
+CREATE TABLE IF NOT EXISTS incoming_senders (
+    id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    name TEXT NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE incoming_senders ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Mindenki elérheti" ON incoming_senders;
+CREATE POLICY "Mindenki elérheti" ON incoming_senders FOR ALL USING (true) WITH CHECK (true);`;
 }
 
 // ================================================================

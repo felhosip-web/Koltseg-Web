@@ -728,7 +728,7 @@ export class ServiceDevManager {
 
     async _updateInfo() {
         const app = this.app;
-        document.getElementById('srvVersion').textContent = app.version?.toString() || 'v4.1';
+        document.getElementById('srvVersion').textContent = app.version?.toString() || 'v4.3.3';
         document.getElementById('srvEntryCount').textContent = app.entries?.entries?.length || 0;
         document.getElementById('srvReminderCount').textContent = app.reminderManager?.reminders?.length || 0;
         document.getElementById('srvDbStatus').textContent = app.db?.db ? '✅ Csatlakozva' : '❌ Nincs kapcsolat';

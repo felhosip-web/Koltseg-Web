@@ -11,6 +11,14 @@ export class PwaManager {
             console.log('[PWA] Service Worker nem támogatott');
             return;
         }
+
+        // Üzenetfogadás a SW-től
+        navigator.serviceWorker.addEventListener('message', event => {
+            if (event.data && event.data.type === 'VERSION_INFO') {
+                console.log(`[PWA] Kiszolgáló aktív verziója: ${event.data.version} (Kiadva: ${event.data.buildDate})`);
+            }
+        });
+
         navigator.serviceWorker.register('./service-worker.js')
             .then(reg => {
                 console.log('[PWA] Service Worker regisztrálva:', reg.scope);

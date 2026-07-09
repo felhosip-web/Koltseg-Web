@@ -1,5 +1,5 @@
 // service-worker.js - Workbox-alapú verzió
-// Költség Nyilvántartó v4.0
+// Költség Nyilvántartó v4.2.0
 
 importScripts(
     'https://storage.googleapis.com/workbox-cdn/releases/7.0.0/workbox-sw.js'
@@ -15,8 +15,8 @@ const { CacheFirst, StaleWhileRevalidate, NetworkFirst, NetworkOnly } = workbox.
 const { ExpirationPlugin } = workbox.expiration;
 const { CacheableResponsePlugin } = workbox.cacheableResponse;
 
-const CACHE_VERSION = 'v4';
-const BUILD_DATE = '2026-06-28';
+const CACHE_VERSION = 'v4.2.0';
+const BUILD_DATE = '2026-07-07';
 const CACHE_NAME = `kny-${CACHE_VERSION}-cache`;
 
 // ===== FALLBACK OFFLINE HTML (beépítve) =====
@@ -115,8 +115,23 @@ registerRoute(
                 maxAgeSeconds: 7 * 24 * 60 * 60,
             }),
             {
-                handlerDidError: async () => {
-                    // Ha nincs hálózat, az offline.html-t adjuk vissza
+                handlerDidError: async ({ request }) => {
+                    try {
+                        const url = new URL(request.url);
+                        // Ha offline indítást kért a felhasználó, vagy a főoldalt/alapértelmezett útvonalat töltené be,
+                        // akkor az index.html-t kell visszaadnunk a gyorsítótárból, hogy betöltődjön az offline-first alkalmazás!
+                        if (url.searchParams.get('offline') === 'true' || url.pathname === '/' || url.pathname === '/index.html' || url.pathname.endsWith('/index.html')) {
+                            const cache = await caches.open(CACHE_NAME);
+                            const cachedIndex = await cache.match('/index.html') || await cache.match('/');
+                            if (cachedIndex) {
+                                return cachedIndex;
+                            }
+                        }
+                    } catch (e) {
+                        console.error('[SW] Hiba az offline navigáció kezelése közben:', e);
+                    }
+
+                    // Különben (vagy ha nincs meg az index.html), az offline.html-t adjuk vissza
                     const cache = await caches.open(CACHE_NAME);
                     const offlineResponse = await cache.match('/offline.html');
                     if (offlineResponse) {
@@ -204,20 +219,77 @@ registerRoute(
     })
 );
 
-// ===== INSTALL: offline.html cache-elése =====
+// ===== INSTALL: offline.html és egyéb fájlok cache-elése =====
 self.addEventListener('install', event => {
     event.waitUntil(
         caches.open(CACHE_NAME)
-            .then(cache => {
-                return cache.addAll([
+            .then(async cache => {
+                // 1. Lokális alapvető fájlok (ha ezek nem sikerülnek, a SW nem települ, ami helyes)
+                const localFiles = [
                     '/',
                     '/index.html',
-                    '/offline.html',   // ← EZ FONTOS!
+                    '/offline.html',
                     '/manifest.json',
+                    '/css/style.css',
+                    '/js/app.js',
+                    '/js/oop-core.js',
+                    '/js/sync-service.js',
+                    '/js/ui-modal-controller.js',
+                    '/js/ui-controller.js',
+                    '/js/oop-charts.js',
+                    '/js/oop-reminders.js',
+                    '/js/storage-manager.js',
+                    '/js/boot-manager.js',
+                    '/js/backup-manager.js',
+                    '/js/pwa-manager.js',
+                    '/js/remote-config-manager.js',
+                    '/js/offline-handler.js',
+                    '/js/version-manager.js',
+                    '/js/virtual-table-renderer.js',
+                    '/js/db-audit.js',
+                    '/js/singleton-lock.js',
+                    '/js/data-sync-controller.js',
+                    '/js/data-export-controller.js',
+                    '/js/data-maintenance-controller.js',
+                    '/js/service-dev-manager.js',
+                    '/js/incoming-renderer.js',
+                    '/js/help-data.js',
+                    '/js/background-tasks.js',
+                    '/js/cell-modal-controller.js',
+                    '/js/input-modal-controller.js',
+                    '/js/sync-manager.js',
                     '/icons/icon-192.png'
-                ]).catch(err => {
-                    console.warn('[SW] Néhány fájl nem cache-elhető:', err);
-                });
+                ];
+                
+                try {
+                    await cache.addAll(localFiles);
+                    console.log('[SW] Lokális fájlok sikeresen gyorsítótárazva');
+                } catch (err) {
+                    console.error('[SW] Kritikus lokális fájlok gyorsítótárazása SIKERTELEN:', err);
+                }
+
+                // 2. Külső CDN fájlok (ha ezek közül valamelyik hibás, ne hiúsuljon meg a SW telepítés)
+                const cdnFiles = [
+                    'https://cdn.tailwindcss.com',
+                    'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',
+                    'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js',
+                    'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
+                    'https://cdn.jsdelivr.net/npm/dayjs@1/dayjs.min.js',
+                    'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js',
+                    'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css',
+                    'https://cdn.jsdelivr.net/@supabase/supabase-js@2',
+                    'https://cdn.jsdelivr.net/npm/chart.js',
+                    'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/webfonts/fa-solid-900.woff2',
+                    'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/webfonts/fa-regular-400.woff2'
+                ];
+
+                for (const url of cdnFiles) {
+                    try {
+                        await cache.add(url);
+                    } catch (err) {
+                        console.warn(`[SW] CDN fájl nem cache-elhető telepítéskor: ${url}`, err);
+                    }
+                }
             })
             .then(() => self.skipWaiting())
     );
@@ -263,11 +335,25 @@ self.addEventListener('message', event => {
     }
     
     if (event.data === 'getVersion') {
-        event.ports[0].postMessage({
-            version: CACHE_VERSION,
-            buildDate: BUILD_DATE,
-            cacheName: CACHE_NAME
-        });
+        if (event.ports && event.ports[0]) {
+            event.ports[0].postMessage({
+                version: CACHE_VERSION,
+                buildDate: BUILD_DATE,
+                cacheName: CACHE_NAME
+            });
+        } else {
+            // Ha nem kaptunk külön portot, elküldjük az összes csatlakoztatott kliensnek (ablaknak)
+            self.clients.matchAll({ type: 'window' }).then(clients => {
+                clients.forEach(client => {
+                    client.postMessage({
+                        type: 'VERSION_INFO',
+                        version: CACHE_VERSION,
+                        buildDate: BUILD_DATE,
+                        cacheName: CACHE_NAME
+                    });
+                });
+            });
+        }
     }
 });
 

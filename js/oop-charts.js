@@ -12,7 +12,6 @@ export class ChartsRenderer {
     }
 
 renderAll(filterMonth = 'all') {
-    if (this.lastFilter === filterMonth) return;
     this.lastFilter = filterMonth;
 
     const entries = this.app.entries.entries || [];
@@ -137,19 +136,39 @@ renderAll(filterMonth = 'all') {
             else totalHuf += e.amount;
         });
 
+        const eurRate = this.app.config?.eurRate || 400;
+        const convertedHuf = Math.round(totalEur * eurRate);
+
         this.instances.currency = new Chart(ctx, {
             type: 'doughnut',
             data: {
-                labels: ['HUF', 'EUR'],
+                labels: [
+                    `HUF (${totalHuf.toLocaleString('hu-HU')} Ft)`,
+                    `EUR (${totalEur.toLocaleString('hu-HU')} EUR / ~${convertedHuf.toLocaleString('hu-HU')} Ft)`
+                ],
                 datasets: [{
-                    data: [totalHuf, totalEur],
+                    data: [totalHuf, convertedHuf],
                     backgroundColor: ['#3b82f6', '#f59e0b']
                 }]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                plugins: { legend: { position: 'bottom' } }
+                plugins: {
+                    legend: { position: 'bottom' },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const index = context.dataIndex;
+                                if (index === 0) {
+                                    return ` HUF: ${totalHuf.toLocaleString('hu-HU')} Ft`;
+                                } else {
+                                    return ` EUR: ${totalEur.toLocaleString('hu-HU')} EUR (${convertedHuf.toLocaleString('hu-HU')} Ft)`;
+                                }
+                            }
+                        }
+                    }
+                }
             }
         });
     }

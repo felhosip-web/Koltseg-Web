@@ -11,6 +11,8 @@ export class SyncService {
         this.isSyncing = false;
         this.lastSyncTime = null;
         this.syncResults = null;
+        this.currentSyncConflicts = [];
+        this.lastSyncConflicts = [];
         // ===== ÚJ: SYNC QUEUE =====
         this._syncQueue = [];
         this._queueListeners = [];
@@ -370,6 +372,7 @@ export class SyncService {
 
             const mergedData = {};
             let mergedCount = 0;
+            this.currentSyncConflicts = [];
 
             for (const table of tables) {
                 const local = localData[table] || [];
@@ -383,29 +386,36 @@ export class SyncService {
                 console.log(`[SYNC] 🔀 ${table}: ${local.length} helyi + ${cloud.length} felhő → ${merged.length} merged`);
             }
 
-            // === 6. PUSH: MERGED ADATOK FELTÖLTÉSE ===
-            console.log('[SYNC] ⬆️ Push: Merged adatok feltöltése a felhőbe...');
+            this.lastSyncConflicts = [...this.currentSyncConflicts];
+
+            // === 6. SZELEKTÍV FELTÖLTÉS (Push): CSAK a helyben módosult/új adatokat töltjük fel! ===
+            console.log('[SYNC] ⬆️ Szelektív Push: CSAK a helyben módosult vagy új adatok feltöltése...');
             
             for (const table of tables) {
                 const items = mergedData[table] || [];
                 if (items.length === 0) continue;
 
+                // Csak azokat töltjük fel, amelyek forrása 'local' vagy 'merged (local wins)'
+                const toPush = items.filter(item => item._source === 'local' || item._source === 'merged (local wins)');
+
                 let pushedCount = 0;
-                for (const item of items) {
+                for (const item of toPush) {
                     try {
-                        await this.push(table, item);
+                        // Letisztítjuk a belső metaadatokat a felhőbe küldés előtt
+                        const { _source, _updated_at, ...cleanItem } = item;
+                        await this.push(table, cleanItem);
                         pushedCount++;
                     } catch (err) {
-                        console.warn(`[SYNC] ⚠️ Push hiba a ${table} táblánál:`, err);
+                        console.warn(`[SYNC] ⚠️ Push hiba a(z) ${table} táblánál:`, err);
                         results.errors.push({ table, operation: 'push', error: err.message });
                     }
                 }
                 results.tables[table].pushed = pushedCount;
-                console.log(`[SYNC] ✅ ${table}: ${pushedCount} elem feltöltve`);
+                console.log(`[SYNC] ✅ ${table}: ${pushedCount} új/módosult elem feltöltve a felhőbe (összesen vizsgált: ${items.length})`);
             }
 
-            // === 7. HELYI ADATBÁZIS FRISSÍTÉSE ===
-            console.log('[SYNC] 💾 Helyi adatbázis frissítése...');
+            // === 7. SZELEKTÍV HELYI FRISSÍTÉS (Save Local): CSAK az új/frissebb felhőbeli adatokat mentjük! ===
+            console.log('[SYNC] 💾 Szelektív Helyi adatbázis frissítése...');
             await this._saveMergedToLocal(mergedData);
 
             // === 8. MEMÓRIA ÉS UI FRISSÍTÉS ===
@@ -476,6 +486,40 @@ export class SyncService {
     /**
      * Két tábla összefésülése (időbélyeg alapján)
      */
+    _isRecordDifferent(local, cloud) {
+        const ignoreKeys = ['updated_at', 'timestamp', '_source', '_updated_at', 'id', 'month', 'created_at', 'creator_id'];
+        const localKeys = Object.keys(local).filter(k => !ignoreKeys.includes(k) && !k.startsWith('_'));
+        const cloudKeys = Object.keys(cloud).filter(k => !ignoreKeys.includes(k) && !k.startsWith('_'));
+        
+        for (const key of localKeys) {
+            if (local[key] !== cloud[key]) {
+                if (typeof local[key] === 'object' && typeof cloud[key] === 'object') {
+                    if (JSON.stringify(local[key]) !== JSON.stringify(cloud[key])) {
+                        return true;
+                    }
+                } else {
+                    return true;
+                }
+            }
+        }
+        
+        for (const key of cloudKeys) {
+            if (cloud[key] !== local[key]) {
+                if (typeof local[key] === 'object' && typeof cloud[key] === 'object') {
+                    if (JSON.stringify(local[key]) !== JSON.stringify(cloud[key])) {
+                        return true;
+                    }
+                } else {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Két tábla összefésülése (időbélyeg alapján)
+     */
     _mergeTable(localItems, cloudItems, table) {
         const merged = [];
         const keyMap = {};
@@ -499,9 +543,32 @@ export class SyncService {
             if (key === undefined || key === null) return;
 
             if (keyMap[key]) {
-                // Összehasonlítás időbélyeg alapján
+                const isDiff = this._isRecordDifferent(keyMap[key], item);
                 const localTime = new Date(keyMap[key]._updated_at || 0);
                 const cloudTime = new Date(item.updated_at || item.timestamp || 0);
+
+                if (isDiff) {
+                    const label = keyMap[key].name || keyMap[key].item || keyMap[key].comment || key;
+                    const resLabel = cloudTime > localTime ? 'Felhő nyert (frissebb)' : 'Helyi nyert (frissebb)';
+                    
+                    const conflict = {
+                        table,
+                        key,
+                        label,
+                        localTime: localTime.toISOString(),
+                        cloudTime: cloudTime.toISOString(),
+                        resolvedBy: cloudTime > localTime ? 'cloud' : 'local',
+                        resolution: resLabel
+                    };
+                    if (this.currentSyncConflicts) {
+                        this.currentSyncConflicts.push(conflict);
+                    }
+
+                    const app = this._getApp();
+                    if (app?.logger) {
+                        app.logger.log('conflict', 'conflict', `Ütközés feloldva a(z) '${table}' táblában (${label}). Helyi: ${localTime.toLocaleTimeString('hu-HU')} vs Felhő: ${cloudTime.toLocaleTimeString('hu-HU')} -> ${resLabel}`);
+                    }
+                }
 
                 if (cloudTime > localTime) {
                     // Felhő frissebb → felülírjuk a helyit
@@ -524,11 +591,9 @@ export class SyncService {
             }
         });
 
-        // Map-ből tömb (belső mezők tisztítása)
+        // Map-ből tömb (belső mezőket megtartjuk a szelektív szinkronizációhoz)
         for (const key in keyMap) {
-            const item = keyMap[key];
-            const { _source, _updated_at, ...cleanItem } = item;
-            merged.push(cleanItem);
+            merged.push(keyMap[key]);
         }
 
         return merged;
@@ -556,13 +621,16 @@ export class SyncService {
 
             for (const item of data) {
                 try {
+                    // Megtisztítjuk a belső mezőktől a helyi IndexedDB mentés előtt
+                    const { _source, _updated_at, ...cleanItem } = item;
+
                     // Időbélyeg biztosítása
-                    if (!item.updated_at) {
-                        item.updated_at = new Date().toISOString();
+                    if (!cleanItem.updated_at) {
+                        cleanItem.updated_at = new Date().toISOString();
                     }
-                    await app.db.save(name, item);
+                    await app.db.save(name, cleanItem);
                 } catch (e) {
-                    console.warn(`[SYNC] Helyi mentési hiba a ${name} táblánál:`, e);
+                    console.warn(`[SYNC] Helyi mentési hiba a(z) ${name} táblánál:`, e);
                 }
             }
         }

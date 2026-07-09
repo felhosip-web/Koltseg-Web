@@ -263,6 +263,9 @@ export class CellModalController {
         // Fő táblázat és összegzés frissítése
         this.app.renderer.render();
         this.app.renderer.renderSummary?.();   // ha létezik
+        
+        // Státusz frissítése a láblécben
+        this.app.renderer.updateFooterStatus('Adatok sikeresen mentve', false);
     }
 
     _normalizeColor(color) {

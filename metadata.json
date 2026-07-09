@@ -1,0 +1,6 @@
+{
+  "name": "Költség Nyilvántartó",
+  "description": "Modern, offline-first PWA költségnyilvántartó webalkalmazás mátrixos felülettel és Supabase szinkronizációval.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

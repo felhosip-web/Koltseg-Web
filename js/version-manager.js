@@ -65,7 +65,7 @@ export class VersionManager {
      */
     async checkForUpdate() {
         try {
-            const response = await fetch('/version.json', { cache: 'no-cache' });
+            const response = await fetch('./version.json', { cache: 'no-cache' });
             if (!response.ok) return null;
             
             const remote = await response.json();

@@ -120,7 +120,7 @@ export class RemoteConfigManager {
         
         // Supabase státusz frissítés
         if (this.app.updateOnlineStatus) {
-            this.app.updateOnlineStatus(navigator.onLine && useCloud);
+            this.app.updateOnlineStatus(navigator.onLine);
         }
         
         // Toast értesítés
@@ -243,5 +243,7 @@ export class RemoteConfigManager {
 
         console.log('[CONFIG] Beállítások mentve:', { url, key, useCloud, eurRate });
         return true;
+    }
+}rue;
     }
 }

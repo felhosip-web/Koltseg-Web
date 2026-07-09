@@ -1,4 +1,6 @@
 // js/ui-renderer.js - Végleges optimalizált verzió (2026)
+import { CategoryIcons } from './category-icons.js';
+
 export class UIRenderer {
     constructor(app) {
         this.app = app;
@@ -83,11 +85,20 @@ export class UIRenderer {
     }
 
     _createCategoryCell(item) {
+        const iconData = CategoryIcons.getIconData(item.name);
+        const hasCustomColor = item.color && item.color !== '#dbeafe';
+        const bgColor = hasCustomColor ? item.color + '15' : '';
+        const borderStyle = hasCustomColor ? `border: 1.5px solid ${item.color}` : '';
+        const iconColorStyle = hasCustomColor ? `color: ${item.color}` : '';
+
         return `
             <td class="px-6 py-4 font-bold text-gray-900 bg-gray-50 border-r border-gray-100 dblclick-row-purge cursor-pointer hover:bg-red-50 transition-colors"
                 data-itemid="${item.id}" data-itemname="${item.name}">
                 <div class="flex items-center gap-3">
-                    <span class="w-3.5 h-3.5 rounded-full flex-shrink-0" style="background-color: ${item.color || '#dbeafe'}"></span>
+                    <div class="w-7 h-7 rounded-xl flex items-center justify-center flex-shrink-0 transition-all shadow-sm ${bgColor ? '' : iconData.bgClass}" 
+                         style="${bgColor ? `background-color: ${bgColor};` : ''} ${borderStyle}">
+                        <i class="${iconData.iconClass} text-xs ${bgColor ? '' : iconData.textClass}" style="${iconColorStyle}"></i>
+                    </div>
                     <span>${item.name}</span>
                 </div>
             </td>`;
@@ -106,10 +117,13 @@ export class UIRenderer {
             style = `background-color:${colors[0]}`;
         }
 
+        const eurRate = this.app.config?.eurRate || 400;
+        const convertedHuf = Math.round(eur * eurRate);
+
         let content = (huf === 0 && eur === 0) ? '-' : 
             `<div class="text-xs font-mono leading-tight">` +
             (huf ? `<div>${huf.toLocaleString('hu-HU')} Ft</div>` : '') +
-            (eur ? `<div class="text-emerald-700">${eur} EUR</div>` : '') +
+            (eur ? `<div class="text-emerald-700">${eur} EUR<div class="text-[10px] text-gray-500 font-normal">(${convertedHuf.toLocaleString('hu-HU')} Ft)</div></div>` : '') +
             `</div>`;
 
         return `<td class="px-4 py-4 text-center border-l border-gray-100 cell-interactive cursor-pointer" 
@@ -182,6 +196,95 @@ export class UIRenderer {
                     el.dataset.itemid, 
                     el.dataset.itemname
                 );
+            });
+
+            // Hosszú nyomás (longpress) eseménykezelő a kategória átnevezéshez és törléshez
+            let pressTimer = null;
+            let isLongPressTriggered = false;
+            let startX = 0;
+            let startY = 0;
+
+            const startPress = (e) => {
+                if (e.target.closest('button')) return;
+                isLongPressTriggered = false;
+                
+                // Track coordinates to detect scrolling/moving
+                if (e.touches && e.touches[0]) {
+                    startX = e.touches[0].clientX;
+                    startY = e.touches[0].clientY;
+                } else {
+                    startX = e.clientX;
+                    startY = e.clientY;
+                }
+
+                if (pressTimer) clearTimeout(pressTimer);
+                pressTimer = setTimeout(async () => {
+                    isLongPressTriggered = true;
+                    // Vizuális visszajelzés (pirosas-rózsaszínes finom kijelölés a haptikus érzetért)
+                    el.classList.add('bg-rose-100');
+                    
+                    try {
+                        const action = await this.app.hmiNotif.showCategoryActionsModal(el.dataset.itemname);
+                        el.classList.remove('bg-rose-100');
+                        
+                        if (action === 'rename') {
+                            this.app.uiController.handleRenameItem(parseInt(el.dataset.itemid), el.dataset.itemname);
+                        } else if (action === 'delete') {
+                            this.app.uiController.handleRowDeleteSequence(el.dataset.itemid, el.dataset.itemname);
+                        }
+                    } catch (err) {
+                        console.error('[LongPress] Hiba:', err);
+                        el.classList.remove('bg-rose-100');
+                    }
+                }, 600); // 600ms tartás elegendő a szándékos hosszú nyomáshoz
+            };
+
+            const cancelPress = () => {
+                if (pressTimer) {
+                    clearTimeout(pressTimer);
+                    pressTimer = null;
+                }
+                el.classList.remove('bg-rose-100');
+            };
+
+            const movePress = (e) => {
+                let currentX = 0;
+                let currentY = 0;
+                if (e.touches && e.touches[0]) {
+                    currentX = e.touches[0].clientX;
+                    currentY = e.touches[0].clientY;
+                } else {
+                    currentX = e.clientX;
+                    currentY = e.clientY;
+                }
+
+                // Ha elmozdult több mint 10px-t, akkor ez görgetés vagy vonszolás, töröljük a hosszú nyomást!
+                if (Math.abs(currentX - startX) > 10 || Math.abs(currentY - startY) > 10) {
+                    cancelPress();
+                }
+            };
+
+            // Események regisztrálása egérhez és érintéshez is
+            el.addEventListener('mousedown', startPress);
+            el.addEventListener('mouseup', cancelPress);
+            el.addEventListener('mouseleave', cancelPress);
+            el.addEventListener('mousemove', movePress);
+
+            el.addEventListener('touchstart', startPress, { passive: true });
+            el.addEventListener('touchend', (e) => {
+                cancelPress();
+                if (isLongPressTriggered) {
+                    e.preventDefault(); // Megakadályozzuk az esetleges kattintást/fókuszt
+                }
+            });
+            el.addEventListener('touchmove', movePress, { passive: true });
+            el.addEventListener('touchcancel', cancelPress);
+            
+            // Kontextus menü letiltása a hosszú nyomás alatt, hogy mobilon ne jöjjön be a gyári menü
+            el.addEventListener('contextmenu', (e) => {
+                if (isLongPressTriggered) {
+                    e.preventDefault();
+                }
             });
         });
     }

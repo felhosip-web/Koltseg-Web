@@ -149,12 +149,15 @@ export class BackgroundTaskManager {
     startEURRateWatcher() {
         if (this.intervals.eur) clearInterval(this.intervals.eur);
 
-        this.intervals.eur = setInterval(async () => {
+        const runFetch = async () => {
             if (!this.isActive) return;
             await this.app.config?.watchDogEur?.((rate, mode) => {
                 this.app.renderer?.updateLed?.(rate, mode);
             });
-        }, 60 * 60 * 1000);
+        };
+
+        this.intervals.eur = setInterval(runFetch, 60 * 60 * 1000);
+        runFetch();
     }
 
     // ==================== Segédmetódusok ====================

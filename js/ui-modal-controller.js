@@ -1,9 +1,11 @@
 // js/ui-modal-controller.js - Egységes üzenetkezelő
+import { HELP_SECTIONS } from './help-data.js';
 
 export class UIModalController {
     constructor() {
         this.toastContainer = document.getElementById('hmiToastContainer');
         this.modal = document.getElementById('globalConfirmModal');
+        setTimeout(() => this.initHelp(), 300);
     }
 
     // ==================== TOAST (NEM BLOKKOLÓ) ====================
@@ -314,5 +316,351 @@ _escapeHtml(text) {
     div.textContent = text;
     return div.innerHTML;
 }
+
+_playChime() {
+    try {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContext) return;
+        const ctx = new AudioContext();
+        
+        // Első hang (magasabb)
+        const osc1 = ctx.createOscillator();
+        const gain1 = ctx.createGain();
+        osc1.type = 'sine';
+        osc1.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
+        gain1.gain.setValueAtTime(0.15, ctx.currentTime);
+        gain1.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.2);
+        
+        // Második hang (még magasabb)
+        const osc2 = ctx.createOscillator();
+        const gain2 = ctx.createGain();
+        osc2.type = 'sine';
+        osc2.frequency.setValueAtTime(880, ctx.currentTime + 0.1); // A5
+        gain2.gain.setValueAtTime(0.15, ctx.currentTime + 0.1);
+        gain2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.2);
+        
+        osc1.connect(gain1);
+        gain1.connect(ctx.destination);
+        osc2.connect(gain2);
+        gain2.connect(ctx.destination);
+        
+        osc1.start();
+        osc1.stop(ctx.currentTime + 1.2);
+        osc2.start(ctx.currentTime + 0.1);
+        osc2.stop(ctx.currentTime + 1.2);
+    } catch (e) {
+        console.log('Audio chime error:', e);
+    }
+}
+
+showSimulatedPushNotification(title, body) {
+    if (!this.toastContainer) return;
+    
+    // Csengő hang lejátszása
+    this._playChime();
+    
+    const card = document.createElement('div');
+    // Gyönyörű üveghatású natív iOS/macOS push kártya stílus
+    card.className = "bg-white/95 backdrop-blur-md border border-slate-200 text-slate-800 p-4 rounded-2xl shadow-xl pointer-events-auto flex gap-3 transform translate-y-[-20px] opacity-0 transition-all duration-500 ease-out min-w-[320px] max-w-sm relative overflow-hidden";
+    
+    card.innerHTML = `
+        <div class="flex-shrink-0 w-10 h-10 bg-indigo-100 text-indigo-600 rounded-xl flex items-center justify-center text-lg shadow-inner">
+            <i class="fas fa-bell animate-bounce"></i>
+        </div>
+        <div class="flex-1 text-left">
+            <div class="flex items-center justify-between gap-2 mb-1">
+                <span class="text-[10px] font-bold text-indigo-600 uppercase tracking-widest">Költségnyilvántartó</span>
+                <span class="text-[9px] text-gray-400">most</span>
+            </div>
+            <h4 class="text-xs font-bold text-gray-900 leading-snug">${title}</h4>
+            <p class="text-xs text-gray-500 mt-0.5 leading-relaxed">${body}</p>
+        </div>
+        <button class="absolute top-2 right-2 text-gray-400 hover:text-gray-600 text-sm font-bold w-5 h-5 flex items-center justify-center rounded-full hover:bg-gray-100 transition">&times;</button>
+    `;
+    
+    // Bezáró gomb működése
+    const closeBtn = card.querySelector('button');
+    closeBtn.onclick = () => {
+        card.classList.add('opacity-0', 'translate-x-12');
+        setTimeout(() => card.remove(), 500);
+    };
+    
+    this.toastContainer.appendChild(card);
+    
+    // Animált beúszás
+    requestAnimationFrame(() => {
+        card.classList.remove('translate-y-[-20px]', 'opacity-0');
+    });
+    
+    // 5 másodperc múlva automatikusan eltűnik
+    setTimeout(() => {
+        if (card.parentNode) {
+            card.classList.add('opacity-0', 'translate-y-[-20px]');
+            setTimeout(() => card.remove(), 500);
+        }
+    }, 5000);
+}
+
+    // ==================== DYNAMIC HELP SYSTEM METHODS ====================
+    initHelp() {
+        this.helpModal = document.getElementById('helpModal');
+        this.helpCategoriesContainer = document.getElementById('helpCategoriesContainer');
+        this.helpContentContainer = document.getElementById('helpContentContainer');
+        this.helpSearchInput = document.getElementById('helpSearchInput');
+        this.btnCloseHelpModal = document.getElementById('btnCloseHelpModal');
+        this.btnHelp = document.getElementById('btnHelp');
+        this.btnHelpInline = document.getElementById('btnHelpInline');
+
+        if (!this.helpModal) return;
+
+        // Eseménykezelők
+        this.btnHelp?.addEventListener('click', () => this.openHelp());
+        this.btnHelpInline?.addEventListener('click', () => this.openHelp());
+        this.btnCloseHelpModal?.addEventListener('click', () => this.closeHelp());
+        this.helpSearchInput?.addEventListener('input', (e) => this.filterHelp(e.target.value));
+
+        // Bezárás külső kattintásra
+        this.helpModal.addEventListener('click', (e) => {
+            if (e.target === this.helpModal) this.closeHelp();
+        });
+
+        // Alapértelmezett kategória kiválasztása
+        this.selectedCategory = HELP_SECTIONS[0]?.id;
+        
+        // Első render
+        this.renderHelpCategories();
+        this.renderHelpContent();
+    }
+
+    openHelp() {
+        if (!this.helpModal) return;
+        this.helpModal.classList.remove('hidden');
+        // Animáció indítása
+        const box = this.helpModal.querySelector('.bg-white');
+        setTimeout(() => {
+            box?.classList.remove('scale-95', 'opacity-0');
+            box?.classList.add('scale-100', 'opacity-100');
+        }, 10);
+    }
+
+    closeHelp() {
+        if (!this.helpModal) return;
+        const box = this.helpModal.querySelector('.bg-white');
+        box?.classList.remove('scale-100', 'opacity-100');
+        box?.classList.add('scale-95', 'opacity-0');
+        setTimeout(() => {
+            this.helpModal.classList.add('hidden');
+        }, 300);
+    }
+
+    renderHelpCategories() {
+        if (!this.helpCategoriesContainer) return;
+        this.helpCategoriesContainer.innerHTML = '';
+
+        HELP_SECTIONS.forEach(section => {
+            const btn = document.createElement('button');
+            const isActive = section.id === this.selectedCategory;
+            btn.className = `w-full text-left p-3.5 rounded-2xl transition-all flex items-center gap-3 border ${
+                isActive 
+                    ? 'bg-indigo-600 border-indigo-700 text-white shadow-md' 
+                    : 'bg-white border-slate-200/60 text-slate-700 hover:bg-slate-100 hover:border-slate-300'
+            }`;
+            
+            btn.innerHTML = `
+                <div class="w-8 h-8 rounded-lg flex items-center justify-center text-sm shrink-0 ${
+                    isActive ? 'bg-white/25 text-white' : 'bg-indigo-50 text-indigo-600'
+                }">
+                    <i class="${section.icon}"></i>
+                </div>
+                <div class="flex-1 text-left min-w-0">
+                    <div class="text-xs font-bold leading-tight truncate">${section.title}</div>
+                    <div class="text-[9px] mt-0.5 ${isActive ? 'text-indigo-100' : 'text-slate-400'}">${section.articles.length} cikk</div>
+                </div>
+            `;
+            
+            btn.addEventListener('click', () => {
+                this.selectedCategory = section.id;
+                this.renderHelpCategories();
+                this.renderHelpContent();
+            });
+            this.helpCategoriesContainer.appendChild(btn);
+        });
+
+        // Plus fixed Developer & Service Panel triggers at the bottom of categories
+        const devDiv = document.createElement('div');
+        devDiv.className = 'pt-4 border-t border-dashed border-slate-200 mt-4 space-y-2';
+        
+        // Button 1: Debug Panel / Hibakereső
+        const debugBtn = document.createElement('button');
+        debugBtn.id = 'helpOpenDevPanelBtn';
+        debugBtn.className = 'w-full text-left p-3 rounded-2xl transition-all flex items-center gap-3 bg-slate-100 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-200 text-slate-700 hover:text-indigo-700';
+        debugBtn.innerHTML = `
+            <div class="w-8 h-8 rounded-lg flex items-center justify-center text-sm shrink-0 bg-white shadow-sm">
+                <i class="fas fa-bug text-rose-500"></i>
+            </div>
+            <div class="flex-1 text-left min-w-0">
+                <div class="text-xs font-black leading-tight uppercase tracking-wider">HMI Hibakereső (Debug)</div>
+                <div class="text-[9px] mt-0.5 text-slate-400">Séma másolás, értesítés tesztek</div>
+            </div>
+        `;
+        debugBtn.addEventListener('click', () => {
+            this.closeHelp();
+        });
+        devDiv.appendChild(debugBtn);
+
+        // Button 2: Service Panel / Fejlesztői Menü
+        const serviceBtn = document.createElement('button');
+        serviceBtn.id = 'helpOpenServicePanelBtn';
+        serviceBtn.className = 'w-full text-left p-3 rounded-2xl transition-all flex items-center gap-3 bg-slate-100 hover:bg-emerald-50 border border-slate-200 hover:border-emerald-200 text-slate-700 hover:text-emerald-700';
+        serviceBtn.innerHTML = `
+            <div class="w-8 h-8 rounded-lg flex items-center justify-center text-sm shrink-0 bg-white shadow-sm">
+                <i class="fas fa-tools text-emerald-600"></i>
+            </div>
+            <div class="flex-1 text-left min-w-0">
+                <div class="text-xs font-black leading-tight uppercase tracking-wider">Fejlesztői & Szerviz Panel</div>
+                <div class="text-[9px] mt-0.5 text-slate-400">Diagnosztika, platform adatok, naplók</div>
+            </div>
+        `;
+        serviceBtn.addEventListener('click', () => {
+            this.closeHelp();
+        });
+        devDiv.appendChild(serviceBtn);
+
+        this.helpCategoriesContainer.appendChild(devDiv);
+    }
+
+    renderHelpContent(filterKeyword = '') {
+        if (!this.helpContentContainer) return;
+        this.helpContentContainer.innerHTML = '';
+
+        const keyword = filterKeyword.toLowerCase().trim();
+
+        if (keyword) {
+            // Globális keresési eredmények
+            let matchCount = 0;
+            HELP_SECTIONS.forEach(section => {
+                const matchedArticles = section.articles.filter(art => 
+                    art.title.toLowerCase().includes(keyword) || 
+                    art.content.toLowerCase().includes(keyword)
+                );
+
+                if (matchedArticles.length > 0) {
+                    const sectionTitle = document.createElement('h4');
+                    sectionTitle.className = "text-[10px] font-bold text-indigo-600 uppercase tracking-widest mt-4 mb-2 border-b pb-1 text-left";
+                    sectionTitle.textContent = section.title;
+                    this.helpContentContainer.appendChild(sectionTitle);
+
+                    matchedArticles.forEach(art => {
+                        matchCount++;
+                        const card = this.createArticleCard(art, keyword);
+                        this.helpContentContainer.appendChild(card);
+                    });
+                }
+            });
+
+            if (matchCount === 0) {
+                this.helpContentContainer.innerHTML = `
+                    <div class="flex flex-col items-center justify-center py-12 text-slate-400">
+                        <i class="fas fa-search-minus text-4xl mb-3"></i>
+                        <div class="text-sm font-bold">Nincs találat a következőre: "${filterKeyword}"</div>
+                        <div class="text-xs mt-1">Próbálj meg más kulcsszavakat megadni.</div>
+                    </div>
+                `;
+            }
+        } else {
+            // Aktuális kategória cikkei
+            const section = HELP_SECTIONS.find(s => s.id === this.selectedCategory);
+            if (!section) return;
+
+            const header = document.createElement('div');
+            header.className = "mb-6 pb-4 border-b border-gray-100 text-left";
+            header.innerHTML = `
+                <h3 class="text-base font-extrabold text-slate-800">${section.title}</h3>
+                <p class="text-xs text-slate-400 mt-1">${section.description}</p>
+            `;
+            this.helpContentContainer.appendChild(header);
+
+            section.articles.forEach(art => {
+                const card = this.createArticleCard(art);
+                this.helpContentContainer.appendChild(card);
+            });
+        }
+    }
+
+    createArticleCard(article, highlightKeyword = '') {
+        const card = document.createElement('div');
+        card.className = "bg-slate-50 border border-slate-200/80 rounded-2xl p-5 mb-4 text-left shadow-sm";
+
+        let title = article.title;
+        let content = article.content;
+
+        if (highlightKeyword) {
+            const regex = new RegExp(`(${highlightKeyword})`, 'gi');
+            title = title.replace(regex, '<mark class="bg-amber-100 text-slate-900 px-1 rounded">$1</mark>');
+        }
+
+        card.innerHTML = `
+            <h4 class="text-sm font-black text-slate-800 mb-2 flex items-center gap-2">
+                <i class="far fa-file-alt text-indigo-500"></i> ${title}
+            </h4>
+            <div class="text-xs text-slate-600 leading-relaxed font-normal space-y-2">
+                ${content}
+            </div>
+        `;
+        return card;
+    }
+
+    filterHelp(value) {
+        this.renderHelpContent(value);
+    }
+
+    showCategoryActionsModal(itemName) {
+        return new Promise((resolve) => {
+            const modal = document.createElement('div');
+            modal.className = 'fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[9999]';
+            modal.innerHTML = `
+                <div class="bg-white rounded-3xl p-6 max-w-sm w-full mx-4 shadow-2xl transform scale-95 opacity-0 transition-all duration-300" id="catActionContent">
+                    <h3 class="text-base font-black text-slate-800 text-center mb-1 uppercase tracking-wider">Kategória Műveletek</h3>
+                    <p class="text-xs text-slate-500 text-center mb-6 font-medium">Mit szeretne tenni a(z) <strong class="text-slate-800 font-bold">"${this._escapeHtml(itemName)}"</strong> kategóriával?</p>
+                    
+                    <div class="flex flex-col gap-3">
+                        <button id="catActionRename" class="w-full py-3.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-2xl font-bold text-xs uppercase tracking-wider transition flex items-center justify-center gap-2 border border-indigo-100">
+                            <i class="fas fa-edit"></i> Kategória átnevezése
+                        </button>
+                        <button id="catActionDelete" class="w-full py-3.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-2xl font-bold text-xs uppercase tracking-wider transition flex items-center justify-center gap-2 border border-rose-100">
+                            <i class="fas fa-trash-alt"></i> Kategória törlése
+                        </button>
+                        <button id="catActionCancel" class="w-full py-3 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-2xl font-bold text-xs uppercase tracking-wider transition">
+                            Mégse
+                        </button>
+                    </div>
+                </div>
+            `;
+
+            document.body.appendChild(modal);
+            
+            const content = modal.querySelector('#catActionContent');
+            requestAnimationFrame(() => {
+                content.classList.remove('scale-95', 'opacity-0');
+                content.classList.add('scale-100', 'opacity-100');
+            });
+
+            const close = (action) => {
+                content.classList.remove('scale-100', 'opacity-100');
+                content.classList.add('scale-95', 'opacity-0');
+                setTimeout(() => {
+                    modal.remove();
+                    resolve(action);
+                }, 150);
+            };
+
+            modal.querySelector('#catActionRename').addEventListener('click', () => close('rename'));
+            modal.querySelector('#catActionDelete').addEventListener('click', () => close('delete'));
+            modal.querySelector('#catActionCancel').addEventListener('click', () => close(null));
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) close(null);
+            });
+        });
+    }
   
 }

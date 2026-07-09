@@ -55,6 +55,16 @@ export class DataSyncController {
             await this._refreshAllUI();
 
             const syncTime = new Date().toLocaleTimeString('hu-HU');
+            const conflicts = this.app.syncService?.lastSyncConflicts || [];
+            
+            if (conflicts.length > 0) {
+                this.app.hmiNotif?.showNotification?.(
+                    '🔀 Szinkronizációs ütközések',
+                    `A szinkronizáció során ${conflicts.length} ütközést észleltünk és oldottunk fel sikeresen (időbélyeg alapján). A részleteket megtekintheted a Beállítások -> Eseménynapló fülön!`,
+                    'info'
+                );
+            }
+            
             this.app.hmiNotif.showToast(`✅ Szinkronizáció sikeres! (${syncTime})`, 'success');
             this.app.renderer.updateFooterStatus(`✅ Szinkronizálva: ${syncTime}`);
 

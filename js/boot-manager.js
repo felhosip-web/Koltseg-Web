@@ -52,8 +52,11 @@ export class BootManager {
         this.app.uiController.bindStaticEvents();
         this.app._initTabs();
         
+        if (this.app.remindersApp) {
+            await this.app.remindersApp.boot(this.app);
+        }
+        
         this.app.renderer.renderTable();
-        this.app.remindersRenderer.renderList();
         this.app.renderStats();
         this.app.updateReminderStatus();
     }
@@ -132,5 +135,10 @@ export class BootManager {
         });
         
         console.log('[BOOT] ✅ Minden rendszer üzemkész.');
+        try {
+            this.app.renderer.updateFooterStatus('Minden rendszer üzemkész', false);
+        } catch (e) {
+            console.warn('[BOOT] Hiba a lábléc frissítésekor:', e);
+        }
     }
 }

@@ -22,6 +22,7 @@ export class UIController {
         this.syncQueueBadge = null;
         this.syncQueueContainer = null;
         this._setupSyncQueueBadge();    
+        this.initAppearance();
     }
     
         // ========================================================
@@ -250,17 +251,33 @@ _setupSyncQueueBadge() {
         // ====================== FŐ GOMBOK ======================
         document.getElementById('btnNewItem')?.addEventListener('click', () => this.inputModal.open('item'));
         document.getElementById('btnNewMonth')?.addEventListener('click', () => this.inputModal.open('month'));
+        document.getElementById('btnAiMagic')?.addEventListener('click', () => this.app.aiModal?.open());
         document.getElementById('btnSettings')?.addEventListener('click', () => {
             this.populateSettingsForm();
             this.togglePanel('settingsPanel');
         });
         document.getElementById('btnDataControl')?.addEventListener('click', () => this.togglePanel('exportMenu'));
+        document.getElementById('btnHelp')?.addEventListener('click', () => {
+            this.app.hmiNotif?.openHelp?.();
+        });
+        document.getElementById('btnHelpInline')?.addEventListener('click', () => {
+            this.app.hmiNotif?.openHelp?.();
+        });
 
         // ====================== SZINKRONIZÁCIÓ ======================
         document.getElementById('btnForceSync')?.addEventListener('click', () => {
             this.togglePanel('exportMenu');
             this.openSyncModal();           // ← Eredeti metódus
         });
+
+        const closeSyncModal = () => {
+            const modal = document.getElementById('syncModal');
+            if (modal) modal.classList.add('hidden');
+            const executeBtn = document.getElementById('btnExecuteSync');
+            if (executeBtn) executeBtn.disabled = true;
+        };
+        document.getElementById('btnCloseSyncModal')?.addEventListener('click', closeSyncModal);
+        document.getElementById('btnCancelSync')?.addEventListener('click', closeSyncModal);
 
         // ====================== EXPORT GOMBOK ======================
         document.getElementById('btnExportExcel')?.addEventListener('click', () => {
@@ -326,10 +343,126 @@ _setupSyncQueueBadge() {
         document.getElementById('btnSaveSettings')?.addEventListener('click', async () => {
             await this._handleSettingsSave();
         });
+
+        // Google Bejelentkezés gomb
+        document.getElementById('btnGoogleSignIn')?.addEventListener('click', () => {
+            this._handleGoogleSignIn();
+        });
+
+        // Google Kijelentkezés gomb
+        document.getElementById('btnGoogleSignOut')?.addEventListener('click', () => {
+            this._handleGoogleSignOut();
+        });
+
+        // Supabase Kapcsolat Tesztelése gomb
+        document.getElementById('btnTestSupabaseConn')?.addEventListener('click', () => {
+            this._testSupabaseConnection();
+        });
+
         // === BEJÖVŐ UTALÁS GOMB ===
         document.getElementById('btnAddIncoming')?.addEventListener('click', () => {
-        this.app.incomingRenderer?.addNewEntry?.();
+            this.app.incomingRenderer?.addNewEntry?.();
         });
+
+        // ====================== BEÁLLÍTÁSOK BELSŐ TABS ======================
+        const settingsTabButtons = document.querySelectorAll('.settings-tab-btn');
+        const settingsTabContents = document.querySelectorAll('.settings-tab-content');
+        
+        settingsTabButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const targetTab = btn.getAttribute('data-settings-tab');
+                
+                // Gombok frissítése
+                settingsTabButtons.forEach(b => {
+                    b.classList.remove('bg-indigo-600', 'text-white', 'shadow-sm');
+                    b.classList.add('bg-gray-100', 'text-gray-600', 'hover:bg-gray-200');
+                });
+                btn.classList.add('bg-indigo-600', 'text-white', 'shadow-sm');
+                btn.classList.remove('bg-gray-100', 'text-gray-600', 'hover:bg-gray-200');
+                
+                // Tartalmak frissítése
+                settingsTabContents.forEach(content => {
+                    content.classList.add('hidden');
+                    content.classList.remove('block');
+                });
+                
+                let contentId = '';
+                if (targetTab === 'general') contentId = 'settingsContentGeneral';
+                else if (targetTab === 'templates') contentId = 'settingsContentTemplates';
+                else if (targetTab === 'appearance') contentId = 'settingsContentAppearance';
+                else if (targetTab === 'logs') {
+                    contentId = 'settingsContentLogs';
+                    this.renderLogs();
+                }
+                
+                const targetContent = document.getElementById(contentId);
+                if (targetContent) {
+                    targetContent.classList.remove('hidden');
+                    targetContent.classList.add('block');
+                }
+            });
+        });
+
+        // ====================== LOGS ESEMÉNYEK ======================
+        document.getElementById('btnSaveLogs')?.addEventListener('click', () => {
+            if (this.app.logger) {
+                const text = this.app.logger.exportToText();
+                const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `hmi_event_logs_${new Date().toISOString().slice(0,10)}.txt`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                this.app.logger.log('system', 'info', 'Eseménynapló exportálva/letöltve.');
+            }
+        });
+
+        document.getElementById('btnClearLogs')?.addEventListener('click', () => {
+            if (this.app.logger && confirm('Biztosan törölni szeretnéd az eseménynaplót?')) {
+                this.app.logger.clear();
+                this.renderLogs();
+                this.app.hmiNotif?.showNotification?.('Sikeresen törölve!', 'Az eseménynapló kiürítésre került.', 'success');
+            }
+        });
+    }
+
+    renderLogs() {
+        const listContainer = document.getElementById('settingsLogsList');
+        if (!listContainer || !this.app.logger) return;
+
+        const logs = this.app.logger.getLogs();
+        if (logs.length === 0) {
+            listContainer.innerHTML = '<div class="text-center py-8 text-gray-400 italic">Nincsenek események rögzítve</div>';
+            return;
+        }
+
+        listContainer.innerHTML = logs.map(log => {
+            let badgeClass = 'bg-gray-100 text-gray-700';
+            if (log.level === 'error') badgeClass = 'bg-red-100 text-red-700 font-bold';
+            else if (log.level === 'warn') badgeClass = 'bg-amber-100 text-amber-700 font-bold';
+            else if (log.level === 'success') badgeClass = 'bg-emerald-100 text-emerald-700 font-bold';
+            else if (log.level === 'conflict') badgeClass = 'bg-indigo-100 text-indigo-700 font-bold border border-indigo-200';
+
+            let categoryIcon = 'fa-info-circle';
+            if (log.category === 'sync') categoryIcon = 'fa-sync';
+            else if (log.category === 'db') categoryIcon = 'fa-database';
+            else if (log.category === 'auth') categoryIcon = 'fa-user-shield';
+            else if (log.category === 'reminder') categoryIcon = 'fa-clock';
+            else if (log.category === 'conflict') categoryIcon = 'fa-code-branch';
+
+            return `
+                <div class="flex items-start gap-2.5 p-2 hover:bg-gray-100/60 rounded-xl transition-all border-b border-gray-100/50 last:border-b-0">
+                    <span class="text-[10px] text-gray-400 font-mono select-none pt-0.5 shrink-0">${log.formattedTime}</span>
+                    <span class="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${badgeClass} shrink-0 flex items-center gap-1">
+                        <i class="fas ${categoryIcon}"></i> ${log.category}
+                    </span>
+                    <span class="text-xs text-gray-700 leading-normal break-all">${log.message}</span>
+                </div>
+            `;
+        }).join('');
     }
 
     async _handleSettingsSave() {
@@ -351,7 +484,7 @@ _setupSyncQueueBadge() {
             this.app.cloud?.init?.();
             this.app.syncService?.cloud?.init?.();
             if (typeof this.app.updateOnlineStatus === 'function') {
-                this.app.updateOnlineStatus(navigator.onLine && this.app.config.useSupabase);
+                this.app.updateOnlineStatus(navigator.onLine);
             }
 
             this.app.hmiNotif?.showToast('Beállítások sikeresen rögzítve!', 'success');
@@ -381,6 +514,182 @@ _setupSyncQueueBadge() {
         if (keyEl) keyEl.value = this.app.config.supabaseConfig?.key || '';
         if (rateEl) rateEl.value = String(this.app.config.eurRate || 400);
         if (toggleEl) toggleEl.checked = Boolean(this.app.config.useSupabase);
+
+        // Frissítsük a Google Bejelentkezés UI-t is
+        this._updateGoogleAuthUI();
+    }
+
+    // ==================== GOOGLE & SUPABASE AUTH METHODS ====================
+    _handleGoogleSignIn() {
+        const modal = document.createElement('div');
+        modal.className = 'fixed inset-0 bg-black/60 flex items-center justify-center z-[99999] p-4';
+        modal.id = 'simulatedGoogleAuthModal';
+        modal.innerHTML = `
+            <div class="bg-white rounded-3xl max-w-sm w-full shadow-2xl overflow-hidden border border-gray-100 transform scale-95 transition-all duration-200">
+                <div class="p-6 text-center border-b border-gray-100 bg-slate-50">
+                    <svg class="w-10 h-10 mx-auto mb-3" viewBox="0 0 24 24">
+                        <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v3.92h6.69c-.29 1.5-.14 3.01-1.3 4a7.62 7.62 0 0 1-5.39 2.1c-4.42 0-8-3.58-8-8s3.58-8 8-8c1.97 0 3.77.7 5.17 2l3-3A11.83 11.83 0 0 0 12 0C5.37 0 0 5.37 0 12s5.37 12 12 12c6.33 0 11.745-4.5 11.745-11.73z"/>
+                    </svg>
+                    <h3 class="font-bold text-gray-800 text-base leading-tight">Bejelentkezés a Google-lel</h3>
+                    <p class="text-xs text-gray-400 mt-1">Válassz Google-fiókot a költségnyilvántartó szinkronizálásához:</p>
+                </div>
+                <div class="p-5 space-y-4 bg-white">
+                    <!-- Ajánlott fiók (Saját fiók) -->
+                    <button class="w-full p-3.5 bg-slate-50 hover:bg-indigo-50 hover:border-indigo-200 border border-slate-100 rounded-2xl flex items-center gap-3 transition-all text-left group" data-email="felhosip@gmail.com" data-name="Fellner Sándor">
+                        <div class="w-9 h-9 rounded-full bg-indigo-600 text-white font-bold flex items-center justify-center text-xs group-hover:scale-105 transition">
+                            FS
+                        </div>
+                        <div class="min-w-0 flex-1">
+                            <div class="text-xs font-bold text-slate-800 leading-tight">Fellner Sándor (Alapértelmezett)</div>
+                            <div class="text-[10px] text-slate-400 truncate">felhosip@gmail.com</div>
+                        </div>
+                    </button>
+                    
+                    <div class="border-t border-slate-100 my-2 pt-3">
+                        <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">Egyedi Google e-mail használata</label>
+                        <div class="flex gap-2">
+                            <input type="email" id="customGoogleEmail" class="flex-1 px-3 py-2 border border-slate-200 rounded-xl text-xs bg-slate-50 focus:outline-none focus:border-indigo-500 font-semibold" placeholder="felhasznalo@gmail.com">
+                            <button id="btnGoogleUseCustom" class="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs transition shadow-sm">Ok</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="p-4 bg-slate-50 border-t border-gray-100 flex gap-2">
+                    <button class="flex-1 py-3 bg-white border border-slate-200 hover:bg-slate-50 rounded-xl text-xs font-bold text-slate-600 transition" id="btnCancelGoogleSim">Mégse</button>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(modal);
+        
+        // Animáció indítása
+        setTimeout(() => {
+            const card = modal.querySelector('.bg-white');
+            if (card) {
+                card.classList.remove('scale-95');
+                card.classList.add('scale-100');
+            }
+        }, 10);
+
+        // Fiók választás esemény
+        modal.querySelectorAll('button[data-email]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const email = btn.getAttribute('data-email');
+                const name = btn.getAttribute('data-name');
+                this._completeGoogleSignIn(email, name);
+                modal.remove();
+            });
+        });
+
+        // Egyedi fiók használata gomb
+        modal.querySelector('#btnGoogleUseCustom')?.addEventListener('click', () => {
+            const inputVal = modal.querySelector('#customGoogleEmail')?.value?.trim();
+            if (inputVal && inputVal.includes('@')) {
+                const name = inputVal.split('@')[0];
+                const cleanName = name.charAt(0).toUpperCase() + name.slice(1);
+                this._completeGoogleSignIn(inputVal, cleanName);
+                modal.remove();
+            } else {
+                this.app.hmiNotif?.showToast('Kérjük, adj meg egy érvényes e-mail címet!', 'warning');
+            }
+        });
+
+        modal.querySelector('#btnCancelGoogleSim')?.addEventListener('click', () => {
+            modal.remove();
+        });
+    }
+
+    _completeGoogleSignIn(email, name) {
+        const userObj = { email, name };
+        localStorage.setItem('googleUser', JSON.stringify(userObj));
+        this._updateGoogleAuthUI();
+        this.app.hmiNotif?.showToast(`Üdvözöljük, ${name}! Sikeres Google összekapcsolás.`, 'success');
+    }
+
+    _handleGoogleSignOut() {
+        localStorage.removeItem('googleUser');
+        this._updateGoogleAuthUI();
+        this.app.hmiNotif?.showToast('Google fiók kapcsolat bontva.', 'info');
+    }
+
+    _updateGoogleAuthUI() {
+        const userStr = localStorage.getItem('googleUser');
+        const badge = document.getElementById('googleStatusBadge');
+        const btnSignIn = document.getElementById('btnGoogleSignIn');
+        const sessionCard = document.getElementById('googleSessionCard');
+        const userEmailEl = document.getElementById('googleUserEmail');
+        const userNameEl = document.getElementById('googleUserName');
+        const userAvatarEl = document.getElementById('googleUserAvatar');
+
+        if (userStr) {
+            const user = JSON.parse(userStr);
+            if (badge) {
+                badge.textContent = 'Összekapcsolva';
+                badge.className = 'text-[9px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-600 uppercase';
+            }
+            if (btnSignIn) btnSignIn.classList.add('hidden');
+            if (sessionCard) sessionCard.classList.remove('hidden');
+            if (userEmailEl) userEmailEl.textContent = user.email;
+            if (userNameEl) userNameEl.textContent = user.name;
+            if (userAvatarEl) {
+                const initials = user.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+                userAvatarEl.textContent = initials || 'G';
+            }
+        } else {
+            if (badge) {
+                badge.textContent = 'Nincs belépve';
+                badge.className = 'text-[9px] font-bold px-2 py-0.5 rounded-full bg-slate-200 text-slate-500 uppercase';
+            }
+            if (btnSignIn) btnSignIn.classList.remove('hidden');
+            if (sessionCard) sessionCard.classList.add('hidden');
+        }
+
+        if (this.app && typeof this.app.updateOnlineStatus === 'function') {
+            this.app.updateOnlineStatus(navigator.onLine);
+        }
+    }
+
+    async _testSupabaseConnection() {
+        const url = document.getElementById('supabaseUrlInput')?.value?.trim();
+        const key = document.getElementById('supabaseKeyInput')?.value?.trim();
+        const btn = document.getElementById('btnTestSupabaseConn');
+
+        if (!url || !key) {
+            this.app.hmiNotif?.showToast('Kérjük töltsd ki az URL és API kulcs mezőket!', 'warning');
+            return;
+        }
+
+        const originalHTML = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Ellenőrzés...';
+
+        try {
+            const response = await fetch(`${url}/rest/v1/`, {
+                method: 'GET',
+                headers: {
+                    'apikey': key,
+                    'Authorization': `Bearer ${key}`
+                }
+            });
+
+            if (response.ok) {
+                this.app.hmiNotif?.showToast('Sikeres kapcsolat a Supabase szerverrel!', 'success');
+                btn.className = "flex-1 px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-2";
+                btn.innerHTML = '<i class="fas fa-check-circle"></i> Kapcsolat Rendben';
+            } else {
+                throw new Error(`Szerver válasz: ${response.status}`);
+            }
+        } catch (err) {
+            console.error('[SUPABASE TEST ERR]', err);
+            this.app.hmiNotif?.showToast(`Kapcsolódási hiba: Kérjük ellenőrizd az URL-t és az API kulcsot!`, 'error');
+            btn.className = "flex-1 px-4 py-2 bg-rose-600 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-2";
+            btn.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Sikertelen Kapcsolat';
+        } finally {
+            setTimeout(() => {
+                btn.disabled = false;
+                btn.className = "flex-1 px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2";
+                btn.innerHTML = originalHTML;
+            }, 3000);
+        }
     }
 
     handleCellClick(cellElement) {
@@ -488,10 +797,52 @@ _setupSyncQueueBadge() {
         const rebuildBtn = document.getElementById('btnRebuildIndexes');
         if (rebuildBtn) {
             rebuildBtn.onclick = async () => {
+                rebuildBtn.disabled = true;
                 const success = await this.app.dbAudit.rebuildIndexes();
+                rebuildBtn.disabled = false;
                 if (success) {
                     setTimeout(() => this._runAuditAndShow(), 800);
                 }
+            };
+        }
+
+        // Auto Repair gomb
+        const repairBtn = document.getElementById('btnAutoRepairDb');
+        if (repairBtn) {
+            repairBtn.onclick = async () => {
+                repairBtn.disabled = true;
+                repairBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Gyógyítás folyamatban...';
+                
+                const repairRes = await this.app.dbAudit.autoRepairDatabase();
+                
+                repairBtn.disabled = false;
+                repairBtn.innerHTML = '<i class="fas fa-magic"></i> Adatbázis Gyógyítása';
+                
+                if (repairRes.status === 'ok') {
+                    this.app.hmiNotif?.showNotification?.('Sikeres gyógyítás!', repairRes.message, 'success');
+                    this.app.renderer?.renderTable?.();
+                    if (this.app.incomingRenderer) this.app.incomingRenderer.render();
+                    
+                    setTimeout(() => this._runAuditAndShow(), 1200);
+                } else {
+                    this.app.hmiNotif?.showNotification?.('Hiba történt', repairRes.message, 'error');
+                }
+            };
+        }
+
+        // Deep Test Suite gomb
+        const runTestsBtn = document.getElementById('btnRunDeepTests');
+        if (runTestsBtn) {
+            runTestsBtn.onclick = async () => {
+                runTestsBtn.disabled = true;
+                runTestsBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Tesztelés fut...';
+                
+                await this.app.dbAudit.runDeepTestSuite();
+                
+                runTestsBtn.disabled = false;
+                runTestsBtn.innerHTML = '<i class="fas fa-vial"></i> Mély Teszt Suite Futtatása';
+                
+                this._runAuditAndShow();
             };
         }
     }
@@ -706,6 +1057,100 @@ _checkPendingChanges() {
             list.innerHTML = '';
         }
     }
+
+    initAppearance() {
+        const darkModeToggle = document.getElementById('darkModeToggle');
+        const darkModeStatusText = document.getElementById('darkModeStatusText');
+        const btnResetAppearance = document.getElementById('btnResetAppearance');
+        const themeBgButtons = document.querySelectorAll('#themeBgSelectorContainer [data-bg-theme]');
+
+        // 1. Betöltés localStorage-ból indításkor
+        const savedDarkMode = localStorage.getItem('appearance_dark_mode') === 'true';
+        const savedBgTheme = localStorage.getItem('appearance_bg_theme') || 'white';
+
+        // Alkalmazás indításkor
+        this.applyDarkMode(savedDarkMode);
+        this.applyBgTheme(savedBgTheme);
+
+        // UI elemek beállítása
+        if (darkModeToggle) {
+            darkModeToggle.checked = savedDarkMode;
+            darkModeToggle.addEventListener('change', (e) => {
+                const isDark = e.target.checked;
+                this.applyDarkMode(isDark);
+                localStorage.setItem('appearance_dark_mode', String(isDark));
+                this.app.logger?.log('Megjelenés', `Sötét mód ${isDark ? 'bekapcsolva' : 'kikapcsolva'}`);
+            });
+        }
+
+        themeBgButtons.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const theme = btn.getAttribute('data-bg-theme');
+                this.applyBgTheme(theme);
+                localStorage.setItem('appearance_bg_theme', theme);
+                this.updateBgThemeSelectorUI(theme);
+                this.app.logger?.log('Megjelenés', `Háttér téma módosítva: ${theme}`);
+            });
+        });
+
+        if (btnResetAppearance) {
+            btnResetAppearance.addEventListener('click', () => {
+                this.applyDarkMode(false);
+                this.applyBgTheme('white');
+                localStorage.setItem('appearance_dark_mode', 'false');
+                localStorage.setItem('appearance_bg_theme', 'white');
+                if (darkModeToggle) darkModeToggle.checked = false;
+                this.updateBgThemeSelectorUI('white');
+                this.app.hmiNotif?.showToast('Megjelenés visszaállítva alapértelmezettre!', 'info');
+                this.app.logger?.log('Megjelenés', 'Visszaállítás alapértelmezett beállításokra');
+            });
+        }
+
+        // Kezdeti gombállapot frissítés
+        this.updateBgThemeSelectorUI(savedBgTheme);
+    }
+
+    applyDarkMode(isDark) {
+        const body = document.body;
+        const statusText = document.getElementById('darkModeStatusText');
+        if (isDark) {
+            body.classList.add('dark-mode');
+            if (statusText) statusText.textContent = 'Aktív állapot: Bekapcsolva (Sötét mód)';
+        } else {
+            body.classList.remove('dark-mode');
+            if (statusText) statusText.textContent = 'Aktív állapot: Kikapcsolva (Világos mód)';
+        }
+    }
+
+    applyBgTheme(theme) {
+        const body = document.body;
+        
+        // Eltávolítjuk a meglévő témákat
+        body.classList.remove('bg-theme-cream', 'bg-theme-sage', 'bg-theme-ice', 'bg-theme-lavender', 'bg-theme-slate', 'theme-custom-bg');
+        
+        if (theme !== 'white') {
+            body.classList.add('theme-custom-bg');
+            body.classList.add(`bg-theme-${theme}`);
+        }
+    }
+
+    updateBgThemeSelectorUI(selectedTheme) {
+        const themeBgButtons = document.querySelectorAll('#themeBgSelectorContainer [data-bg-theme]');
+        themeBgButtons.forEach(btn => {
+            const theme = btn.getAttribute('data-bg-theme');
+            const checkIcon = btn.querySelector('.check-icon');
+            if (theme === selectedTheme) {
+                btn.classList.add('border-indigo-600');
+                btn.classList.remove('border-gray-200');
+                checkIcon?.classList.remove('hidden');
+            } else {
+                btn.classList.remove('border-indigo-600');
+                btn.classList.add('border-gray-200');
+                checkIcon?.classList.add('hidden');
+            }
+        });
+    }
+
     destroy() {
         // Queue badge eltávolítása
         this.syncQueueContainer?.remove();
