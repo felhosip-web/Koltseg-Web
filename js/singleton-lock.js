@@ -8,35 +8,40 @@ export class SingletonLock {
     }
 
     async init() {
-        if (!('BroadcastChannel' in window)) {
-            console.warn('[LOCK] BroadcastChannel nem támogatott ebben a böngészőben.');
-            return true; // folytatjuk fallback-ként
-        }
-
-        this.channel = new BroadcastChannel(this.lockKey);
-
-        // Üzenetek figyelése
-        this.channel.onmessage = (event) => {
-            if (event.data.type === 'MASTER_CLAIM') {
-                if (!this.isMaster) {
-                    this._handleAnotherInstance();
-                }
-            } else if (event.data.type === 'MASTER_PING') {
-                // Válaszolunk, hogy élünk
-                if (this.isMaster) {
-                    this.channel.postMessage({ type: 'MASTER_PONG' });
-                }
+        try {
+            if (!('BroadcastChannel' in window)) {
+                console.warn('[LOCK] BroadcastChannel nem támogatott ebben a böngészőben.');
+                return true; // folytatjuk fallback-ként
             }
-        };
 
-        // Próbáljuk megszerezni a lock-ot
-        const success = await this._tryAcquireLock();
-        
-        if (success) {
-            this._startHeartbeat();
+            this.channel = new BroadcastChannel(this.lockKey);
+
+            // Üzenetek figyelése
+            this.channel.onmessage = (event) => {
+                if (event.data.type === 'MASTER_CLAIM') {
+                    if (!this.isMaster) {
+                        this._handleAnotherInstance();
+                    }
+                } else if (event.data.type === 'MASTER_PING') {
+                    // Válaszolunk, hogy élünk
+                    if (this.isMaster) {
+                        this.channel.postMessage({ type: 'MASTER_PONG' });
+                    }
+                }
+            };
+
+            // Próbáljuk megszerezni a lock-ot
+            const success = await this._tryAcquireLock();
+            
+            if (success) {
+                this._startHeartbeat();
+            }
+
+            return success;
+        } catch (err) {
+            console.warn('[LOCK] Hiba a BroadcastChannel inicializálásakor (pl. biztonsági korlátozások miatt), folytatás lock nélkül:', err);
+            return true; // Folytatjuk fallback-ként, hogy elindulhasson az app
         }
-
-        return success;
     }
 
     async _tryAcquireLock() {

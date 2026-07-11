@@ -52,31 +52,59 @@ export class Database {
         this.db = null;
     }
 
+    _enableMockDb() {
+        this.isMock = true;
+        this.mockStore = {
+            entries: {},
+            items: {},
+            months: {},
+            templates: {},
+            reminders: {},
+            incomings: {},
+            incoming_senders: {}
+        };
+        this.mockIdCounter = {};
+        console.log('[DB] ℹ️ Memóriabeli adatbázis sikeresen inicializálva.');
+    }
+
     connect() {
-        return new Promise((resolve, reject) => {
-            const request = indexedDB.open(this.dbName, this.version);
-            
-            request.onupgradeneeded = (e) => {
-                try {
-                    const transaction = e.target.transaction;
-                    this._handleUpgrade(e.target.result, e.oldVersion, transaction);
-                } catch (err) {
-                    console.error('[DB] Upgrade hiba:', err);
-                    // Az onupgradeneeded-ben dobott hiba automatikusan abortálja a tranzakciót és kiváltja az onerror-t.
-                }
-            };
-            
-            request.onsuccess = (e) => {
-                this.db = e.target.result;
-                console.log(`[DB] ✅ IndexedDB csatlakoztatva (v${this.version})`);
-                resolve(this);
-            };
-            
-            request.onerror = (e) => {
-                const errObj = e?.target?.error || e || new Error('Ismeretlen adatbázis hiba');
-                console.error('[DB] Kapcsolódási hiba:', errObj);
-                reject(errObj);
-            };
+        return new Promise((resolve) => {
+            // Ellenőrizzük, hogy az IndexedDB egyáltalán létezik-e a window-ban
+            if (typeof window === 'undefined' || !('indexedDB' in window) || !window.indexedDB) {
+                console.warn('[DB] Az IndexedDB nem támogatott ebben a környezetben. Memóriabeli adatbázis mód bekapcsolva.');
+                this._enableMockDb();
+                return resolve(this);
+            }
+
+            try {
+                const request = window.indexedDB.open(this.dbName, this.version);
+                
+                request.onupgradeneeded = (e) => {
+                    try {
+                        const transaction = e.target.transaction;
+                        this._handleUpgrade(e.target.result, e.oldVersion, transaction);
+                    } catch (err) {
+                        console.error('[DB] Upgrade hiba:', err);
+                    }
+                };
+                
+                request.onsuccess = (e) => {
+                    this.db = e.target.result;
+                    console.log(`[DB] ✅ IndexedDB csatlakoztatva (v${this.version})`);
+                    resolve(this);
+                };
+                
+                request.onerror = (e) => {
+                    const errObj = e?.target?.error || e || new Error('Ismeretlen adatbázis hiba');
+                    console.warn('[DB] Kapcsolódási hiba, áttérés memóriabeli adatbázisra:', errObj);
+                    this._enableMockDb();
+                    resolve(this); // Mindig resolve-olunk, hogy az alkalmazás el tudjon indulni!
+                };
+            } catch (err) {
+                console.warn('[DB] Kivétel az IndexedDB megnyitásakor, áttérés memóriabeli adatbázisra:', err);
+                this._enableMockDb();
+                resolve(this); // Mindig resolve-olunk, hogy az alkalmazás el tudjon indulni!
+            }
         });
     }
 
@@ -197,6 +225,12 @@ export class Database {
 
     async getByCellKey(cellKeyPrefix) {
         return new Promise((resolve) => {
+            if (this.isMock) {
+                const results = Object.values(this.mockStore.entries).filter(entry => 
+                    entry && entry.cellKey && entry.cellKey.startsWith(cellKeyPrefix)
+                );
+                return resolve(results);
+            }
             if (!this.db) return resolve([]);
             try {
                 const tx = this.db.transaction('entries', 'readonly');
@@ -215,6 +249,10 @@ export class Database {
 
     async getAll(storeName) {
         return new Promise((resolve) => {
+            if (this.isMock) {
+                const results = Object.values(this.mockStore[storeName] || {});
+                return resolve(results);
+            }
             if (!this.db) return resolve([]);
             try {
                 const tx = this.db.transaction(storeName, 'readonly');
@@ -236,6 +274,25 @@ export class Database {
         if (!data.updated_at) data.updated_at = new Date().toISOString();
 
         return new Promise((resolve, reject) => {
+            if (this.isMock) {
+                this.mockStore[storeName] = this.mockStore[storeName] || {};
+                
+                let key;
+                if (storeName === 'months') {
+                    key = data.month;
+                } else if (storeName === 'incoming_senders') {
+                    key = data.id;
+                } else {
+                    if (!data.id) {
+                        this.mockIdCounter[storeName] = (this.mockIdCounter[storeName] || 0) + 1;
+                        data.id = this.mockIdCounter[storeName];
+                    }
+                    key = data.id;
+                }
+                
+                this.mockStore[storeName][key] = JSON.parse(JSON.stringify(data));
+                return resolve(key);
+            }
             if (!this.db) return reject(new Error('Nincs adatbázis kapcsolat!'));
             try {
                 const tx = this.db.transaction(storeName, 'readwrite');
@@ -251,6 +308,12 @@ export class Database {
 
     async delete(storeName, key) {
         return new Promise((resolve, reject) => {
+            if (this.isMock) {
+                if (this.mockStore[storeName]) {
+                    delete this.mockStore[storeName][key];
+                }
+                return resolve();
+            }
             if (!this.db) return reject(new Error('Nincs adatbázis kapcsolat!'));
             try {
                 const tx = this.db.transaction(storeName, 'readwrite');

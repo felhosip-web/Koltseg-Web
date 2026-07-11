@@ -2,6 +2,56 @@
 // Elszigeteli a LocalStorage-ot ha az alkalmazás nem a gyökérben fut (pl. GitHub Pages vagy más megosztott origin)
 
 (function() {
+    // Különleges védelem: ha a localStorage nem érhető el (pl. blokkolt cookie-k, beágyazott iframe, biztonsági korlátozások),
+    // akkor létrehozunk egy memóriabeli helyettesítőt, hogy az alkalmazás ne fagyjon le és ne dobjon SecurityError-t.
+    let storageAvailable = false;
+    try {
+        if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
+            // Egy egyszerű írás/olvasás teszt
+            const testKey = '__storage_test__';
+            window.localStorage.setItem(testKey, testKey);
+            window.localStorage.removeItem(testKey);
+            storageAvailable = true;
+        }
+    } catch (e) {
+        console.warn('[SANDBOX] A böngésző blokkolja vagy nem támogatja a valódi LocalStorage-ot. Memóriabeli fallback aktiválása:', e);
+    }
+
+    if (!storageAvailable && typeof window !== 'undefined') {
+        try {
+            let storageMock = {};
+            const mock = {
+                getItem: function(key) {
+                    return key in storageMock ? storageMock[key] : null;
+                },
+                setItem: function(key, value) {
+                    storageMock[key] = String(value);
+                },
+                removeItem: function(key) {
+                    delete storageMock[key];
+                },
+                clear: function() {
+                    storageMock = {};
+                },
+                key: function(index) {
+                    const keys = Object.keys(storageMock);
+                    return keys[index] || null;
+                },
+                get length() {
+                    return Object.keys(storageMock).length;
+                }
+            };
+            Object.defineProperty(window, 'localStorage', {
+                value: mock,
+                writable: true,
+                configurable: true
+            });
+            console.log('[SANDBOX] ✅ Memóriabeli LocalStorage fallback sikeresen beállítva.');
+        } catch (err) {
+            console.error('[SANDBOX] Nem sikerült létrehozni a memóriabeli LocalStorage-ot:', err);
+        }
+    }
+
     try {
         if (typeof window === 'undefined' || typeof localStorage === 'undefined') return;
 
