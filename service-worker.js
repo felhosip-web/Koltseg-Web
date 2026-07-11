@@ -15,8 +15,8 @@ const { CacheFirst, StaleWhileRevalidate, NetworkFirst, NetworkOnly } = workbox.
 const { ExpirationPlugin } = workbox.expiration;
 const { CacheableResponsePlugin } = workbox.cacheableResponse;
 
-const CACHE_VERSION = 'v4.2.0';
-const BUILD_DATE = '2026-07-07';
+const CACHE_VERSION = 'v4.3.3';
+const BUILD_DATE = '2026-07-11';
 const CACHE_NAME = `kny-${CACHE_VERSION}-cache`;
 
 // ===== FALLBACK OFFLINE HTML (beépítve) =====
