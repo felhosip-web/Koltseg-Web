@@ -1788,7 +1788,7 @@ CREATE POLICY "Mindenki elérheti" ON incoming_senders FOR ALL USING (true) WITH
 // === INDÍTÁS ===
 // ================================================================
 
-document.addEventListener('DOMContentLoaded', async () => {
+async function initApp() {
     // Elsőként aktiváljuk a konzol patchelést
     setupDebugConsole();
     
@@ -1800,7 +1800,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     window.getVersion = () => app.getVersionInfo();
     
     await app.start();
-});
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initApp);
+} else {
+    initApp();
+}
 
 console.log('💡 Költség Nyilvántartó v4.1 elindult');
 
