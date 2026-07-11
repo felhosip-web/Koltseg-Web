@@ -1,9 +1,17 @@
 import express from 'express';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI, Type } from "@google/genai";
 
-const rootDir = process.cwd();
+let rootDir = process.cwd();
+try {
+  if (typeof __dirname !== 'undefined') {
+    rootDir = __dirname;
+  }
+} catch (e) {
+  rootDir = process.cwd();
+}
 
 const app = express();
 const PORT = 3000;
@@ -151,4 +159,8 @@ app.get('*', (req, res) => {
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on http://0.0.0.0:${PORT}`);
+  console.log(`[Startup Diagnostics] rootDir resolved to: ${rootDir}`);
+  console.log(`[Startup Diagnostics] index.html exists: ${fs.existsSync(path.join(rootDir, 'index.html'))}`);
+  console.log(`[Startup Diagnostics] js/app.js exists: ${fs.existsSync(path.join(rootDir, 'js/app.js'))}`);
+  console.log(`[Startup Diagnostics] css/style.css exists: ${fs.existsSync(path.join(rootDir, 'css/style.css'))}`);
 });
