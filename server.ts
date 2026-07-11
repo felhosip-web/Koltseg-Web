@@ -3,8 +3,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI, Type } from "@google/genai";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const rootDir = process.cwd();
 
 const app = express();
 const PORT = 3000;
@@ -122,34 +121,37 @@ Guidelines:
 });
 
 // Individual static folders
-app.use('/css', express.static(path.join(__dirname, 'css')));
-app.use('/js', express.static(path.join(__dirname, 'js')));
-app.use('/icons', express.static(path.join(__dirname, 'icons')));
+app.use('/css', express.static(path.join(rootDir, 'css')));
+app.use('/js', express.static(path.join(rootDir, 'js')));
+app.use('/icons', express.static(path.join(rootDir, 'icons')));
 
 // Individual static files at root
 app.get('/manifest.json', (req, res) => {
-  res.sendFile(path.join(__dirname, 'manifest.json'));
+  res.sendFile(path.join(rootDir, 'manifest.json'));
 });
 app.get('/service-worker.js', (req, res) => {
-  res.sendFile(path.join(__dirname, 'service-worker.js'));
+  res.sendFile(path.join(rootDir, 'service-worker.js'));
 });
 app.get('/version.json', (req, res) => {
-  res.sendFile(path.join(__dirname, 'version.json'));
+  res.sendFile(path.join(rootDir, 'version.json'));
 });
 app.get('/offline.html', (req, res) => {
-  res.sendFile(path.join(__dirname, 'offline.html'));
+  res.sendFile(path.join(rootDir, 'offline.html'));
 });
 
 // Primary index.html
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'index.html'));
+  res.sendFile(path.join(rootDir, 'index.html'));
 });
 
 // Fallback for everything else
 app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'index.html'));
+  res.sendFile(path.join(rootDir, 'index.html'));
 });
 
 app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Server running on http://0.0.0.0:${PORT}`);
+});
+'0.0.0.0', () => {
   console.log(`Server running on http://0.0.0.0:${PORT}`);
 });
