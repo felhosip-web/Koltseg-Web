@@ -33,31 +33,3 @@
     "@types/express": "^4.17.21"
   }
 }
-tseg-Web.git"
-  },
-  "keywords": [
-    "koltseg",
-    "nyilvantarto",
-    "pwa",
-    "offline",
-    "supabase",
-    "finance"
-  ],
-  "author": "felhosip-web",
-  "license": "MIT",
-  "bugs": {
-    "url": "https://github.com/felhosip-web/Koltseg-Web/issues"
-  },
-  "homepage": "https://github.com/felhosip-web/Koltseg-Web#readme",
-  "engines": {
-    "node": ">=16.0.0"
-  },
-  "browserslist": [
-    "last 2 versions",
-    "not dead",
-    "> 0.5%"
-  ],
-  "devDependencies": {
-    "@playwright/test": "^1.61.1"
-  }
-}
