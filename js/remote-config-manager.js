@@ -244,6 +244,4 @@ export class RemoteConfigManager {
         console.log('[CONFIG] Beállítások mentve:', { url, key, useCloud, eurRate });
         return true;
     }
-}rue;
-    }
 }
