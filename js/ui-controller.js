@@ -355,7 +355,7 @@ _setupSyncQueueBadge() {
         });
 
         // Supabase Kapcsolat Tesztelése gomb
-        document.getElementById('btnTestSupabaseConn')?.addEventListener('click', () => {
+        document.getElementById('btnTestSupabaseConnSettings')?.addEventListener('click', () => {
             this._testSupabaseConnection();
         });
 
@@ -420,11 +420,20 @@ _setupSyncQueueBadge() {
             }
         });
 
-        document.getElementById('btnClearLogs')?.addEventListener('click', () => {
-            if (this.app.logger && confirm('Biztosan törölni szeretnéd az eseménynaplót?')) {
-                this.app.logger.clear();
-                this.renderLogs();
-                this.app.hmiNotif?.showNotification?.('Sikeresen törölve!', 'Az eseménynapló kiürítésre került.', 'success');
+        document.getElementById('btnClearLogs')?.addEventListener('click', async () => {
+            if (this.app.logger) {
+                const confirmed = await this.app.hmiNotif?.showConfirm?.({
+                    title: 'Eseménynapló törlése',
+                    message: 'Biztosan törölni szeretnéd az eseménynaplót?',
+                    type: 'danger',
+                    confirmText: 'Törlés',
+                    cancelText: 'Mégse'
+                });
+                if (confirmed) {
+                    this.app.logger.clear();
+                    this.renderLogs();
+                    this.app.hmiNotif?.showToast('Eseménynapló sikeresen törölve!', 'success');
+                }
             }
         });
     }
@@ -473,16 +482,35 @@ _setupSyncQueueBadge() {
             const newKey = document.getElementById('supabaseKeyInput')?.value?.trim() || '';
             const newRate = Number(document.getElementById('eurRateInput')?.value || 400);
             const useCloud = document.getElementById('supabaseToggle')?.checked || false;
+            const useLiveEur = document.getElementById('useLiveEurToggle')?.checked ?? true;
 
-            console.log('[SETTINGS] Collected values', { newUrl, hasKey: !!newKey, useCloud, newRate });
+            console.log('[SETTINGS] Collected values', { newUrl, hasKey: !!newKey, useCloud, newRate, useLiveEur });
             if (this.app.config) {
-                const saved = this.app.config.saveSettings({ url: newUrl, key: newKey, useCloud, eurRate: newRate });
+                const saved = this.app.config.saveSettings({ 
+                    url: newUrl, 
+                    key: newKey, 
+                    useCloud: useCloud, 
+                    eurRate: newRate,
+                    useLiveEur: useLiveEur
+                });
                 console.log('[SETTINGS] saveSettings ->', saved);
                 console.log('[SETTINGS] Config after save', this.app.config.supabaseConfig, this.app.config.useSupabase, this.app.config.eurRate);
             }
 
             this.app.cloud?.init?.();
             this.app.syncService?.cloud?.init?.();
+            
+            // Ha kikapcsolták az online árfolyamot, akkor azonnal alkalmazzuk a mentett biztonsági árfolyamot
+            if (!useLiveEur && this.app.config) {
+                this.app.config.eurRate = newRate;
+                this.app.renderer?.updateLed?.(newRate, 'fallback');
+            } else if (this.app.config) {
+                // Egyébként kérjük le azonnal az online árfolyamot
+                await this.app.config.watchDogEur?.((rate, mode) => {
+                    this.app.renderer?.updateLed?.(rate, mode);
+                });
+            }
+
             if (typeof this.app.updateOnlineStatus === 'function') {
                 this.app.updateOnlineStatus(navigator.onLine);
             }
@@ -509,11 +537,13 @@ _setupSyncQueueBadge() {
         const keyEl = document.getElementById('supabaseKeyInput');
         const rateEl = document.getElementById('eurRateInput');
         const toggleEl = document.getElementById('supabaseToggle');
+        const liveEurEl = document.getElementById('useLiveEurToggle');
 
         if (urlEl) urlEl.value = this.app.config.supabaseConfig?.url || '';
         if (keyEl) keyEl.value = this.app.config.supabaseConfig?.key || '';
-        if (rateEl) rateEl.value = String(this.app.config.eurRate || 400);
+        if (rateEl) rateEl.value = String(this.app.config.defaultEurRate || this.app.config.eurRate || 400);
         if (toggleEl) toggleEl.checked = Boolean(this.app.config.useSupabase);
+        if (liveEurEl) liveEurEl.checked = this.app.config.useLiveEur !== false;
 
         // Frissítsük a Google Bejelentkezés UI-t is
         this._updateGoogleAuthUI();
@@ -649,13 +679,21 @@ _setupSyncQueueBadge() {
     }
 
     async _testSupabaseConnection() {
-        const url = document.getElementById('supabaseUrlInput')?.value?.trim();
+        let url = document.getElementById('supabaseUrlInput')?.value?.trim();
         const key = document.getElementById('supabaseKeyInput')?.value?.trim();
-        const btn = document.getElementById('btnTestSupabaseConn');
+        const btn = document.getElementById('btnTestSupabaseConnSettings');
 
         if (!url || !key) {
             this.app.hmiNotif?.showToast('Kérjük töltsd ki az URL és API kulcs mezőket!', 'warning');
             return;
+        }
+
+        // URL tisztítása és normalizálása
+        if (url.endsWith('/')) {
+            url = url.slice(0, -1);
+        }
+        if (!url.startsWith('http://') && !url.startsWith('https://')) {
+            url = 'https://' + url;
         }
 
         const originalHTML = btn.innerHTML;
@@ -663,24 +701,98 @@ _setupSyncQueueBadge() {
         btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Ellenőrzés...';
 
         try {
-            const response = await fetch(`${url}/rest/v1/`, {
-                method: 'GET',
-                headers: {
-                    'apikey': key,
-                    'Authorization': `Bearer ${key}`
-                }
-            });
+            console.log('[SUPABASE TEST] Kapcsolódás tesztelése a következő URL-lel:', url);
+            
+            let success = false;
+            let warningText = '';
 
-            if (response.ok) {
-                this.app.hmiNotif?.showToast('Sikeres kapcsolat a Supabase szerverrel!', 'success');
-                btn.className = "flex-1 px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-2";
-                btn.innerHTML = '<i class="fas fa-check-circle"></i> Kapcsolat Rendben';
-            } else {
-                throw new Error(`Szerver válasz: ${response.status}`);
+            // Próbáljuk meg először a hivatalos Supabase SDK segítségével, ha az létezik
+            if (window.supabase) {
+                try {
+                    console.log('[SUPABASE TEST] Próbálkozás a Supabase JS SDK-val...');
+                    const client = window.supabase.createClient(url, key, { auth: { persistSession: false } });
+                    
+                    // Próbáljunk lekérdezni egy meglévő táblát (pl. months vagy entries)
+                    const { data, error } = await client.from('months').select('month').limit(1);
+                    
+                    if (!error) {
+                        console.log('[SUPABASE TEST] SDK lekérdezés sikeres!');
+                        success = true;
+                    } else {
+                        console.warn('[SUPABASE TEST] SDK hiba válasz:', error);
+                        
+                        // Speciális státuszkódok lekezelése
+                        if (error.status === 401 || error.status === 403) {
+                            throw new Error(`Hitelesítési hiba: ${error.message || 'Helytelen API kulcs!'}`);
+                        } else if (error.code === '42P01') {
+                            // A tábla nem létezik, de a kapcsolat és hitelesítés teljesen jó!
+                            console.log('[SUPABASE TEST] A táblák nincsenek létrehozva, de a hitelesítés és a kapcsolat jó.');
+                            success = true;
+                            warningText = 'Kapcsolat rendben, de az SQL sémát még be kell másolni a Supabase-be!';
+                        } else if (error.status === 404) {
+                            // 404 vagy más schema hiba is jelezheti, hogy maga a kiszolgáló válaszol, csak a tábla/schema rossz
+                            console.log('[SUPABASE TEST] Kapcsolat jó (404-es válasz a months táblára).');
+                            success = true;
+                            warningText = 'Kapcsolat rendben, de a táblák még hiányoznak!';
+                        } else {
+                            // Ha valamilyen más hiba van, amit nem ismerünk, próbáljuk meg a közvetlen fetch hívást is fallback-ként
+                            console.log('[SUPABASE TEST] Egyéb SDK hiba, átváltás fetch-re...');
+                        }
+                    }
+                } catch (sdkErr) {
+                    console.warn('[SUPABASE TEST] SDK hiba:', sdkErr.message);
+                    if (sdkErr.message.includes('Hitelesítési hiba')) {
+                        throw sdkErr;
+                    }
+                }
             }
+
+            // Ha az SDK nem volt elérhető, vagy az SDK teszt bizonytalan eredményt adott, de nem dobott auth hibát
+            if (!success) {
+                console.log('[SUPABASE TEST] Próbálkozás közvetlen fetch-csel...');
+                const response = await fetch(`${url}/rest/v1/`, {
+                    method: 'GET',
+                    headers: {
+                        'apikey': key,
+                        'Authorization': `Bearer ${key}`
+                    }
+                });
+
+                if (response.ok) {
+                    console.log('[SUPABASE TEST] Közvetlen fetch sikeres!');
+                    success = true;
+                } else if (response.status === 401 || response.status === 403) {
+                    throw new Error(`Hitelesítési hiba (HTTP ${response.status})`);
+                } else {
+                    throw new Error(`Szerver válasz kód: ${response.status}`);
+                }
+            }
+
+            if (success) {
+                if (warningText) {
+                    this.app.hmiNotif?.showToast(warningText, 'warning', 5000);
+                    btn.className = "flex-1 px-4 py-2 bg-amber-500 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-2";
+                    btn.innerHTML = '<i class="fas fa-exclamation-circle"></i> Kapcsolat Jó (Séma hiány)';
+                } else {
+                    this.app.hmiNotif?.showToast('Sikeres kapcsolat a Supabase szerverrel!', 'success');
+                    btn.className = "flex-1 px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-2";
+                    btn.innerHTML = '<i class="fas fa-check-circle"></i> Kapcsolat Rendben';
+                }
+            } else {
+                throw new Error('Nem sikerült kapcsolatot létesíteni.');
+            }
+
         } catch (err) {
             console.error('[SUPABASE TEST ERR]', err);
-            this.app.hmiNotif?.showToast(`Kapcsolódási hiba: Kérjük ellenőrizd az URL-t és az API kulcsot!`, 'error');
+            const errMsg = err.message || '';
+            let toastMsg = 'Kapcsolódási hiba: Ellenőrizd a Supabase adatokat!';
+            if (errMsg.includes('Hitelesítési hiba') || errMsg.includes('401') || errMsg.includes('403')) {
+                toastMsg = 'Hitelesítési hiba: Érvénytelen Anon API kulcs!';
+            } else if (errMsg.includes('Failed to fetch') || errMsg.includes('network')) {
+                toastMsg = 'Hálózati hiba: A Supabase szerver nem érhető el (CORS vagy hibás URL)!';
+            }
+            
+            this.app.hmiNotif?.showToast(toastMsg, 'error', 4000);
             btn.className = "flex-1 px-4 py-2 bg-rose-600 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-2";
             btn.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Sikertelen Kapcsolat';
         } finally {
@@ -869,6 +981,74 @@ _setupSyncQueueBadge() {
     statusText.textContent = 'Kattints a "Letöltés" vagy "Feltöltés" gombra az adatok ellenőrzéséhez.';
     document.getElementById('syncLed').className = 'w-3 h-3 rounded-full bg-gray-400';
     executeBtn.disabled = true;
+
+    // Kezdeti állapotok beállítása, hogy ne "Ellenőrzés..." legyen látható üresen
+    const pStats = document.getElementById('pullStats');
+    if (pStats) {
+        pStats.innerHTML = '<span class="text-gray-400 italic">Kattints az ellenőrzéshez</span>';
+    }
+    const puStats = document.getElementById('pushStats');
+    if (puStats) {
+        puStats.innerHTML = '<span class="text-gray-400 italic">Kattints az ellenőrzéshez</span>';
+    }
+
+    // Ha nincsenek táblák a Supabase-ben, jelezzük kiemelten
+    if (this.app.syncService?.cloud?.tablesMissing) {
+        statusText.textContent = '⚠️ HIÁNYZÓ TÁBLÁK A SUPABASE-BEN!';
+        document.getElementById('syncLed').className = 'w-3 h-3 rounded-full bg-red-500 animate-pulse';
+        details.innerHTML = `
+            <div class="p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 space-y-2">
+                <p class="font-bold text-xs flex items-center gap-1">
+                    <i class="fas fa-exclamation-triangle"></i> A Supabase táblák nem találhatók!
+                </p>
+                <p class="text-[10px] leading-relaxed">
+                    A felhőben nincsenek létrehozva a szükséges táblák (vagy nemrég törölted őket). Kérlek, másold ki a sémát és futtasd le a Supabase SQL Editor-jában!
+                </p>
+                <div class="mt-2 flex gap-2">
+                    <button id="btnCopySchemaModal" class="px-2.5 py-1 bg-red-600 hover:bg-red-700 text-white rounded-lg text-[10px] font-bold transition flex items-center gap-1">
+                        <i class="fas fa-copy"></i> SQL Séma Másolása
+                    </button>
+                    <button id="btnGoToDev" class="px-2.5 py-1 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg text-[10px] font-bold transition flex items-center gap-1">
+                        <i class="fas fa-plug"></i> Diagnosztika
+                    </button>
+                </div>
+            </div>
+        `;
+
+        // Eseménykezelők hozzáadása a figyelmeztetés gombjaihoz
+        setTimeout(() => {
+            const btnCopy = document.getElementById('btnCopySchemaModal');
+            if (btnCopy) {
+                btnCopy.onclick = (e) => {
+                    e.stopPropagation();
+                    const sqlText = typeof window.getSupabaseSQLScript === 'function' ? window.getSupabaseSQLScript() : '';
+                    if (sqlText) {
+                        navigator.clipboard.writeText(sqlText);
+                        this.app.hmiNotif?.showToast('SQL séma másolva a vágólapra!', 'success');
+                    } else {
+                        const debugSql = document.getElementById('debugSupabaseSQL');
+                        if (debugSql) {
+                            navigator.clipboard.writeText(debugSql.value);
+                            this.app.hmiNotif?.showToast('SQL séma másolva a vágólapra!', 'success');
+                        }
+                    }
+                };
+            }
+            const btnGo = document.getElementById('btnGoToDev');
+            if (btnGo) {
+                btnGo.onclick = (e) => {
+                    e.stopPropagation();
+                    modal.classList.add('hidden');
+                    const devCard = document.getElementById('devManagerCard');
+                    if (devCard) {
+                        devCard.scrollIntoView({ behavior: 'smooth' });
+                    }
+                };
+            }
+        }, 50);
+    } else {
+        details.innerHTML = '<p class="text-gray-400 italic">Kattints a "Letöltés" vagy "Feltöltés" gombra az adatok ellenőrzéséhez.</p>';
+    }
     
     // Pull adatok ellenőrzése
     pullBtn.onclick = async () => {
@@ -881,12 +1061,15 @@ _setupSyncQueueBadge() {
             const total = Object.values(stats).reduce((sum, v) => sum + v, 0);
             
             // Statisztika megjelenítése
-            document.getElementById('pullStats').innerHTML = `
-                <span class="font-bold text-blue-600">${total}</span> elem a felhőben
-                <div class="text-[9px] text-gray-400 mt-0.5">
-                    ${Object.entries(stats).map(([table, count]) => `${table}: ${count}`).join(' | ')}
-                </div>
-            `;
+            const pullStatsEl = document.getElementById('pullStats');
+            if (pullStatsEl) {
+                pullStatsEl.innerHTML = `
+                    <span class="font-bold text-blue-600">${total}</span> elem a felhőben
+                    <div class="text-[9px] text-gray-400 mt-0.5">
+                        ${Object.entries(stats).map(([table, count]) => `${table}: ${count}`).join(' | ')}
+                    </div>
+                `;
+            }
             
             // Részletes lista
             let html = '<div class="space-y-1">';
@@ -921,6 +1104,7 @@ _setupSyncQueueBadge() {
                         <p class="text-xs text-gray-500">Adatok lekérése a felhőből</p>
                     </div>
                 </div>
+                <div id="pullStats" class="mt-2 text-xs text-gray-600">${document.getElementById('pullStats')?.innerHTML || '<span class="text-gray-400 italic">Kattints az ellenőrzéshez</span>'}</div>
             `;
         }
     };
@@ -936,12 +1120,15 @@ _setupSyncQueueBadge() {
             const total = Object.values(stats).reduce((sum, v) => sum + v, 0);
             
             // Statisztika megjelenítése
-            document.getElementById('pushStats').innerHTML = `
-                <span class="font-bold text-emerald-600">${total}</span> elem helyben
-                <div class="text-[9px] text-gray-400 mt-0.5">
-                    ${Object.entries(stats).map(([table, count]) => `${table}: ${count}`).join(' | ')}
-                </div>
-            `;
+            const pushStatsEl = document.getElementById('pushStats');
+            if (pushStatsEl) {
+                pushStatsEl.innerHTML = `
+                    <span class="font-bold text-emerald-600">${total}</span> elem helyben
+                    <div class="text-[9px] text-gray-400 mt-0.5">
+                        ${Object.entries(stats).map(([table, count]) => `${table}: ${count}`).join(' | ')}
+                    </div>
+                `;
+            }
             
             // Részletes lista
             let html = '<div class="space-y-1">';
@@ -976,6 +1163,7 @@ _setupSyncQueueBadge() {
                         <p class="text-xs text-gray-500">Helyi adatok feltöltése a felhőbe</p>
                     </div>
                 </div>
+                <div id="pushStats" class="mt-2 text-xs text-gray-600">${document.getElementById('pushStats')?.innerHTML || '<span class="text-gray-400 italic">Kattints az ellenőrzéshez</span>'}</div>
             `;
         }
     };
@@ -987,12 +1175,22 @@ _setupSyncQueueBadge() {
         
         executeBtn.disabled = true;
         executeBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Folyamatban...';
-        statusText.textContent = mode === 'pull' ? 'Adatok letöltése...' : 'Adatok feltöltése...';
+        
+        if (mode === 'pull') {
+            statusText.textContent = 'Adatok letöltése...';
+        } else if (mode === 'queue') {
+            statusText.textContent = 'Várólista feldolgozása...';
+        } else {
+            statusText.textContent = 'Adatok feltöltése...';
+        }
         document.getElementById('syncLed').className = 'w-3 h-3 rounded-full bg-amber-500 animate-pulse';
         
         try {
             if (mode === 'pull') {
                 await this.app.syncManager.executePull();
+            } else if (mode === 'queue') {
+                const qResult = await this.app.syncManager.processQueue();
+                details.innerHTML = `<p class="text-emerald-600 font-bold">✅ Sikerült feldolgozni ${qResult.processed} műveletet.</p>${qResult.failed > 0 ? `<p class="text-red-500 font-bold">⚠️ ${qResult.failed} művelet sikertelen.</p>` : ''}`;
             } else {
                 await this.app.syncManager.executePush();
             }
@@ -1000,7 +1198,9 @@ _setupSyncQueueBadge() {
             // Sikeres befejezés
             document.getElementById('syncLed').className = 'w-3 h-3 rounded-full bg-emerald-500';
             statusText.textContent = '✅ Szinkronizáció sikeresen befejeződött!';
-            details.innerHTML = '<p class="text-emerald-600 font-bold">✅ A művelet sikeresen végrehajtódott.</p>';
+            if (mode !== 'queue') {
+                details.innerHTML = '<p class="text-emerald-600 font-bold">✅ A művelet sikeresen végrehajtódott.</p>';
+            }
             
             // UI frissítése
             this.app.renderer.renderTable();

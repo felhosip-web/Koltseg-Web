@@ -202,17 +202,25 @@ class App {
 
             // === OFFLINE MÓD ELLENŐRZÉS ===
             const params = new URLSearchParams(window.location.search);
+            const isSupabaseConfigured = localStorage.getItem('supabase_use') === 'true' && 
+                                         localStorage.getItem('supabase_url') && 
+                                         localStorage.getItem('supabase_key');
+
             if (params.get('offline') === 'true') {
                 this.isOfflineMode = true;
                 localStorage.setItem('offlineMode', 'true');
                 console.log('[APP] Offline mód aktiválva (URL paraméter)');
-            } else if (localStorage.getItem('offlineMode') === 'true') {
+            } else if (localStorage.getItem('offlineMode') === 'true' && !isSupabaseConfigured) {
                 this.isOfflineMode = true;
                 console.log('[APP] Offline mód aktiválva (localStorage)');
-            } else if (!navigator.onLine) {
+            } else if (!navigator.onLine && !isSupabaseConfigured) {
                 this.isOfflineMode = true;
                 localStorage.setItem('offlineMode', 'true');
                 console.log('[APP] Offline mód automatikusan (nincs hálózat)');
+            } else {
+                this.isOfflineMode = false;
+                localStorage.removeItem('offlineMode');
+                console.log('[APP] Online mód aktiválva (felhő beállítva vagy aktív hálózat)');
             }
 
             if (this.isOfflineMode) {
@@ -221,7 +229,8 @@ class App {
                 this.hmiNotif.showToast('Offline mód – csak helyi adatok', 'warning');
             }
 
-            this.updateOnlineStatus(!this.isOfflineMode && navigator.onLine);
+            const isOnline = navigator.onLine || isSupabaseConfigured;
+            this.updateOnlineStatus(!this.isOfflineMode && isOnline);
             this._setupNetworkListeners();
 
             // === KRITIKUS: Singleton Lock ===
@@ -365,16 +374,16 @@ class App {
             statusText.textContent = 'Offline';
             const eurLed = document.getElementById('eurLed');
             if (eurLed) eurLed.className = 'w-3 h-3 rounded-full bg-red-400';
-        } else if (!useSupabase || !isLoggedIn) {
-            statusBadge.className = 'text-[10px] px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700 font-medium flex items-center gap-1';
-            statusText.textContent = 'Online (Helyi)';
-            const eurLed = document.getElementById('eurLed');
-            if (eurLed) eurLed.className = 'w-3 h-3 rounded-full bg-yellow-400';
-        } else {
+        } else if (useSupabase) {
             statusBadge.className = 'text-[10px] px-2 py-0.5 rounded-full bg-green-100 text-green-600 font-medium flex items-center gap-1';
-            statusText.textContent = 'Szerver Online';
+            statusText.textContent = isLoggedIn ? 'Szerver Online (Fiók)' : 'Szerver Online';
             const eurLed = document.getElementById('eurLed');
             if (eurLed) eurLed.className = 'w-3 h-3 rounded-full bg-green-400';
+        } else {
+            statusBadge.className = 'text-[10px] px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700 font-medium flex items-center gap-1';
+            statusText.textContent = isLoggedIn ? 'Online (Helyi + Fiók)' : 'Online (Helyi)';
+            const eurLed = document.getElementById('eurLed');
+            if (eurLed) eurLed.className = 'w-3 h-3 rounded-full bg-yellow-400';
         }
     }
 
@@ -415,13 +424,18 @@ class App {
 
         this._offlineHandler = () => {
             console.log('[APP] Hálózat offline');
-            this.isOfflineMode = true;
-            localStorage.setItem('offlineMode', 'true');
-            this.config.setSupabaseEnabled(false);
+            const isSupabaseConfigured = localStorage.getItem('supabase_use') === 'true' && 
+                                         localStorage.getItem('supabase_url') && 
+                                         localStorage.getItem('supabase_key');
+            if (!isSupabaseConfigured) {
+                this.isOfflineMode = true;
+                localStorage.setItem('offlineMode', 'true');
+                this.config.setSupabaseEnabled(false);
+            }
             this.updateOnlineStatus(false);
             this.offline.showBanner();
             this.hmiNotif.showToast('📡 Internetkapcsolat megszakadt – offline mód', 'warning');
-            this.logger?.log('system', 'warn', 'Internetkapcsolat megszakadt. A rendszer offline módba kényszerült.');
+            this.logger?.log('system', 'warn', 'Internetkapcsolat megszakadt. A rendszer offline módba lépett.');
         };
 
         window.addEventListener('online', this._onlineHandler);
@@ -1454,7 +1468,7 @@ function initDebugPanel() {
     });
 
     // Supabase Ping / Kapcsolati teszt
-    const btnTestSupa = document.getElementById('btnTestSupabaseConn');
+    const btnTestSupa = document.getElementById('btnTestSupabaseConnDebug');
     btnTestSupa?.addEventListener('click', async () => {
         const app = window.app;
         if (!app) return;
@@ -1495,6 +1509,70 @@ function initDebugPanel() {
         } catch(err) {
             resultDiv.className = "p-3 rounded-lg text-xs font-mono bg-rose-50 text-rose-800 border border-rose-200";
             resultDiv.textContent = `🔴 HÁLÓZATI HIBA!\nNem sikerült elérni a megadott Supabase címet.\n\nRészletek: ${err.message}\n\nJavaslat: Ellenőrizd az URL formátumát (pl. https://xxx.supabase.co)!`;
+        }
+    });
+
+    // Supabase felhő adatbázis teljes törlése (RESET)
+    const btnWipeSupa = document.getElementById('btnWipeSupabaseCloudDebug');
+    btnWipeSupa?.addEventListener('click', async () => {
+        const app = window.app;
+        if (!app) return;
+
+        const resultDiv = document.getElementById('debugSupabaseWipeResult');
+        if (!resultDiv) return;
+
+        const url = app.config?.supabaseConfig?.url;
+        const key = app.config?.supabaseConfig?.key;
+
+        if (!url || !key) {
+            resultDiv.classList.remove('hidden');
+            resultDiv.className = "p-3 rounded-lg text-xs font-mono bg-red-50 text-red-800 border border-red-200 mt-2";
+            resultDiv.textContent = "Hiba: Supabase URL és Key nincs megadva a Beállításokban!";
+            return;
+        }
+
+        // Külön ablak / Input modal a jelszó bekérésére
+        const password = await app.hmiNotif.showInputModal({
+            title: '🔑 Felhő RESET Megerősítése',
+            label: 'Ez a művelet TELJESEN és visszafordíthatatlanul törli a felhő adatbázis összes táblájának tartalmát! Kérjük, írd be a jelszót a folytatáshoz:',
+            placeholder: 'Jelszó...',
+            inputType: 'text',
+            confirmText: 'MINDEN TÖRÖLVE LEGYEN'
+        });
+
+        if (!password) {
+            app.hmiNotif.showToast('Törlés megszakítva', 'info');
+            return;
+        }
+
+        // A kért jelszó ellenőrzése: " !!most minden torles!! " (trimmed vagy pontos egyezés)
+        if (password !== '!!most minden torles!!' && password !== ' !!most minden torles!! ') {
+            app.hmiNotif.showToast('❌ Hibás jelszó! A törlés elutasítva.', 'error');
+            resultDiv.classList.remove('hidden');
+            resultDiv.className = "p-3 rounded-lg text-xs font-mono bg-red-50 text-red-800 border border-red-200 mt-2";
+            resultDiv.textContent = "Hiba: Érvénytelen jelszó a felhő reseteléshez!";
+            return;
+        }
+
+        // Jelszó helyes, indítsuk el a törlést!
+        resultDiv.classList.remove('hidden');
+        resultDiv.className = "p-3 rounded-lg text-xs font-mono bg-amber-50 text-amber-800 border border-amber-200 mt-2";
+        resultDiv.textContent = "Felhő törlése folyamatban...";
+        app.hmiNotif.showToast('Felhő adatbázis törlése indítva...', 'info');
+
+        try {
+            if (!app.syncService?.cloud) {
+                throw new Error('Felhő szinkronizációs modul nem érhető el!');
+            }
+            await app.syncService.cloud.wipeCloudDatabase();
+
+            resultDiv.className = "p-3 rounded-lg text-xs font-mono bg-emerald-50 text-emerald-800 border border-emerald-200 mt-2";
+            resultDiv.textContent = `🟢 SIKERES FELHŐ RESET!\nA Supabase felhő adatbázisból minden adat sikeresen törlésre került (mind a 8 tábla kiürítve).`;
+            app.hmiNotif.showToast('🟢 Felhő adatbázis sikeresen törölve!', 'success');
+        } catch (err) {
+            resultDiv.className = "p-3 rounded-lg text-xs font-mono bg-rose-50 text-rose-800 border border-rose-200 mt-2";
+            resultDiv.textContent = `🔴 RESET HIBA!\nHiba történt a felhő törlése közben.\n\nRészletek: ${err.message || err}`;
+            app.hmiNotif.showToast('🔴 Felhő törlési hiba!', 'error');
         }
     });
 
@@ -1781,7 +1859,19 @@ CREATE TABLE IF NOT EXISTS incoming_senders (
 );
 ALTER TABLE incoming_senders ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Mindenki elérheti" ON incoming_senders;
-CREATE POLICY "Mindenki elérheti" ON incoming_senders FOR ALL USING (true) WITH CHECK (true);`;
+CREATE POLICY "Mindenki elérheti" ON incoming_senders FOR ALL USING (true) WITH CHECK (true);
+
+-- 8. DELETED_RECORDS (Törölt rekordok követése - Tombstone)
+CREATE TABLE IF NOT EXISTS deleted_records (
+    id TEXT PRIMARY KEY,
+    record_id TEXT NOT NULL,
+    table_name TEXT NOT NULL,
+    deleted_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE deleted_records ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Mindenki elérheti" ON deleted_records;
+CREATE POLICY "Mindenki elérheti" ON deleted_records FOR ALL USING (true) WITH CHECK (true);`;
 }
 
 // ================================================================

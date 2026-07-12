@@ -51,15 +51,12 @@ export class DataMaintenanceController {
             const dbRaw = this.app.db.db || this.app.db._db;
             if (!dbRaw) throw new Error('Nincs adatbázis kapcsolat!');
 
-            const tx = dbRaw.transaction([
-                'items',
-                'months',
-                'entries',
-                'templates',
-                'reminders',
-                'incomings',
-                'incoming_senders'
-            ], 'readwrite');
+            const activeStores = ['items', 'months', 'entries', 'templates', 'reminders', 'incomings', 'incoming_senders'];
+            if (dbRaw.objectStoreNames.contains('deleted_records')) {
+                activeStores.push('deleted_records');
+            }
+
+            const tx = dbRaw.transaction(activeStores, 'readwrite');
 
             tx.objectStore('items').clear();
             tx.objectStore('months').clear();
@@ -68,11 +65,24 @@ export class DataMaintenanceController {
             tx.objectStore('reminders').clear();
             tx.objectStore('incomings').clear();
             tx.objectStore('incoming_senders').clear();
+            if (dbRaw.objectStoreNames.contains('deleted_records')) {
+                tx.objectStore('deleted_records').clear();
+            }
 
             await new Promise((resolve, reject) => {
                 tx.oncomplete = resolve;
                 tx.onerror = () => reject(tx.error);
             });
+
+            // Függő offline változtatások törlése
+            if (this.app.offline && typeof this.app.offline.clearPendingChanges === 'function') {
+                this.app.offline.clearPendingChanges();
+            }
+
+            // Supabase hiányzó táblák státuszának visszaállítása (mivel az adatbázis tiszta lappal indul)
+            if (this.app.syncService && this.app.syncService.cloud) {
+                this.app.syncService.cloud.tablesMissing = false;
+            }
 
             // Memória és UI frissítés
             await Promise.all([

@@ -133,6 +133,23 @@ export class OfflineHandler {
     }
 
     /**
+     * Függő offline változtatások teljes törlése
+     */
+    clearPendingChanges() {
+        this.pendingChanges = {
+            items: [],
+            months: [],
+            entries: [],
+            templates: [],
+            reminders: [],
+            incomings: [],
+            incoming_senders: []
+        };
+        this._saveToStorage();
+        console.log('[OFFLINE] Függő változtatások sikeresen kiürítve');
+    }
+
+    /**
      * Függő változtatások listája (részletesen)
      */
     getPendingDetails() {

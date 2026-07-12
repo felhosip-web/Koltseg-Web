@@ -1,8 +1,37 @@
 {
-  "version": "4.3.3",
-  "build": "2026-07-09T08:00:00.000Z",
+  "version": "4.3.6",
+  "build": "2026-07-12T14:46:00.000Z",
   "release": "stable",
   "changelog": [
+    {
+      "version": "4.3.6",
+      "date": "2026-07-12",
+      "changes": [
+        "✅ Biztonságos felhő adatbázis törlés (Wipe/RESET) megvalósítása a fejlesztői és debug panelen",
+        "✅ Kétlépcsős megerősítési folyamat egyedi, biztonságos feloldó jelszóval (' !!most minden torles!! ')",
+        "✅ Adatbázis szoftveres verziószám és változásnapló frissítése 4.3.6-ra"
+      ]
+    },
+    {
+      "version": "4.3.5",
+      "date": "2026-07-12",
+      "changes": [
+        "✅ Interaktív Ütközésfeloldó Panel (Conflict Resolution UI) fejlesztése és beépítése",
+        "✅ Tombstone alapú megbízható fizikai törlések (deleted_records tábla) kétirányú szinkronizációja",
+        "✅ Automatizált adatbázis séma-verzió követés és migrációs réteg bevezetése (IndexedDB v9-re emelés)",
+        "✅ Supabase SQL sémamásoló szkript kiterjesztése a törölt rekordok automatikus követésére"
+      ]
+    },
+    {
+      "version": "4.3.4",
+      "date": "2026-07-12",
+      "changes": [
+        "✅ Supabase kétirányú Pull és Push szinkronizáció teljes körű javítása és optimalizálása",
+        "✅ Automatikus táblahiba detektálás (pl. ha a táblák nincsenek létrehozva a Supabase-ben) és kiemelt figyelmeztetés a szinkronizációs panelen",
+        "✅ Gyors sémamásolás és diagnosztikai parancsikonok elhelyezése közvetlenül a figyelmeztetésekben",
+        "✅ Időtúllépés (Timeout) elleni védelem és párhuzamos lekérdezések a gyorsabb és megbízhatóbb kapcsolatellenőrzésért"
+      ]
+    },
     {
       "version": "4.3.3",
       "date": "2026-07-09",

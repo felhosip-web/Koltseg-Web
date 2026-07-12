@@ -9,10 +9,19 @@ export class SyncService {
         this.offline = offlineHandler;
         this.cloud = new CloudSync(configManager);
         this.isSyncing = false;
-        this.lastSyncTime = null;
+        
+        // ===== ÚJ: LAST SYNC TIME PERSISTENCE =====
+        try {
+            const savedTime = localStorage.getItem('hmi_lastSyncTime');
+            this.lastSyncTime = savedTime ? new Date(savedTime) : null;
+        } catch (e) {
+            this.lastSyncTime = null;
+        }
+        
         this.syncResults = null;
         this.currentSyncConflicts = [];
         this.lastSyncConflicts = [];
+        this.unresolvedConflicts = []; // ÚJ: Interaktív ütközések listája
         // ===== ÚJ: SYNC QUEUE =====
         this._syncQueue = [];
         this._queueListeners = [];
@@ -287,6 +296,50 @@ export class SyncService {
     }
 
     /**
+     * Pull művelet (letöltés felhőből) - párhuzamosítva és timeout-tal védve
+     */
+    async pull(storeName) {
+        if (!this.cloud.client || !this.config.useSupabase) return [];
+        
+        const withTimeout = (promise, ms = 4000) => {
+            let timeoutId;
+            const timeoutPromise = new Promise((_, reject) => {
+                timeoutId = setTimeout(() => {
+                    reject(new Error(`Időtúllépés (${ms}ms)`));
+                }, ms);
+            });
+            return Promise.race([promise, timeoutPromise]).finally(() => {
+                clearTimeout(timeoutId);
+            });
+        };
+
+        try {
+            if (storeName === 'all') {
+                const results = {};
+                const tables = ['items', 'months', 'entries', 'templates', 'reminders', 'incomings', 'incoming_senders', 'deleted_records'];
+                
+                // Párhuzamos lekérdezés minden táblára, 4 mp-es timeouttal
+                await Promise.all(
+                    tables.map(async (table) => {
+                        try {
+                            const data = await withTimeout(this.cloud.pull(table), 4000);
+                            results[table] = data || [];
+                        } catch (err) {
+                            console.warn(`[SYNC] Pull hiba/időtúllépés a(z) ${table} táblánál:`, err);
+                            results[table] = [];
+                        }
+                    })
+                );
+                return results;
+            }
+            return await withTimeout(this.cloud.pull(storeName), 4000);
+        } catch (err) {
+            console.warn(`[SYNC] Pull hiba a(z) ${storeName} táblánál:`, err);
+            return [];
+        }
+    }
+
+    /**
      * Teljes kétirányú szinkronizáció push + pull + merge
      * (módosítva: queue feldolgozással)
      */
@@ -341,7 +394,7 @@ export class SyncService {
 
             // === 4. PULL: ADATOK LETÖLTÉSE A FELHŐBŐL ===
             console.log('[SYNC] ⬇️ Pull: Adatok letöltése a felhőből...');
-            const tables = ['items', 'months', 'entries', 'templates', 'reminders', 'incomings', 'incoming_senders'];
+            const tables = ['items', 'months', 'entries', 'templates', 'reminders', 'incomings', 'incoming_senders', 'deleted_records'];
             const cloudData = {};
 
             for (const table of tables) {
@@ -360,6 +413,9 @@ export class SyncService {
             // === 5. MERGE: ADATOK ÖSSZEFÉSÜLÉSE ===
             console.log('[SYNC] 🔀 Merge: Adatok összefésülése...');
             
+            const app = this._getApp();
+            const localDeletedRecords = app && app.db ? await app.db.getAll('deleted_records') : [];
+
             const localData = {
                 items: this._getLocalData('items'),
                 months: this._getLocalData('months'),
@@ -367,12 +423,14 @@ export class SyncService {
                 templates: this._getLocalData('templates'),
                 reminders: this._getLocalData('reminders'),
                 incomings: this._getLocalData('incomings'),
-                incoming_senders: this._getLocalData('incoming_senders')
+                incoming_senders: this._getLocalData('incoming_senders'),
+                deleted_records: localDeletedRecords
             };
 
             const mergedData = {};
             let mergedCount = 0;
             this.currentSyncConflicts = [];
+            this.unresolvedConflicts = []; // Kezdjük tiszta lappal
 
             for (const table of tables) {
                 const local = localData[table] || [];
@@ -384,6 +442,45 @@ export class SyncService {
                 
                 results.tables[table].merged = merged.length;
                 console.log(`[SYNC] 🔀 ${table}: ${local.length} helyi + ${cloud.length} felhő → ${merged.length} merged`);
+            }
+
+            // === 5.1. INTERAKTÍV ÜTKÖZÉSEK KEZELÉSE ===
+            if (this.unresolvedConflicts.length > 0) {
+                console.log(`[SYNC] ⚠️ ${this.unresolvedConflicts.length} interaktív feloldásra váró ütközés detektálva!`);
+                try {
+                    const resolutions = await this._showConflictResolutionModal(this.unresolvedConflicts);
+                    this._applyConflictResolutions(mergedData, resolutions);
+                } catch (err) {
+                    console.warn('[SYNC] Szinkronizáció megszakítva ütközésfeloldás közben:', err);
+                    throw err; // Visszaadjuk a hibaüzenetet az UI-nak
+                }
+            }
+
+            // === 5.2. TOMBSTONE TÖRLÉSEK ALKALMAZÁSA ===
+            const mergedTombstones = mergedData.deleted_records || [];
+            console.log(`[SYNC] 🧹 ${mergedTombstones.length} tombstone rekord feldolgozása...`);
+            for (const tombstone of mergedTombstones) {
+                const targetTable = tombstone.table_name;
+                const targetId = tombstone.record_id;
+                
+                if (targetTable && targetId && targetTable !== 'deleted_records') {
+                    const keyField = targetTable === 'months' ? 'month' : 'id';
+                    
+                    // Kiszűrjük a mergedData-ból
+                    if (mergedData[targetTable]) {
+                        mergedData[targetTable] = mergedData[targetTable].filter(item => String(item[keyField]) !== String(targetId));
+                    }
+                    
+                    // Fizikailag töröljük a helyi IndexedDB-ből is
+                    try {
+                        const key = (targetTable === 'months') ? targetId : (isNaN(Number(targetId)) ? targetId : Number(targetId));
+                        if (app && app.db) {
+                            await app.db._directDelete(targetTable, key);
+                        }
+                    } catch (e) {
+                        console.warn(`[SYNC] Hiba a tombstone fizikai törlése közben: ${targetTable} / ${targetId}`, e);
+                    }
+                }
             }
 
             this.lastSyncConflicts = [...this.currentSyncConflicts];
@@ -424,6 +521,11 @@ export class SyncService {
 
             // === 9. BEFEJEZÉS ===
             this.lastSyncTime = new Date();
+            try {
+                localStorage.setItem('hmi_lastSyncTime', this.lastSyncTime.toISOString());
+            } catch (e) {
+                console.warn('[SYNC] Nem sikerült elmenteni a hmi_lastSyncTime-ot:', e);
+            }
             results.endTime = this.lastSyncTime.toISOString();
             results.duration = (new Date(results.endTime) - new Date(results.startTime)) / 1000 + 's';
             
@@ -551,22 +653,44 @@ export class SyncService {
                     const label = keyMap[key].name || keyMap[key].item || keyMap[key].comment || key;
                     const resLabel = cloudTime > localTime ? 'Felhő nyert (frissebb)' : 'Helyi nyert (frissebb)';
                     
-                    const conflict = {
-                        table,
-                        key,
-                        label,
-                        localTime: localTime.toISOString(),
-                        cloudTime: cloudTime.toISOString(),
-                        resolvedBy: cloudTime > localTime ? 'cloud' : 'local',
-                        resolution: resLabel
-                    };
-                    if (this.currentSyncConflicts) {
-                        this.currentSyncConflicts.push(conflict);
-                    }
+                    // Valódi ütközés: Mindkét fél módosított az utolsó sikeres szinkron óta, és a tábla nem a deleted_records
+                    const isRealConflict = this.lastSyncTime && 
+                                           (localTime > this.lastSyncTime) && 
+                                           (cloudTime > this.lastSyncTime) &&
+                                           table !== 'deleted_records';
 
-                    const app = this._getApp();
-                    if (app?.logger) {
-                        app.logger.log('conflict', 'conflict', `Ütközés feloldva a(z) '${table}' táblában (${label}). Helyi: ${localTime.toLocaleTimeString('hu-HU')} vs Felhő: ${cloudTime.toLocaleTimeString('hu-HU')} -> ${resLabel}`);
+                    if (isRealConflict) {
+                        if (!this.unresolvedConflicts) {
+                            this.unresolvedConflicts = [];
+                        }
+                        this.unresolvedConflicts.push({
+                            table,
+                            key,
+                            label,
+                            localItem: { ...keyMap[key] },
+                            cloudItem: { ...item },
+                            localTime: localTime.toISOString(),
+                            cloudTime: cloudTime.toISOString(),
+                            resolvedValue: null
+                        });
+                    } else {
+                        const conflict = {
+                            table,
+                            key,
+                            label,
+                            localTime: localTime.toISOString(),
+                            cloudTime: cloudTime.toISOString(),
+                            resolvedBy: cloudTime > localTime ? 'cloud' : 'local',
+                            resolution: resLabel
+                        };
+                        if (this.currentSyncConflicts) {
+                            this.currentSyncConflicts.push(conflict);
+                        }
+
+                        const app = this._getApp();
+                        if (app?.logger) {
+                            app.logger.log('conflict', 'conflict', `Ütközés feloldva a(z) '${table}' táblában (${label}). Helyi: ${localTime.toLocaleTimeString('hu-HU')} vs Felhő: ${cloudTime.toLocaleTimeString('hu-HU')} -> ${resLabel}`);
+                        }
                     }
                 }
 
@@ -745,5 +869,197 @@ export class SyncService {
             this.offline.addPendingChange(table, 'update', data);
             throw err;
         }
+    }
+
+    _showConflictResolutionModal(conflicts) {
+        return new Promise((resolve, reject) => {
+            const modal = document.getElementById('conflictModal');
+            if (!modal) {
+                console.warn('[SYNC] Conflict modal not found, falling back to LWW');
+                resolve(conflicts.map(c => ({ ...c, resolvedValue: c.cloudTime > c.localTime ? 'cloud' : 'local' })));
+                return;
+            }
+
+            // Populate last sync time
+            const timeSpan = document.getElementById('conflictLastSyncTime');
+            if (timeSpan) {
+                timeSpan.textContent = this.lastSyncTime ? this.lastSyncTime.toLocaleString('hu-HU') : 'ismeretlen';
+            }
+
+            // Render conflicts list
+            const listContainer = document.getElementById('conflictList');
+            if (!listContainer) {
+                resolve(conflicts.map(c => ({ ...c, resolvedValue: c.cloudTime > c.localTime ? 'cloud' : 'local' })));
+                return;
+            }
+
+            listContainer.innerHTML = '';
+            
+            conflicts.forEach((conflict, idx) => {
+                const itemDiv = document.createElement('div');
+                itemDiv.className = 'border border-gray-200 rounded-[20px] p-4 bg-gray-50/50 space-y-3';
+                
+                const localDateStr = new Date(conflict.localTime).toLocaleString('hu-HU');
+                const cloudDateStr = new Date(conflict.cloudTime).toLocaleString('hu-HU');
+                const tableNameHu = this._getTableNameHu(conflict.table);
+                
+                itemDiv.innerHTML = `
+                    <div class="flex items-center justify-between">
+                        <span class="text-[10px] font-black uppercase px-2 py-1 bg-amber-100 text-amber-800 rounded-lg">${tableNameHu}</span>
+                        <span class="text-[10px] font-mono text-gray-400">ID: ${conflict.key}</span>
+                    </div>
+                    <div class="font-bold text-gray-800 text-xs">${conflict.label}</div>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2 text-xs">
+                        <!-- Local choice -->
+                        <label class="flex items-start gap-3 p-3 bg-white border border-gray-100 rounded-xl hover:border-amber-500 cursor-pointer transition">
+                            <input type="radio" name="conflict_${idx}" value="local" checked class="mt-0.5 text-amber-500 focus:ring-amber-500">
+                            <div class="space-y-1">
+                                <span class="font-bold text-indigo-600 block">Helyi verzió</span>
+                                <span class="text-[9px] text-gray-400 block">${localDateStr}</span>
+                                <span class="text-gray-600 block truncate max-w-[200px]" title='${this._getRecordSummary(conflict.localItem)}'>
+                                    ${this._getRecordSummary(conflict.localItem)}
+                                </span>
+                            </div>
+                        </label>
+                        
+                        <!-- Cloud choice -->
+                        <label class="flex items-start gap-3 p-3 bg-white border border-gray-100 rounded-xl hover:border-amber-500 cursor-pointer transition">
+                            <input type="radio" name="conflict_${idx}" value="cloud" class="mt-0.5 text-amber-500 focus:ring-amber-500">
+                            <div class="space-y-1">
+                                <span class="font-bold text-emerald-600 block">Felhő verzió</span>
+                                <span class="text-[9px] text-gray-400 block">${cloudDateStr}</span>
+                                <span class="text-gray-600 block truncate max-w-[200px]" title='${this._getRecordSummary(conflict.cloudItem)}'>
+                                    ${this._getRecordSummary(conflict.cloudItem)}
+                                </span>
+                            </div>
+                        </label>
+                    </div>
+                `;
+                listContainer.appendChild(itemDiv);
+            });
+
+            // Show modal
+            modal.classList.remove('hidden');
+
+            const btnKeepAllLocal = document.getElementById('btnKeepAllLocal');
+            const btnKeepAllCloud = document.getElementById('btnKeepAllCloud');
+            const btnResolveConflicts = document.getElementById('btnResolveConflicts');
+            const btnCloseConflictModal = document.getElementById('btnCloseConflictModal');
+
+            const handleKeepAll = (side) => {
+                conflicts.forEach((_, idx) => {
+                    const radios = document.getElementsByName(`conflict_${idx}`);
+                    radios.forEach(r => {
+                        if (r.value === side) r.checked = true;
+                    });
+                });
+            };
+
+            const keepLocalHandler = () => handleKeepAll('local');
+            const keepCloudHandler = () => handleKeepAll('cloud');
+            
+            const resolveHandler = () => {
+                const resolved = conflicts.map((conflict, idx) => {
+                    const radios = document.getElementsByName(`conflict_${idx}`);
+                    let chosen = 'local';
+                    radios.forEach(r => {
+                        if (r.checked) chosen = r.value;
+                    });
+                    return {
+                        ...conflict,
+                        resolvedValue: chosen
+                    };
+                });
+                cleanup();
+                resolve(resolved);
+            };
+
+            const closeHandler = () => {
+                cleanup();
+                reject(new Error('A felhasználó megszakította a szinkronizációt az ütközések miatt.'));
+            };
+
+            const cleanup = () => {
+                modal.classList.add('hidden');
+                btnKeepAllLocal?.removeEventListener('click', keepLocalHandler);
+                btnKeepAllCloud?.removeEventListener('click', keepCloudHandler);
+                btnResolveConflicts?.removeEventListener('click', resolveHandler);
+                btnCloseConflictModal?.removeEventListener('click', closeHandler);
+            };
+
+            btnKeepAllLocal?.addEventListener('click', keepLocalHandler);
+            btnKeepAllCloud?.addEventListener('click', keepCloudHandler);
+            btnResolveConflicts?.addEventListener('click', resolveHandler);
+            btnCloseConflictModal?.addEventListener('click', closeHandler);
+        });
+    }
+
+    _applyConflictResolutions(mergedData, resolutions) {
+        resolutions.forEach(res => {
+            const { table, key, resolvedValue, localItem, cloudItem } = res;
+            const items = mergedData[table] || [];
+            const keyField = table === 'months' ? 'month' : 'id';
+            
+            const index = items.findIndex(item => item[keyField] === key);
+            if (index !== -1) {
+                if (resolvedValue === 'local') {
+                    items[index] = {
+                        ...localItem,
+                        _source: 'merged (local wins)',
+                        _updated_at: new Date().toISOString()
+                    };
+                    this.currentSyncConflicts.push({
+                        table,
+                        key,
+                        label: res.label,
+                        localTime: res.localTime,
+                        cloudTime: res.cloudTime,
+                        resolvedBy: 'local',
+                        resolution: 'Helyi nyert (felhasználó döntése)'
+                    });
+                } else {
+                    items[index] = {
+                        ...cloudItem,
+                        _source: 'merged (cloud wins)',
+                        _updated_at: new Date().toISOString()
+                    };
+                    this.currentSyncConflicts.push({
+                        table,
+                        key,
+                        label: res.label,
+                        localTime: res.localTime,
+                        cloudTime: res.cloudTime,
+                        resolvedBy: 'cloud',
+                        resolution: 'Felhő nyert (felhasználó döntése)'
+                    });
+                }
+            }
+        });
+    }
+
+    _getTableNameHu(table) {
+        switch (table) {
+            case 'entries': return 'Tételek';
+            case 'items': return 'Kategóriák';
+            case 'months': return 'Hónapok';
+            case 'templates': return 'Sablonok';
+            case 'reminders': return 'Emlékeztetők';
+            case 'incomings': return 'Bejövő utalások';
+            case 'incoming_senders': return 'Partnerek';
+            default: return table;
+        }
+    }
+
+    _getRecordSummary(item) {
+        if (!item) return '';
+        const parts = [];
+        if (item.amount !== undefined) parts.push(`${Number(item.amount).toLocaleString('hu-HU')} Ft`);
+        if (item.category !== undefined) parts.push(item.category);
+        if (item.comment !== undefined && item.comment) parts.push(item.comment);
+        if (item.name !== undefined && item.name) parts.push(item.name);
+        if (item.title !== undefined && item.title) parts.push(item.title);
+        if (item.sender !== undefined && item.sender) parts.push(item.sender);
+        return parts.join(' - ') || JSON.stringify(item);
     }
 }

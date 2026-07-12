@@ -178,6 +178,18 @@ export class UIModalController {
         });
     }
 
+    // ==================== ÁLTALÁNOS ÉRTESÍTÉS METÓDUS ====================
+    showNotification(title, message, type = 'info') {
+        const mappedType = type === 'error' || type === 'danger' ? 'danger' : (type === 'success' ? 'success' : 'info');
+        return this.showConfirm({
+            title,
+            message,
+            type: mappedType,
+            confirmText: 'Rendben',
+            showCancel: false
+        });
+    }
+
     // ==================== INFORMÁCIÓS MEGERŐSÍTÉS ====================
     showInfo(title, message) {
         return this.showConfirm({

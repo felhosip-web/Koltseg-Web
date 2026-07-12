@@ -130,7 +130,39 @@ export const HELP_SECTIONS = [
         description: "Az alkalmazás legújabb funkciói, javításai és a verziótörténet részletes listája.",
         articles: [
             {
-                title: "v4.3.3 — Megjelenés Testreszabás & Fejlesztői Eszközök (Aktuális verzió)",
+                title: "v4.3.6 — Biztonságos Felhő RESET & Debug Eszközök (Aktuális verzió)",
+                content: `<strong>Megjelenés:</strong> 2026-07-12<br><br>
+                <strong>Újdonságok és fejlesztések:</strong>
+                <ul class="list-disc pl-5 mt-2 space-y-1">
+                    <li><strong>Biztonságos Felhő RESET:</strong> Új funkció a Fejlesztői & Debug Panel "Supabase Felhő" fülén, amellyel egyetlen gombnyomással teljesen és tisztára törölhető a teljes felhőbéli Supabase adatbázis (mind a 8 tábla).</li>
+                    <li><strong>Kétlépcsős biztonsági megerősítés:</strong> A véletlen törlések elkerülése érdekében a RESET folyamat egy külön ablakban megnyíló, egyedi feloldó jelszót kér a felhasználótól: <code> !!most minden torles!! </code>.</li>
+                    <li><strong>Komplex tisztítás:</strong> A törlés kiüríti az összes lokális függő offline változtatást és visszaállítja a hiányzó táblák (tablesMissing) állapotjelzőit is az azonnali, tiszta újrakezdéshez.</li>
+                </ul>`
+            },
+            {
+                title: "v4.3.5 — Interaktív Ütközésfeloldás & Tombstone Törlés",
+                content: `<strong>Megjelenés:</strong> 2026-07-12<br><br>
+                <strong>Újdonságok és fejlesztések:</strong>
+                <ul class="list-disc pl-5 mt-2 space-y-1">
+                    <li><strong>Interaktív Ütközésfeloldó Panel (Conflict Resolution UI):</strong> Ha ugyanaz az adat a helyi eszközön és a felhőben is módosult az utolsó szinkronizáció óta, egy gyönyörű, áttekinthető modal ablakban választhatja ki, melyik verziót szeretné megtartani.</li>
+                    <li><strong>Tombstone-alapú fizikai törlés:</strong> Bevezettük a törölt tételek precíz követését (deleted_records tábla), így ha egy elemet letöröl az egyik eszközén, a szinkronizáció során az a többi eszközéről is fizikailag és biztonságosan törlődik.</li>
+                    <li><strong>Séma-verzió követés és migrációs réteg:</strong> Az IndexedDB adatbázis sémát v9-re emeltük, és automatizált migrációs logikával egészítettük ki az offline-first stabilitásért.</li>
+                    <li><strong>SQL séma kiterjesztés:</strong> A fejlesztői és hibakereső panelen kimásolható SQL séma frissült a törölt rekordok automatikus követését biztosító táblával.</li>
+                </ul>`
+            },
+            {
+                title: "v4.3.4 — Robusztus Szinkronizáció & Supabase Diagnosztika",
+                content: `<strong>Megjelenés:</strong> 2026-07-12<br><br>
+                <strong>Újdonságok és fejlesztések:</strong>
+                <ul class="list-disc pl-5 mt-2 space-y-1">
+                    <li><strong>Időtúllépés-védelem (Timeout):</strong> Az összes felhőbeli pull művelet 4 másodperces időtúllépési védelemmel és párhuzamos lekérdezéssel lett felvértezve, így egy esetlegesen akadozó hálózati kapcsolat nem fagyasztja be az ellenőrzést.</li>
+                    <li><strong>Automatikus Táblahiba Detektálás:</strong> A rendszer valós időben felismeri, ha a Supabase adatbázisban még nincsenek létrehozva a szükséges táblák (pl. új Supabase fiók vagy friss telepítés esetén).</li>
+                    <li><strong>Kiemelt Figyelmeztető Panel:</strong> Ha a táblák hiányoznak, a szinkronizációs panelen azonnal megjelenik egy kiemelt piros figyelmeztetés, ahonnan egyetlen kattintással kimásolható a szükséges SQL séma és elérhető a diagnosztika.</li>
+                    <li><strong>Kétirányú adatbiztonság:</strong> Optimalizáltuk a felhőbeli egyedi sor-upsert és delete metódusok hibakezelését és állapot-szinkronizációját.</li>
+                </ul>`
+            },
+            {
+                title: "v4.3.3 — Megjelenés Testreszabás & Fejlesztői Eszközök",
                 content: `<strong>Megjelenés:</strong> 2026-07-09<br><br>
                 <strong>Újdonságok és fejlesztések:</strong>
                 <ul class="list-disc pl-5 mt-2 space-y-1">

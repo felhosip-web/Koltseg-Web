@@ -36,7 +36,7 @@ export class SecurityManager {
 }
 
 export class Database {
-    constructor(dbName = 'KoltsegNyilvantarto', version = 8) {  // ← verzió 8-ra emelve
+    constructor(dbName = 'KoltsegNyilvantarto', version = 9) {  // ← verzió 9-re emelve
         let finalDbName = dbName;
         try {
             const path = window.location.pathname;
@@ -61,7 +61,8 @@ export class Database {
             templates: {},
             reminders: {},
             incomings: {},
-            incoming_senders: {}
+            incoming_senders: {},
+            deleted_records: {}
         };
         this.mockIdCounter = {};
         console.log('[DB] ℹ️ Memóriabeli adatbázis sikeresen inicializálva.');
@@ -217,6 +218,12 @@ export class Database {
                 console.warn('[DB] Incoming senders index újjáépítési hiba:', err);
             }
         }
+
+        // === deleted_records tábla (v9) ===
+        if (!db.objectStoreNames.contains('deleted_records')) {
+            db.createObjectStore('deleted_records', { keyPath: 'id' });
+            console.log('[DB] deleted_records tábla sikeresen létrehozva (v9)');
+        }
     }
 
     // ================================================================
@@ -306,7 +313,7 @@ export class Database {
         });
     }
 
-    async delete(storeName, key) {
+    async _directDelete(storeName, key) {
         return new Promise((resolve, reject) => {
             if (this.isMock) {
                 if (this.mockStore[storeName]) {
@@ -325,6 +332,31 @@ export class Database {
                 reject(e);
             }
         });
+    }
+
+    async delete(storeName, key) {
+        // Track deletion in tombstone table
+        if (storeName !== 'deleted_records') {
+            try {
+                const deletedRecord = {
+                    id: `${storeName}_${key}`,
+                    record_id: String(key),
+                    table_name: storeName,
+                    deleted_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString()
+                };
+                await this.save('deleted_records', deletedRecord);
+                
+                // Track in Sync Queue
+                const syncService = window.app?.syncService || window.app?.syncManager;
+                if (syncService) {
+                    syncService.addToQueue('delete', { id: key }, storeName, 'high');
+                }
+            } catch (err) {
+                console.warn('[DB] Hiba a törlés naplózásakor:', err);
+            }
+        }
+        return this._directDelete(storeName, key);
     }
 }
 
@@ -539,7 +571,9 @@ export class EntryManager {
 // ==================== 3. CONFIGURATION MANAGER ====================
 export class ConfigManager {
     constructor() {
-        this.eurRate = parseFloat(localStorage.getItem('default_eur_rate')) || 400;
+        this.defaultEurRate = parseFloat(localStorage.getItem('default_eur_rate')) || 400;
+        this.eurRate = parseFloat(localStorage.getItem('live_eur_rate')) || this.defaultEurRate;
+        this.useLiveEur = localStorage.getItem('use_live_eur') !== 'false';
         this.useSupabase = localStorage.getItem('supabase_use') === 'true';
         this.supabaseConfig = {
             url: localStorage.getItem('supabase_url') || '',
@@ -548,6 +582,11 @@ export class ConfigManager {
     }
 
     async watchDogEur(uiCallback) {
+        if (!this.useLiveEur) {
+            this.eurRate = this.defaultEurRate;
+            uiCallback(this.eurRate, 'fallback');
+            return;
+        }
         try {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 3000);
@@ -573,7 +612,7 @@ export class ConfigManager {
 
     saveSettings(settings) {
         if (!settings || typeof settings !== 'object') return false;
-        const { url, key, useCloud, eurRate } = settings;
+        const { url, key, useCloud, eurRate, useLiveEur } = settings;
 
         if (url !== undefined) {
             this.supabaseConfig.url = url;
@@ -588,8 +627,18 @@ export class ConfigManager {
             localStorage.setItem('supabase_use', this.useSupabase ? 'true' : 'false');
         }
         if (eurRate !== undefined) {
-            this.eurRate = Number(eurRate);
-            localStorage.setItem('default_eur_rate', String(this.eurRate));
+            this.defaultEurRate = Number(eurRate);
+            localStorage.setItem('default_eur_rate', String(this.defaultEurRate));
+            if (!this.useLiveEur) {
+                this.eurRate = this.defaultEurRate;
+            }
+        }
+        if (useLiveEur !== undefined) {
+            this.useLiveEur = Boolean(useLiveEur);
+            localStorage.setItem('use_live_eur', this.useLiveEur ? 'true' : 'false');
+            if (!this.useLiveEur) {
+                this.eurRate = this.defaultEurRate;
+            }
         }
 
         return true;
@@ -607,6 +656,7 @@ export class CloudSync {
     constructor(configManager) {
         this.config = configManager;
         this.client = null;
+        this.tablesMissing = false;
         this.init();
     }
 
@@ -626,6 +676,76 @@ export class CloudSync {
             } catch (e) {
                 console.error('[CLOUD] Supabase initialization failed', e);
             }
+        }
+    }
+
+    /**
+     * Egyedi sor beszúrása vagy frissítése a felhőben (hibát dob, ha sikertelen)
+     */
+    async upsert(storeName, data, customKey = 'id') {
+        if (!this.client || !this.config.useSupabase) {
+            throw new Error('Supabase kliens nincs inicializálva vagy ki van kapcsolva');
+        }
+        
+        if (!data || typeof data !== 'object') {
+            throw new Error('Érvénytelen adat az upsert művelethez');
+        }
+
+        try {
+            const { error } = await this.client
+                .from(storeName)
+                .upsert(data, { onConflict: customKey });
+
+            if (error) {
+                if (error.code === '42P01') {
+                    this.tablesMissing = true;
+                }
+                throw error;
+            }
+            console.log(`[CLOUD] ${storeName} egyedi upsert sikeres`);
+        } catch (err) {
+            if (err.code === '42P01' || (err.message && (err.message.includes('relation') || err.message.includes('does not exist')))) {
+                this.tablesMissing = true;
+            }
+            throw err;
+        }
+    }
+
+    /**
+     * Egyedi sor törlése a felhőben (hibát dob, ha sikertelen)
+     */
+    async delete(storeName, data, customKey = 'id') {
+        if (!this.client || !this.config.useSupabase) {
+            throw new Error('Supabase kliens nincs inicializálva vagy ki van kapcsolva');
+        }
+
+        let keyValue = typeof data === 'object' && data !== null ? data[customKey] : data;
+        if (keyValue === undefined && typeof data === 'object' && data !== null) {
+            keyValue = data.id;
+        }
+
+        if (keyValue === undefined || keyValue === null) {
+            throw new Error('Hiányzó kulcsmező a törlés művelethez');
+        }
+
+        try {
+            const { error } = await this.client
+                .from(storeName)
+                .delete()
+                .eq(customKey, keyValue);
+
+            if (error) {
+                if (error.code === '42P01') {
+                    this.tablesMissing = true;
+                }
+                throw error;
+            }
+            console.log(`[CLOUD] ${storeName} egyedi törlés sikeres (${customKey}: ${keyValue})`);
+        } catch (err) {
+            if (err.code === '42P01' || (err.message && (err.message.includes('relation') || err.message.includes('does not exist')))) {
+                this.tablesMissing = true;
+            }
+            throw err;
         }
     }
 
@@ -783,12 +903,20 @@ export class CloudSync {
                 .from(storeName)
                 .select('*');
 
-            if (error) throw error;
+            if (error) {
+                if (error.code === '42P01') {
+                    this.tablesMissing = true;
+                }
+                throw error;
+            }
             console.log(`[CLOUD] ${storeName} pull: ${data?.length || 0} records`);
             return data || [];
 
         } catch (err) {
             console.warn(`[CLOUD] Pull error from ${storeName}:`, err.message);
+            if (err.code === '42P01' || (err.message && (err.message.includes('relation') || err.message.includes('does not exist')))) {
+                this.tablesMissing = true;
+            }
             return [];
         }
     }
@@ -799,6 +927,8 @@ export class CloudSync {
     async pullAll() {
         const tables = ['items', 'months', 'entries', 'templates', 'reminders', 'incomings', 'incoming_senders'];
         const result = {};
+
+        this.tablesMissing = false;
 
         for (const table of tables) {
             result[table] = await this.pull(table);
@@ -838,6 +968,54 @@ export class CloudSync {
             console.warn('[CLOUD] Full sync error:', e);
             return { status: 'error', message: e.message };
         }
+    }
+
+    /**
+     * Teljes felhő adatbázis törlése (minden sor törlése a táblákból)
+     */
+    async wipeCloudDatabase() {
+        if (!this.client || !this.config.useSupabase) {
+            throw new Error('Supabase kliens nincs inicializálva vagy ki van kapcsolva!');
+        }
+
+        const tables = [
+            { name: 'items', key: 'id', type: 'bigint' },
+            { name: 'months', key: 'month', type: 'text' },
+            { name: 'entries', key: 'id', type: 'text' },
+            { name: 'templates', key: 'id', type: 'bigint' },
+            { name: 'reminders', key: 'id', type: 'bigint' },
+            { name: 'incomings', key: 'id', type: 'bigint' },
+            { name: 'incoming_senders', key: 'id', type: 'bigint' },
+            { name: 'deleted_records', key: 'id', type: 'text' }
+        ];
+
+        const errors = [];
+        for (const table of tables) {
+            try {
+                let query = this.client.from(table.name).delete();
+                if (table.type === 'bigint') {
+                    query = query.neq(table.key, -999999);
+                } else {
+                    query = query.neq(table.key, '___non_existent_wipe___');
+                }
+                
+                const { error } = await query;
+                if (error) {
+                    throw error;
+                }
+                console.log(`[CLOUD] ${table.name} tábla összes adata törölve a felhőben.`);
+            } catch (err) {
+                console.error(`[CLOUD] Hiba a ${table.name} tábla törlése közben:`, err);
+                errors.push(`${table.name}: ${err.message || err}`);
+            }
+        }
+
+        if (errors.length > 0) {
+            throw new Error(`Néhány táblát nem sikerült törölni: ${errors.join(', ')}`);
+        }
+        
+        this.tablesMissing = false;
+        return true;
     }
 }
 

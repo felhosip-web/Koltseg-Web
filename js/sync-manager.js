@@ -26,18 +26,87 @@ export class SyncManager {
     }
 
     /**
-     * Csak pull (delegálás)
+     * Csak pull (delegálás + helyi mentés és UI frissítés)
      */
     async executePull() {
         if (!this.service) return [];
-        return this.service.pull('all');
+        console.log('[SyncManager] executePull() indítása...');
+        
+        if (this.service.cloud) {
+            this.service.cloud.tablesMissing = false;
+        }
+        
+        // 1. Felhő adatok lekérése
+        const cloudData = await this.service.pull('all');
+        console.log('[SyncManager] Felhőből letöltött adatok:', cloudData);
+        
+        // 2. Helyi törölt rekordok betöltése
+        const localDeletedRecords = this.app.db ? await this.app.db.getAll('deleted_records') : [];
+        
+        // 3. Helyi adatok összeszerelése az összefésüléshez
+        const localData = {
+            items: this.service._getLocalData('items'),
+            months: this.service._getLocalData('months'),
+            entries: this.service._getLocalData('entries'),
+            templates: this.service._getLocalData('templates'),
+            reminders: this.service._getLocalData('reminders'),
+            incomings: this.service._getLocalData('incomings'),
+            incoming_senders: this.service._getLocalData('incoming_senders'),
+            deleted_records: localDeletedRecords
+        };
+        
+        // 4. Összefésülés táblánként (felhő/LWW szabályok szerint)
+        const mergedData = {};
+        for (const table of this.tables) {
+            const local = localData[table] || [];
+            const cloud = cloudData[table] || [];
+            
+            const merged = this.service._mergeTable(local, cloud, table);
+            mergedData[table] = merged;
+        }
+        
+        // 5. Tombstone törlések alkalmazása (felhőből érkező törlések törlése helyben)
+        const mergedTombstones = mergedData.deleted_records || [];
+        for (const tombstone of mergedTombstones) {
+            const targetTable = tombstone.table_name;
+            const targetId = tombstone.record_id;
+            
+            if (targetTable && targetId && targetTable !== 'deleted_records') {
+                const keyField = targetTable === 'months' ? 'month' : 'id';
+                if (mergedData[targetTable]) {
+                    mergedData[targetTable] = mergedData[targetTable].filter(item => String(item[keyField]) !== String(targetId));
+                }
+                try {
+                    const key = (targetTable === 'months') ? targetId : (isNaN(Number(targetId)) ? targetId : Number(targetId));
+                    if (this.app.db) {
+                        await this.app.db._directDelete(targetTable, key);
+                    }
+                } catch (e) {
+                    console.warn(`[SyncManager] Tombstone fizikai törlési hiba letöltés közben:`, e);
+                }
+            }
+        }
+        
+        // 6. Összefésült adatok mentése a helyi IndexedDB-be
+        await this.service._saveMergedToLocal(mergedData);
+        
+        // 7. Helyi managerek újratöltése és UI újra-renderelése
+        await this.service._reloadAndRender();
+        
+        console.log('[SyncManager] executePull() sikeresen befejeződött, helyi DB és UI frissítve.');
+        return cloudData;
     }
 
     /**
-     * Csak push (delegálás)
+     * Csak push (delegálás + UI frissítés)
      */
     async executePush() {
         if (!this.service) return;
+        console.log('[SyncManager] executePush() indítása...');
+        
+        if (this.service.cloud) {
+            this.service.cloud.tablesMissing = false;
+        }
         // Push csak akkor működik, ha van adat
         const app = this.app;
         for (const table of this.tables) {
@@ -48,6 +117,9 @@ export class SyncManager {
                 }
             }
         }
+        // Push után is töltsük újra és rendereljük az UI-t, biztos ami biztos
+        await this.service._reloadAndRender();
+        console.log('[SyncManager] executePush() sikeresen befejeződött.');
     }
 
     // ========================================================
@@ -55,39 +127,52 @@ export class SyncManager {
     // ========================================================
 
     /**
-     * Pull statisztikák lekérése (felhőben lévő adatok száma)
+     * Pull statisztikák lekérése (felhőben lévő adatok száma) - párhuzamosítva és timeout-tal védve
      */
     async getPullStats() {
         const stats = {};
         
         if (!this.service) {
             console.warn('[SyncManager] SyncService nem elérhető');
-            // Üres statisztika
             this.tables.forEach(table => stats[table] = 0);
             return stats;
         }
 
-        for (const table of this.tables) {
-            try {
-                // Ha a service-nek van pull metódusa
-                if (typeof this.service.pull === 'function') {
-                    const data = await this.service.pull(table);
-                    stats[table] = data?.length || 0;
-                } 
-                // Ha a service-nek van cloud pull metódusa
-                else if (this.service.cloud && typeof this.service.cloud.pull === 'function') {
-                    const data = await this.service.cloud.pull(table);
-                    stats[table] = data?.length || 0;
-                }
-                // Ha nincs pull, akkor 0
-                else {
+        if (this.service.cloud) {
+            this.service.cloud.tablesMissing = false;
+        }
+
+        const withTimeout = (promise, ms = 4000) => {
+            let timeoutId;
+            const timeoutPromise = new Promise((_, reject) => {
+                timeoutId = setTimeout(() => {
+                    reject(new Error(`Időtúllépés (${ms}ms)`));
+                }, ms);
+            });
+            return Promise.race([promise, timeoutPromise]).finally(() => {
+                clearTimeout(timeoutId);
+            });
+        };
+
+        // Párhuzamos lekérdezés minden táblára, 4 mp-es timeouttal
+        await Promise.all(
+            this.tables.map(async (table) => {
+                try {
+                    if (typeof this.service.pull === 'function') {
+                        const data = await withTimeout(this.service.pull(table), 4000);
+                        stats[table] = data?.length || 0;
+                    } else if (this.service.cloud && typeof this.service.cloud.pull === 'function') {
+                        const data = await withTimeout(this.service.cloud.pull(table), 4000);
+                        stats[table] = data?.length || 0;
+                    } else {
+                        stats[table] = 0;
+                    }
+                } catch (e) {
+                    console.warn(`[SyncManager] Pull stats hiba/időtúllépés a(z) ${table} táblánál:`, e);
                     stats[table] = 0;
                 }
-            } catch (e) {
-                console.warn(`[SyncManager] Pull stats hiba a ${table} táblánál:`, e);
-                stats[table] = 0;
-            }
-        }
+            })
+        );
         
         return stats;
     }
