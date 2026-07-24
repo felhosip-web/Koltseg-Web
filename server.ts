@@ -3,6 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI, Type } from "@google/genai";
+import webpush from 'web-push';
 
 let rootDir = process.cwd();
 try {
@@ -43,14 +44,26 @@ function getGemini(): GoogleGenAI {
 // AI transaction parser route
 app.post('/api/ai/parse', async (req, res) => {
   try {
-    const { text, categories, months, currentDate } = req.body;
-
+    const { text, categories, months, currentDate, aiConfig } = req.body;
     if (!text || typeof text !== 'string') {
       res.status(400).json({ error: 'Text prompt is required and must be a string' });
       return;
     }
 
-    const ai = getGemini();
+    // Determine model
+    const modelToUse = aiConfig?.model || "gemini-3.5-flash";
+
+    // Determine API Key
+    let ai;
+    if (aiConfig?.apiKey && aiConfig.apiKey.trim() !== '') {
+        ai = new GoogleGenAI({ 
+            apiKey: aiConfig.apiKey.trim(),
+            httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
+        });
+    } else {
+        ai = getGemini(); // uses env
+    }
+
 
     const systemInstruction = `You are a precise financial transaction parser. Your job is to parse a natural language input (usually in Hungarian) and structure it as a JSON transaction entry.
 You are given:
@@ -74,7 +87,7 @@ Guidelines:
 - "note": A concise, natural summary or note in Hungarian describing the purpose of the transaction (e.g., "Ebéd", "Fűnyírás", "Villanyszámla").`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
+      model: modelToUse,
       contents: `Input text to parse: "${text}"`,
       config: {
         systemInstruction,
@@ -128,6 +141,139 @@ Guidelines:
   }
 });
 
+// Root developer password verification route for Access Guard emergency unlock and escalation
+app.post('/api/security/verify-root', (req, res) => {
+  try {
+    const { password } = req.body;
+    const rootPassword = process.env.ROOT_DEV_PASSWORD;
+    
+    if (!rootPassword) {
+      res.status(503).json({ success: false, error: 'A root jelszó nincs konfigurálva a szerveren!' });
+      return;
+    }
+    
+    if (password && password.trim() === rootPassword.trim()) {
+      res.json({ success: true, role: 'owner' });
+    } else {
+      res.status(401).json({ success: false, error: 'Helytelen fejlesztői jelszó!' });
+    }
+  } catch (err: any) {
+    console.error('[Verify Root Error]:', err);
+    res.status(500).json({ success: false, error: 'Szerver hiba a jelszó ellenőrzésekor.' });
+  }
+});
+
+// ================================================================
+// === WEB PUSH API ===
+// ================================================================
+
+// VAPID kulcsok (környezeti változókból, vagy alapértelmezett teszt kulcsok)
+const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || '';
+const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || '';
+const VAPID_SUBJECT = process.env.VAPID_SUBJECT || 'mailto:admin@koltsegnyilvantarto.hu';
+
+// In-memory push subscription tároló
+const pushSubscriptions: Map<string, any> = new Map();
+
+// Web Push beállítása
+try {
+  if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
+    webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+    console.log('[PUSH] ✅ Web Push VAPID konfigurálva');
+  } else {
+    console.log('[PUSH] ⚠️ VAPID kulcsok nincsenek beállítva (.env)');
+  }
+} catch (e) {
+  console.log('[PUSH] ℹ️ Hiba a VAPID kulcsok beállításakor:', e);
+}
+
+// VAPID public key kiszolgálása
+app.get('/api/push/vapid-public', (req, res) => {
+  if (!VAPID_PUBLIC_KEY) {
+    res.status(404).json({ error: 'VAPID public key nincs beállítva' });
+    return;
+  }
+  res.json({ publicKey: VAPID_PUBLIC_KEY });
+});
+
+// Push subscription regisztrálása
+app.post('/api/push/subscribe', (req, res) => {
+  try {
+    const subscription = req.body;
+    if (!subscription || !subscription.endpoint) {
+      res.status(400).json({ error: 'Érvénytelen subscription' });
+      return;
+    }
+
+    pushSubscriptions.set(subscription.endpoint, subscription);
+    console.log(`[PUSH] ✅ Új subscription regisztrálva (összesen: ${pushSubscriptions.size})`);
+    res.json({ success: true, count: pushSubscriptions.size });
+  } catch (err: any) {
+    console.error('[PUSH] Subscribe hiba:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Push subscription törlése
+app.post('/api/push/unsubscribe', (req, res) => {
+  try {
+    const { endpoint } = req.body;
+    if (endpoint) {
+      pushSubscriptions.delete(endpoint);
+      console.log(`[PUSH] Subscription törölve (maradt: ${pushSubscriptions.size})`);
+    }
+    res.json({ success: true, count: pushSubscriptions.size });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Push értesítés küldése az összes feliratkozottnak
+app.post('/api/push/send', async (req, res) => {
+  if (!webpush || !VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
+    res.status(503).json({ error: 'Web Push nincs konfigurálva (hiányzó VAPID kulcsok)' });
+    return;
+  }
+
+  try {
+    const payload = JSON.stringify(req.body);
+    const results = { sent: 0, failed: 0, errors: [] as string[] };
+
+    const sendPromises = Array.from(pushSubscriptions.entries()).map(async ([endpoint, subscription]) => {
+      try {
+        await webpush.sendNotification(subscription, payload);
+        results.sent++;
+      } catch (err: any) {
+        results.failed++;
+        results.errors.push(`${endpoint.substring(0, 50)}...: ${err.message}`);
+        
+        // Ha a subscription lejárt vagy érvénytelen, töröljük
+        if (err.statusCode === 404 || err.statusCode === 410) {
+          pushSubscriptions.delete(endpoint);
+          console.log(`[PUSH] Lejárt subscription törölve: ${endpoint.substring(0, 50)}`);
+        }
+      }
+    });
+
+    await Promise.all(sendPromises);
+    console.log(`[PUSH] Küldés kész: ${results.sent} sikeres, ${results.failed} hibás`);
+    res.json(results);
+  } catch (err: any) {
+    console.error('[PUSH] Send hiba:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Push státusz
+app.get('/api/push/status', (req, res) => {
+  res.json({
+    configured: !!(VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY),
+    webpushAvailable: !!webpush,
+    subscriptionCount: pushSubscriptions.size,
+    vapidSubject: VAPID_SUBJECT
+  });
+});
+
 // Individual static folders
 app.use('/css', express.static(path.join(rootDir, 'css')));
 app.use('/js', express.static(path.join(rootDir, 'js')));
@@ -142,6 +288,9 @@ app.get('/service-worker.js', (req, res) => {
 });
 app.get('/version.json', (req, res) => {
   res.sendFile(path.join(rootDir, 'version.json'));
+});
+app.get('/settings.json', (req, res) => {
+  res.sendFile(path.join(rootDir, 'settings.json'));
 });
 app.get('/offline.html', (req, res) => {
   res.sendFile(path.join(rootDir, 'offline.html'));

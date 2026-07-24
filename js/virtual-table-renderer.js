@@ -98,10 +98,88 @@ export class VirtualTableRenderer {
 
         const visibleMonths = months.slice(0, this.loadedMonths);
         visibleMonths.forEach(m => {
-            html += `<th class="px-4 py-4 text-center border-l border-gray-200 min-w-[160px] whitespace-nowrap">${m}</th>`;
+            html += `<th class="px-4 py-4 text-center border-l border-gray-200 min-w-[160px] whitespace-nowrap dblclick-month-purge cursor-pointer hover:bg-red-50/80 transition-colors" data-month="${m}">${m}</th>`;
         });
         html += `</tr>`;
         thead.innerHTML = html;
+        this._attachHeaderEvents();
+    }
+
+    _attachHeaderEvents() {
+        const thead = document.getElementById('vtThead');
+        if (!thead) return;
+
+        thead.querySelectorAll('.dblclick-month-purge').forEach(el => {
+            el.addEventListener('dblclick', (e) => {
+                this.app.uiController.handleMonthDeleteSequence(el.dataset.month);
+            });
+
+            // Hosszú nyomás (longpress) eseménykezelő a hónap törléshez
+            let pressTimer = null;
+            let isLongPressTriggered = false;
+            let startX = 0;
+            let startY = 0;
+
+            const startPress = (e) => {
+                isLongPressTriggered = false;
+                if (e.touches && e.touches[0]) {
+                    startX = e.touches[0].clientX;
+                    startY = e.touches[0].clientY;
+                } else {
+                    startX = e.clientX;
+                    startY = e.clientY;
+                }
+
+                if (pressTimer) clearTimeout(pressTimer);
+                pressTimer = setTimeout(async () => {
+                    isLongPressTriggered = true;
+                    el.classList.add('bg-rose-100');
+                    
+                    try {
+                        await this.app.uiController.handleMonthDeleteSequence(el.dataset.month);
+                        el.classList.remove('bg-rose-100');
+                    } catch (err) {
+                        console.error('[LongPress Month] Hiba:', err);
+                        el.classList.remove('bg-rose-100');
+                    }
+                }, 600);
+            };
+
+            const cancelPress = () => {
+                if (pressTimer) {
+                    clearTimeout(pressTimer);
+                    pressTimer = null;
+                }
+                el.classList.remove('bg-rose-100');
+            };
+
+            const movePress = (e) => {
+                let currentX = 0, currentY = 0;
+                if (e.touches && e.touches[0]) {
+                    currentX = e.touches[0].clientX;
+                    currentY = e.touches[0].clientY;
+                } else {
+                    currentX = e.clientX;
+                    currentY = e.clientY;
+                }
+                if (Math.abs(currentX - startX) > 10 || Math.abs(currentY - startY) > 10) {
+                    cancelPress();
+                }
+            };
+
+            el.addEventListener('mousedown', startPress);
+            el.addEventListener('mouseup', cancelPress);
+            el.addEventListener('mouseleave', cancelPress);
+            el.addEventListener('mousemove', movePress);
+
+            el.addEventListener('touchstart', startPress, { passive: true });
+            el.addEventListener('touchend', (e) => {
+                cancelPress();
+                if (isLongPressTriggered) e.preventDefault();
+            });
+            el.addEventListener('touchmove', movePress, { passive: true });
+            el.addEventListener('touchcancel', cancelPress);
+        });
     }
     
 // 2. RÉSZ: Sorok render, Események, Segédfüggvények, Destroy
@@ -296,24 +374,53 @@ export class VirtualTableRenderer {
         });
 
         let huf = 0, eur = 0;
+        let hasStorno = false;
+        let allStorno = cellEntries.length > 0;
+        let stornoHuf = 0, stornoEur = 0;
+
         cellEntries.forEach(e => {
-            if (e.currency === 'EUR') eur += e.amount;
-            else huf += e.amount;
+            if (e.isStorno) {
+                hasStorno = true;
+                if (e.currency === 'EUR') stornoEur += e.amount;
+                else stornoHuf += e.amount;
+            } else {
+                allStorno = false;
+                if (e.currency === 'EUR') eur += e.amount;
+                else huf += e.amount;
+            }
         });
 
         let style = '';
         const colorEntry = cellEntries.find(e => e.color && e.color !== 'transparent');
         if (colorEntry) style = `background-color: ${colorEntry.color};`;
 
+        // Ha sztornó van, különleges stílust kaphat a cella
+        if (allStorno) {
+            style += 'background-color: rgba(254, 242, 242, 0.6);';
+        }
+
         const eurRate = this.app.config?.eurRate || 400;
         const convertedHuf = Math.round(eur * eurRate);
+        const convertedStornoHuf = Math.round(stornoEur * eurRate);
 
-        const content = (huf + eur === 0)
-            ? `<span class="text-gray-300 text-xl font-light">-</span>`
-            : `<div class="text-xs font-mono leading-tight text-center">
+        let content = '';
+        if (huf + eur === 0) {
+            if (allStorno) {
+                content = `<div class="text-xs font-mono leading-tight text-center text-red-500/70 opacity-65 flex flex-col items-center justify-center line-through decoration-red-500 decoration-1">
+                    <div class="flex items-center gap-1 mb-0.5 text-[9px] font-bold bg-red-100 text-red-600 px-1 rounded"><i class="fas fa-ban"></i> SZTORNÓ</div>
+                    ${stornoHuf ? `<div>${stornoHuf.toLocaleString('hu-HU')} Ft</div>` : ''}
+                    ${stornoEur ? `<div>${stornoEur} EUR<div class="text-[9px] font-normal">(${convertedStornoHuf.toLocaleString('hu-HU')} Ft)</div></div>` : ''}
+                   </div>`;
+            } else {
+                content = `<span class="text-gray-300 text-xl font-light">-</span>`;
+            }
+        } else {
+            content = `<div class="text-xs font-mono leading-tight text-center relative">
                 ${huf ? `<div>${huf.toLocaleString('hu-HU')} Ft</div>` : ''}
                 ${eur ? `<div class="text-emerald-700">${eur} EUR<div class="text-[10px] text-gray-500 font-normal">(${convertedHuf.toLocaleString('hu-HU')} Ft)</div></div>` : ''}
+                ${hasStorno ? `<div class="absolute -top-1 -right-1 text-red-500 text-[10px] bg-red-50 rounded-full w-4 h-4 flex items-center justify-center border border-red-100 shadow-sm" title="Részben sztornózott tételt tartalmaz!"><i class="fas fa-ban"></i></div>` : ''}
                </div>`;
+        }
 
         return `<td class="cell-interactive px-4 py-4 text-center border-l border-gray-100 cursor-pointer w-40 min-w-[160px] max-w-[160px]" 
                     data-cellbasekey="${cellBaseKey}" style="${style}">${content}</td>`;

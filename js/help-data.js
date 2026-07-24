@@ -124,13 +124,119 @@ export const HELP_SECTIONS = [
         ]
     },
     {
+        id: "work_log",
+        title: "💼 Munka Nyilvántartás",
+        icon: "fas fa-briefcase text-emerald-500",
+        description: "Hogyan használd a munka nyilvántartó rendszert a napi feladataid és projektjeid követésére.",
+        articles: [
+            {
+                title: "Mi az a Munka Nyilvántartás?",
+                content: `A Munka Nyilvántartás modul (v5.1.0) segítségével nyomon követheted a napi munkáidat, karbantartásokat, fejlesztéseket vagy tetszőleges projekteket.<br><br>
+                Minden munka bejegyzés tartalmaz egy nevet, részletes feladatleírást, helyszínt, dátumot, tervezett vagy tényleges időtartamot (napokban) és egy aktuális státuszt.`
+            },
+            {
+                title: "Munkák kezelése és szerkesztése",
+                content: `Új munkát az <strong>'Új munka felvitele'</strong> gombbal tudsz rögzíteni. 
+                <br><br>
+                <strong>Műveletek a meglévő bejegyzésekkel:</strong>
+                <ul class="list-disc pl-5 mt-2 space-y-1">
+                    <li><strong>Szerkesztés:</strong> Kattints a sor végén lévő <i class="fas fa-edit text-emerald-600"></i> ikonra, vagy asztali gépen kattints duplán a sorra. Mobilon a sor hosszan tartó megnyomásával is megnyithatod a szerkesztőt.</li>
+                    <li><strong>Törlés:</strong> Nyisd meg a szerkesztőt, majd kattints a bal alsó sarokban található <strong>'Törlés'</strong> gombra és erősítsd meg a szándékod.</li>
+                    <li><strong>Státusz módosítása:</strong> Háromféle státuszt választhatsz: <em>Folyamatban</em> (🟡), <em>Elvégzett</em> (🟢) vagy <em>Meghiúsult</em> (🔴).</li>
+                </ul>`
+            },
+            {
+                title: "Szinkronizáció és offline működés",
+                content: `A munkák nyilvántartása is teljes mértékben támogatja a kétirányú felhőszinkronizációt és az <strong>Offline-First</strong> működést. Internetkapcsolat nélkül az adatok az eszköz belső adatbázisába mentődnek, és amint online állapotba kerülsz, automatikusan felszinkronizálódnak a Supabase felhőbe a többi eszközödre is.`
+            }
+        ]
+    },
+    {
         id: "version_changelog",
         title: "🔄 Verziókövetés & Újdonságok",
         icon: "fas fa-code-branch text-blue-500",
         description: "Az alkalmazás legújabb funkciói, javításai és a verziótörténet részletes listája.",
         articles: [
             {
-                title: "v4.3.6 — Biztonságos Felhő RESET & Debug Eszközök (Aktuális verzió)",
+                title: "v5.2.0 — Központi ModalManager és vizuális tuning (Aktuális verzió)",
+                content: `<strong>Megjelenés:</strong> 2026-07-22<br><br>
+                <strong>Újdonságok és fejlesztések:</strong>
+                <ul class="list-disc pl-5 mt-2 space-y-1">
+                    <li><strong>ModalManager bevezetése:</strong> Központosított logika felel az összes modális ablak megjelenítéséért és elrejtéséért.</li>
+                    <li><strong>Vizuális Tuning:</strong> Elegáns fade-in és scale-up animációkat kaptak a felugró ablakok, javítva a felhasználói élményt.</li>
+                    <li><strong>UX javítások:</strong> Minden modális ablak bezárható az ESC gomb megnyomásával, illetve a háttérre kattintva.</li>
+                    <li><strong>Bugfix:</strong> Javítva a hiba, amely miatt a háttér szinkronizáció feleslegesen duplikálta a queue elemeket újrainduláskor.</li>
+                    <li><strong>Verziószám emelés:</strong> Rendszerszintű verziófrissítés v5.2.0-ra minden felületen.</li>
+                </ul>`
+            },
+            {
+                title: "v5.1.0 — Háttér szinkronizáció, GDrive aszinkron mentés és Hálózat vizualizáció",
+                content: `<strong>Megjelenés:</strong> 2026-07-21<br><br>
+                <strong>Újdonságok és fejlesztések:</strong>
+                <ul class="list-disc pl-5 mt-2 space-y-1">
+                    <li><strong>Google Drive Aszinkron Mentés:</strong> A biztonsági mentések mostantól háttérfolyamatként töltődnek fel a Google Drive-ra, megakadályozva a felület megakadását.</li>
+                    <li><strong>Fejlett Hálózat és Státusz Indikátorok:</strong> A fejlécbe integrált, különálló ikonok jelzik vizuálisan a Supabase és a Google Drive aktuális kapcsolati státuszát.</li>
+                    <li><strong>Globális Offline/Online jelzés:</strong> Egyértelmű hálózati kijelzés a fő nézeteken.</li>
+                    <li><strong>Háttérfolyamatok és Ütközésfeloldás:</strong> Finomított háttér szinkronizációs és auto-backup folyamatok.</li>
+                    <li><strong>Verziószám emelés:</strong> Rendszerszintű verziófrissítés v5.1.0-ra minden felületen.</li>
+                </ul>`
+            },
+            {
+                title: "v5.0.1 — Súgó kibővítés, Navigáció & Törlés Stabilizálás",
+                content: `<strong>Megjelenés:</strong> 2026-07-19<br><br>
+                <strong>Újdonságok és fejlesztések:</strong>
+                <ul class="list-disc pl-5 mt-2 space-y-1">
+                    <li><strong>Munka Nyilvántartás Súgó:</strong> Részletes útmutató és dokumentáció hozzáadása a Súgó modulhoz a munkák hatékony kezeléséhez.</li>
+                    <li><strong>Törlés funkció stabilizálása:</strong> Kijavítottuk a munka bejegyzések törlésénél fellépő modális megerősítő és gomb-felirat/eseménykezelési hibát, így a törlés mostantól zökkenőmentesen és biztonságosan működik.</li>
+                    <li><strong>Navigáció és Menü elérés:</strong> A beállítások, a súgó és az adatkezelési/export menük mostantól közvetlenül elérhetőek és teljes mértékben használhatóak a Munka Nyilvántartás nézetből is.</li>
+                    <li><strong>Verziószám emelés:</strong> Rendszerszintű verziófrissítés v5.0.1-re minden felületen.</li>
+                </ul>`
+            },
+            {
+                title: "v5.0.0 — Munka Nyilvántartási Rendszer Integráció",
+                content: `<strong>Megjelenés:</strong> 2026-07-18<br><br>
+                <strong>Főbb mérföldkövek:</strong>
+                <ul class="list-disc pl-5 mt-2 space-y-1">
+                    <li><strong>Munka Nyilvántartási Modul:</strong> Teljes értékű munka- és projekt-követő alrendszer bevezetése.</li>
+                    <li><strong>Offline-First & Cloud Sync:</strong> Teljes IndexedDB és Supabase szinkronizáció beépítése a 'works' táblával.</li>
+                    <li><strong>Új főmenü választó:</strong> Két külön gomb az indításnál a Költség Nyilvántartó és a Munka Nyilvántartó választására.</li>
+                </ul>`
+            },
+            {
+                title: "v4.5.1 — Modális ablakok z-index javítása",
+                content: `<strong>Megjelenés:</strong> 2026-07-15<br><br>
+                <strong>Újdonságok és fejlesztések:</strong>
+                <ul class="list-disc pl-5 mt-2 space-y-1">
+                    <li><strong>Megerősítő ablakok z-index ütközésének javítása:</strong> A rendszer-szintű megerősítő és figyelmeztető ablakok (Confirm dialogs) mostantól mindig a hívó modális ablakok felett, láthatóan és akadálymentesen jelennek meg, megakadályozva, hogy a hívó modal mögé szoruljanak.</li>
+                    <li><strong>HMI Toast értesítések z-indexének emelése:</strong> A felugró értesítések z-indexe z-[300000]-ra lett emelve, így minden modal és panel felett láthatóak maradnak.</li>
+                    <li><strong>Rendszerszintű verziószám frissítés:</strong> Az alkalmazás minden felületén és a verziókövetésben a verziószám 4.5.1-re lett emelve.</li>
+                </ul>`
+            },
+            {
+                title: "v4.5.0 — Sztornózás Funkció & Hónap Kiürítés",
+                content: `<strong>Megjelenés:</strong> 2026-07-14<br><br>
+                <strong>Újdonságok és fejlesztések:</strong>
+                <ul class="list-disc pl-5 mt-2 space-y-1">
+                    <li><strong>Sztornózás (Cancellation/Void) funkció:</strong> Tételek érvénytelenítése fizikai törlés nélkül, így a történetük megmarad, de kiesnek a pénzügyi összesítésekből és grafikonokból.</li>
+                    <li><strong>Sztornó Vizuális Visszajelzés:</strong> Áthúzott számok, vörös SZTORNÓ felirat és egyedi háttérszín a kiadás- és bejövő utalás táblázatokban.</li>
+                    <li><strong>Figyelmeztető Ikonok:</strong> A részlegesen sztornózott cellák jelölése a fő táblázatban egy piros tiltás (ban) ikonnal.</li>
+                    <li><strong>Hónap törlése (Month Purge):</strong> Hosszú nyomással vagy dupla kattintással kezdeményezhető teljes havi adatkészlet-tisztítás a virtuális táblázat fejlécéből.</li>
+                    <li><strong>Bejövő utalások gyors törlése:</strong> Közvetlen törlési gomb/lehetőség a bejövő utalások táblázat celláiból.</li>
+                </ul>`
+            },
+            {
+                title: "v4.4.0 — Alkalmazás Hozzáférés-zár & Többfelhasználós Szerepkörök",
+                content: `<strong>Megjelenés:</strong> 2026-07-13<br><br>
+                <strong>Újdonságok és fejlesztések:</strong>
+                <ul class="list-disc pl-5 mt-2 space-y-1">
+                    <li><strong>Alkalmazás Hozzáférés-zár (Access Guard):</strong> PIN vagy tetszőleges jelszó alapú biztonsági záróképernyő bevezetése a Beállítások -> Biztonság menüpont alatt, mely elrejti és zárolja a teljes felületet.</li>
+                    <li><strong>Szerepkör-alapú korlátozások:</strong> Külön Tulajdonos (Owner) és Vendég (User 2) kódok állíthatók be. A Vendég kód teljes megtekintést és tételrögzítést enged, de automatikusan zárolja a Beállításokat, törlési funkciókat és a Fejlesztői Panelt.</li>
+                    <li><strong>Intelligens automatikus lezárás (Autolock):</strong> 1, 3, 5, 15 vagy 30 perc inaktivitás után a rendszer magától biztonságos záróképernyőre vált.</li>
+                    <li><strong>Részletes biztonsági audit:</strong> Minden sikeres és sikertelen bejelentkezési kísérlet bekerül az Eseménynaplóba időbélyeggel és felhasználói szerepkörrel.</li>
+                </ul>`
+            },
+            {
+                title: "v4.3.6 — Biztonságos Felhő RESET & Debug Eszközök",
                 content: `<strong>Megjelenés:</strong> 2026-07-12<br><br>
                 <strong>Újdonságok és fejlesztések:</strong>
                 <ul class="list-disc pl-5 mt-2 space-y-1">

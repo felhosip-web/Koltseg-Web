@@ -70,7 +70,7 @@ export class IncomingRenderer {
         // Sorok
         senders.forEach(sender => {
             const senderEntries = incomings.filter(e => e.sender === sender);
-            const total = senderEntries.reduce((sum, e) => sum + e.amount, 0);
+            const total = senderEntries.filter(e => !e.isStorno).reduce((sum, e) => sum + e.amount, 0);
 
             html += `
                 <tr class="border-b border-gray-100 hover:bg-gray-50 transition group">
@@ -90,14 +90,25 @@ export class IncomingRenderer {
                 const amount = entry ? entry.amount : '';
                 const entryId = entry ? entry.id : null;
 
+                let cellHtml = '—';
+                let cellClass = 'p-2 text-center incoming-cell cursor-pointer hover:bg-blue-50 transition rounded-lg';
+                if (amount) {
+                    if (entry && entry.isStorno) {
+                        cellHtml = `<span class="line-through text-red-500/70 opacity-60 flex items-center justify-center gap-1" title="Sztornózott bejövő utalás"><i class="fas fa-ban text-[10px]"></i> ${amount.toLocaleString('hu-HU')} Ft</span>`;
+                        cellClass += ' bg-red-50/50';
+                    } else {
+                        cellHtml = `${amount.toLocaleString('hu-HU')} Ft`;
+                    }
+                }
+
                 html += `
-                    <td class="p-2 text-center incoming-cell cursor-pointer hover:bg-blue-50 transition rounded-lg"
+                    <td class="${cellClass}"
                          data-sender="${this._escapeHtml(sender)}"
                          data-date="${date}"
                          data-entry-id="${entryId || ''}"
                          data-amount="${amount}"
                          onclick="window.app?.incomingRenderer?._handleCellClick(this)">
-                        ${amount ? amount.toLocaleString('hu-HU') + ' Ft' : '—'}
+                        ${cellHtml}
                     </td>
                 `;
             });
@@ -119,7 +130,7 @@ export class IncomingRenderer {
         `;
 
         dates.forEach(date => {
-            const total = incomings.filter(e => e.date === date).reduce((sum, e) => sum + e.amount, 0);
+            const total = incomings.filter(e => e.date === date && !e.isStorno).reduce((sum, e) => sum + e.amount, 0);
             html += `
                 <td class="p-3 text-center font-bold text-gray-700">
                     ${total ? total.toLocaleString('hu-HU') + ' Ft' : '—'}
@@ -129,7 +140,7 @@ export class IncomingRenderer {
 
         html += `
                     <td class="p-3 text-center font-bold text-blue-700 bg-gray-100">
-                        ${incomings.reduce((sum, e) => sum + e.amount, 0).toLocaleString('hu-HU')} Ft
+                        ${incomings.filter(e => !e.isStorno).reduce((sum, e) => sum + e.amount, 0).toLocaleString('hu-HU')} Ft
                     </td>
                 </tr>
             </tbody>
@@ -152,6 +163,9 @@ export class IncomingRenderer {
         const entryId = element.dataset.entryId;
         const currentAmount = element.dataset.amount;
 
+        const existingEntry = entryId ? this.app.incomingManager.incomings.find(e => e.id === entryId) : null;
+        const isCurrentlyStorno = existingEntry ? !!existingEntry.isStorno : false;
+
         // Input modal megnyitása
         this.app.hmiNotif.showInputModal({
             title: entryId ? '💰 Bejövő utalás szerkesztése' : '💰 Új bejövő utalás',
@@ -160,7 +174,28 @@ export class IncomingRenderer {
             placeholder: 'Add meg az összeget...',
             inputType: 'number',
             confirmText: entryId ? 'Módosítás' : 'Rögzítés',
-            onConfirm: async (value) => {
+            showDelete: !!entryId,
+            showStorno: !!entryId,
+            isStorno: isCurrentlyStorno,
+            onDelete: async () => {
+                const confirmed = await this.app.hmiNotif.showConfirm({
+                    title: '🗑️ Tétel törlése',
+                    message: `Biztosan törölni szeretnéd ezt a bejövő utalást? (${parseFloat(currentAmount || 0).toLocaleString('hu-HU')} Ft)`,
+                    type: 'danger',
+                    confirmText: 'Törlés'
+                });
+                if (!confirmed) return;
+
+                try {
+                    await this.app.incomingManager.delete(entryId);
+                    this.render();
+                    this.app.hmiNotif.showToast('✅ Bejövő utalás törölve!', 'success');
+                } catch (e) {
+                    console.error('[INCOMING] Hiba a törlésnél:', e);
+                    this.app.hmiNotif.showToast('❌ Hiba a törlés során!', 'error');
+                }
+            },
+            onConfirm: async (value, isStornoChecked) => {
                 const amount = parseFloat(value);
                 if (isNaN(amount) || amount <= 0) {
                     this.app.hmiNotif.showToast('Érvénytelen összeg!', 'error');
@@ -170,13 +205,14 @@ export class IncomingRenderer {
                 try {
                     if (entryId) {
                         // Meglévő módosítása
-                        await this.app.incomingManager.update(entryId, { amount });
+                        await this.app.incomingManager.update(entryId, { amount, isStorno: isStornoChecked });
+                        this.app.hmiNotif.showToast('✅ Bejövő utalás módosítva!', 'success');
                     } else {
                         // Új hozzáadása
                         await this.app.incomingManager.add(sender, date, amount);
+                        this.app.hmiNotif.showToast('✅ Bejövő utalás rögzítve!', 'success');
                     }
                     this.render();
-                    this.app.hmiNotif.showToast('✅ Bejövő utalás rögzítve!', 'success');
                 } catch (e) {
                     console.error('[INCOMING] Hiba:', e);
                     this.app.hmiNotif.showToast('❌ Hiba a mentés során!', 'error');

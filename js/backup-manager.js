@@ -19,6 +19,7 @@ export class BackupManager {
             reminders: this.app.reminderManager?.reminders || [],
             incomings: this.app.incomingManager?.incomings || [],
             incoming_senders: this.app.incomingManager?.senders || [],
+            works: this.app.workLogManager?.works || [],
             supabaseConfig: {
                 url: this.app.config?.supabaseConfig?.url || '',
                 useCloud: this.app.config?.useSupabase || false
@@ -63,7 +64,7 @@ export class BackupManager {
         console.log('[BACKUP] BackupManager megsemmisítve');
     }
 
-    performBackup() {
+    async performBackup() {
         try {
             if (!this.app.storage) {
                 console.warn('[BACKUP] Storage nem elérhető');
@@ -85,6 +86,22 @@ export class BackupManager {
             
             console.log('[BACKUP] Automatikus mentés kész');
             
+            // Ha a Google Drive be van állítva és van internet, feltöltjük oda is
+            if (navigator.onLine && this.app.gdriveBackup && this.app.gdriveBackup.isConfigured()) {
+                console.log('[BACKUP] Google Drive backup indítása a háttérben...');
+                // Nem várjuk meg (async háttér folyamat)
+                this.app.gdriveBackup.uploadBackup(backupData).then(result => {
+                    if (result && result.success) {
+                        console.log('[BACKUP] Google Drive sikeres.');
+                        if (this.app.renderer?.updateFooterStatus) {
+                            this.app.renderer.updateFooterStatus(`☁️ GDrive mentve: ${new Date().toLocaleTimeString('hu-HU')}`, false);
+                        }
+                    }
+                }).catch(err => {
+                    console.warn('[BACKUP] Google Drive feltöltés hiba:', err);
+                });
+            }
+
         } catch (e) {
             console.warn('[BACKUP] Automatikus mentés sikertelen:', e);
         }
@@ -127,7 +144,8 @@ export class BackupManager {
                 'templates',
                 'reminders',
                 'incomings',
-                'incoming_senders'
+                'incoming_senders',
+                'works'
             ], 'readwrite');
             
             // Törlés
@@ -138,6 +156,7 @@ export class BackupManager {
             tx.objectStore('reminders').clear();
             tx.objectStore('incomings').clear();
             tx.objectStore('incoming_senders').clear();
+            tx.objectStore('works').clear();
             
             // Visszaírás - helyesen
             backupData.items?.forEach(item => tx.objectStore('items').put(item));
@@ -150,6 +169,7 @@ export class BackupManager {
             backupData.reminders?.forEach(rem => tx.objectStore('reminders').put(rem));
             backupData.incomings?.forEach(incoming => tx.objectStore('incomings').put(incoming));
             backupData.incoming_senders?.forEach(sender => tx.objectStore('incoming_senders').put(sender));
+            backupData.works?.forEach(work => tx.objectStore('works').put(work));
             
             await new Promise((resolve, reject) => {
                 tx.oncomplete = resolve;
@@ -163,10 +183,12 @@ export class BackupManager {
                 this.app.entries?.load?.(),
                 this.app.templates?.load?.(),
                 this.app.reminderManager?.load?.(),
-                this.app.incomingManager?.load?.()
+                this.app.incomingManager?.load?.(),
+                this.app.workLogManager?.load?.()
             ]);
             
             this.app.renderer?.renderTable?.();
+            this.app.workLogRenderer?.render?.();
             this.app.remindersRenderer?.renderList?.();
             this.app.incomingRenderer?.render?.();
             this.app.renderStats?.();

@@ -1,4 +1,5 @@
-// js/oop-core.js - OOP HMI Core Infrastruktúra v4.1 (IndexedDB Optimalizált)
+// js/oop-core.js - OOP HMI Core Infrastruktúra v5.0 (UUID-alapú IndexedDB)
+import { generateUUID } from './uuid-utils.js';
 export class SecurityManager {
     static async generateChecksum(obj) {
         const { checksum, ...cleanObj } = obj;
@@ -29,6 +30,10 @@ export class SecurityManager {
                 return typeof data.id !== 'undefined' &&
                     typeof data.name === 'string' &&
                     data.name.trim() !== '';
+            case 'works':
+                return typeof data.name === 'string' &&
+                    data.name.trim() !== '' &&
+                    typeof data.date === 'string';
             default:
                 return true;
         }
@@ -36,12 +41,12 @@ export class SecurityManager {
 }
 
 export class Database {
-    constructor(dbName = 'KoltsegNyilvantarto', version = 9) {  // ← verzió 9-re emelve
+    constructor(dbName = 'KoltsegNyilvantarto', version = 11) {  // ← verzió 11: UUID migráció
         let finalDbName = dbName;
         try {
             const path = window.location.pathname;
             const cleanPath = path.replace(/^\/|\/$/g, '').replace(/[^a-zA-Z0-9_-]/g, '_');
-            if (cleanPath && cleanPath !== 'index.html' && cleanPath !== 'src') {
+            if (cleanPath && cleanPath !== 'index.html' && cleanPath !== 'index_html' && cleanPath !== 'src') {
                 finalDbName = `${dbName}_${cleanPath}`;
             }
         } catch (e) {
@@ -62,7 +67,8 @@ export class Database {
             reminders: {},
             incomings: {},
             incoming_senders: {},
-            deleted_records: {}
+            deleted_records: {},
+            works: {}
         };
         this.mockIdCounter = {};
         console.log('[DB] ℹ️ Memóriabeli adatbázis sikeresen inicializálva.');
@@ -112,14 +118,74 @@ export class Database {
     _handleUpgrade(db, oldVersion, transaction) {
         console.log(`[DB] Upgrade: ${oldVersion} → ${this.version}`);
 
+        // ================================================================
+        // v11 UUID MIGRÁCIÓ: Táblák újraépítése autoIncrement nélkül
+        // ================================================================
+        
+        // Segédfüggvény: object store újraépítése UUID-vel
+        const _migrateStoreToUUID = (storeName, options = {}) => {
+            const { indexes = [], keyPath = 'id' } = options;
+            
+            if (db.objectStoreNames.contains(storeName) && oldVersion < 11) {
+                // Meglévő adatok kiolvasása a tranzakcióból
+                const existingStore = transaction.objectStore(storeName);
+                const getAllReq = existingStore.getAll();
+                
+                getAllReq.onsuccess = () => {
+                    const existingData = getAllReq.result || [];
+                    
+                    // Store törlése és újraépítése autoIncrement NÉLKÜL
+                    db.deleteObjectStore(storeName);
+                    const newStore = db.createObjectStore(storeName, { keyPath });
+                    
+                    // Indexek létrehozása
+                    indexes.forEach(idx => {
+                        try {
+                            newStore.createIndex(idx.name, idx.keyPath || idx.name, { unique: idx.unique || false });
+                        } catch (e) {
+                            console.warn(`[DB] Index hiba (${storeName}.${idx.name}):`, e);
+                            if (idx.unique) {
+                                try { newStore.createIndex(idx.name, idx.keyPath || idx.name, { unique: false }); } catch (e2) {}
+                            }
+                        }
+                    });
+                    
+                    // Meglévő adatok visszaírása UUID-vel
+                    existingData.forEach(record => {
+                        if (keyPath === 'id') {
+                            // Integer ID → UUID konverzió
+                            const oldId = record.id;
+                            if (typeof oldId === 'number' || (typeof oldId === 'string' && /^\d+$/.test(oldId))) {
+                                record._old_autoincrement_id = oldId;
+                                record.id = generateUUID();
+                            }
+                        }
+                        try {
+                            newStore.put(record);
+                        } catch (e) {
+                            console.warn(`[DB] Migráció hiba (${storeName}):`, e, record);
+                        }
+                    });
+                    
+                    console.log(`[DB] ${storeName}: ${existingData.length} rekord migrálva UUID-re (v11)`);
+                };
+                return true; // Migráció indítva
+            }
+            return false; // Nem volt szükséges
+        };
+
         // === Entries tábla ===
         if (!db.objectStoreNames.contains('entries')) {
-            const store = db.createObjectStore('entries', { 
-                keyPath: 'id', 
-                autoIncrement: true 
-            });
+            const store = db.createObjectStore('entries', { keyPath: 'id' });
             store.createIndex('cellKey', 'cellKey', { unique: false });
             store.createIndex('updated_at', 'updated_at', { unique: false });
+        } else if (oldVersion < 11) {
+            _migrateStoreToUUID('entries', {
+                indexes: [
+                    { name: 'cellKey', unique: false },
+                    { name: 'updated_at', unique: false }
+                ]
+            });
         } else if (transaction) {
             const store = transaction.objectStore('entries');
             try {
@@ -135,30 +201,33 @@ export class Database {
 
         // === Items tábla ===
         if (!db.objectStoreNames.contains('items')) {
-            db.createObjectStore('items', { keyPath: 'id', autoIncrement: true });
+            db.createObjectStore('items', { keyPath: 'id' });
+        } else if (oldVersion < 11) {
+            _migrateStoreToUUID('items');
         }
 
-        // === Months tábla ===
+        // === Months tábla (keyPath: 'month' – nem kell UUID) ===
         if (!db.objectStoreNames.contains('months')) {
             db.createObjectStore('months', { keyPath: 'month' });
         }
 
         // === Templates tábla ===
         if (!db.objectStoreNames.contains('templates')) {
-            db.createObjectStore('templates', { keyPath: 'id', autoIncrement: true });
+            db.createObjectStore('templates', { keyPath: 'id' });
+        } else if (oldVersion < 11) {
+            _migrateStoreToUUID('templates');
         }
 
         // === Reminders tábla ===
         if (!db.objectStoreNames.contains('reminders')) {
-            db.createObjectStore('reminders', { keyPath: 'id', autoIncrement: true });
+            db.createObjectStore('reminders', { keyPath: 'id' });
+        } else if (oldVersion < 11) {
+            _migrateStoreToUUID('reminders');
         }
 
         // === Incomings tábla ===
         if (!db.objectStoreNames.contains('incomings')) {
-            const store = db.createObjectStore('incomings', { 
-                keyPath: 'id', 
-                autoIncrement: true 
-            });
+            const store = db.createObjectStore('incomings', { keyPath: 'id' });
             store.createIndex('sender', 'sender', { unique: false });
             store.createIndex('date', 'date', { unique: false });
             try {
@@ -168,6 +237,15 @@ export class Database {
                 store.createIndex('sender_date', ['sender', 'date'], { unique: false });
             }
             store.createIndex('updated_at', 'updated_at', { unique: false });
+        } else if (oldVersion < 11) {
+            _migrateStoreToUUID('incomings', {
+                indexes: [
+                    { name: 'sender', unique: false },
+                    { name: 'date', unique: false },
+                    { name: 'sender_date', keyPath: ['sender', 'date'], unique: false },
+                    { name: 'updated_at', unique: false }
+                ]
+            });
         } else if (transaction) {
             const store = transaction.objectStore('incomings');
             try {
@@ -178,15 +256,12 @@ export class Database {
                 
                 store.createIndex('sender', 'sender', { unique: false });
                 store.createIndex('date', 'date', { unique: false });
-                
-                // Különleges védelem az egyediségi hiba miatti tranzakció-abortálás ellen
                 try {
                     store.createIndex('sender_date', ['sender', 'date'], { unique: true });
                 } catch (e) {
                     console.warn('[DB] Nem-egyedi index fallback a sender_date mezőhöz:', e);
                     store.createIndex('sender_date', ['sender', 'date'], { unique: false });
                 }
-                
                 store.createIndex('updated_at', 'updated_at', { unique: false });
                 console.log('[DB] Incomings indexek sikeresen újjáépítve upgrade során');
             } catch (err) {
@@ -196,9 +271,7 @@ export class Database {
 
         // === Incoming senders tábla ===
         if (!db.objectStoreNames.contains('incoming_senders')) {
-            const store = db.createObjectStore('incoming_senders', { 
-                keyPath: 'id' 
-            });
+            const store = db.createObjectStore('incoming_senders', { keyPath: 'id' });
             try {
                 store.createIndex('name', 'name', { unique: true });
             } catch (e) {
@@ -223,6 +296,18 @@ export class Database {
         if (!db.objectStoreNames.contains('deleted_records')) {
             db.createObjectStore('deleted_records', { keyPath: 'id' });
             console.log('[DB] deleted_records tábla sikeresen létrehozva (v9)');
+        }
+
+        // === works tábla ===
+        if (!db.objectStoreNames.contains('works')) {
+            db.createObjectStore('works', { keyPath: 'id' });
+            console.log('[DB] works tábla sikeresen létrehozva (UUID, v11)');
+        } else if (oldVersion < 11) {
+            _migrateStoreToUUID('works');
+        }
+
+        if (oldVersion < 11) {
+            console.log('[DB] ✅ v11 UUID migráció indítva – az összes autoIncrement tábla konvertálva');
         }
     }
 
@@ -291,8 +376,7 @@ export class Database {
                     key = data.id;
                 } else {
                     if (!data.id) {
-                        this.mockIdCounter[storeName] = (this.mockIdCounter[storeName] || 0) + 1;
-                        data.id = this.mockIdCounter[storeName];
+                        data.id = generateUUID();
                     }
                     key = data.id;
                 }
@@ -372,8 +456,9 @@ export class TemplateManager {
     }
     
     async add(template) {
+        if (!template.id) template.id = generateUUID();
         template.updated_at = new Date().toISOString();
-        template.id = await this.db.save('templates', template);
+        await this.db.save('templates', template);
         this.templates.push(template);
         await this.syncService.push('templates', template);
         return template;
@@ -426,8 +511,9 @@ export class ReminderManager {
     }
     
     async add(reminder) {
+        if (!reminder.id) reminder.id = generateUUID();
         reminder.updated_at = new Date().toISOString();
-        reminder.id = await this.db.save('reminders', reminder);
+        await this.db.save('reminders', reminder);
         this.reminders.push(reminder);
         await this.syncService.push('reminders', reminder);
         return reminder;
@@ -483,8 +569,8 @@ export class ItemManager {
     }
     
     async add(name, color = '#dbeafe') {
-        const item = { name, color, updated_at: new Date().toISOString() };
-        item.id = await this.db.save('items', item);
+        const item = { id: generateUUID(), name, color, updated_at: new Date().toISOString() };
+        await this.db.save('items', item);
         this.items.push(item);
         await this.syncService.push('items', item);
         return item;
@@ -524,7 +610,7 @@ export class MonthManager {
         await this.db.save('months', data);
         this.months.push(month);
         this.months.sort();
-        await this.syncService.push('months', data);
+        await this.syncService.push('months', data, false, 'month');
     }
     
     async delete(month) {
@@ -550,8 +636,9 @@ export class EntryManager {
     }
     
     async saveEntry(entry) {
+        if (!entry.id) entry.id = generateUUID();
         if (!entry.updated_at) entry.updated_at = new Date().toISOString();
-        entry.id = await this.db.save('entries', entry);
+        await this.db.save('entries', entry);
         
         const idx = this.entries.findIndex(e => e.id === entry.id);
         if (idx !== -1) this.entries[idx] = entry;
@@ -575,9 +662,14 @@ export class ConfigManager {
         this.eurRate = parseFloat(localStorage.getItem('live_eur_rate')) || this.defaultEurRate;
         this.useLiveEur = localStorage.getItem('use_live_eur') !== 'false';
         this.useSupabase = localStorage.getItem('supabase_use') === 'true';
+        
         this.supabaseConfig = {
             url: localStorage.getItem('supabase_url') || '',
             key: localStorage.getItem('supabase_key') || ''
+        };
+        this.aiConfig = {
+            apiKey: localStorage.getItem('ai_api_key') || '',
+            model: localStorage.getItem('ai_model') || 'gemini-3.5-flash'
         };
     }
 
@@ -688,26 +780,53 @@ export class CloudSync {
         }
         
         if (!data || typeof data !== 'object') {
-            throw new Error('Érvénytelen adat az upsert művelethez');
+            console.error('[CLOUD] Érvénytelen adat:', data, 'storeName:', storeName); throw new Error('Érvénytelen adat az upsert művelethez');
         }
 
-        try {
-            const { error } = await this.client
-                .from(storeName)
-                .upsert(data, { onConflict: customKey });
+        let currentData = { ...data };
+        let attempts = 0;
+        const maxAttempts = 3;
+        
+        while (attempts < maxAttempts) {
+            try {
+                const { error } = await this.client
+                    .from(storeName)
+                    .upsert(currentData, { onConflict: customKey });
 
-            if (error) {
-                if (error.code === '42P01') {
+                if (error) {
+                    throw error;
+                }
+                console.log(`[CLOUD] ${storeName} egyedi upsert sikeres`);
+                return;
+            } catch (err) {
+                // 42703 is undefined_column in Postgres
+                const isColumnError = err.code === '42703' || 
+                                      (err.message && (err.message.toLowerCase().includes('column') && (err.message.toLowerCase().includes('does not exist') || err.message.toLowerCase().includes('not found'))));
+                
+                if (isColumnError && attempts < maxAttempts - 1) {
+                    let columnName = null;
+                    const match = err.message.match(/column "([^"]+)"/i) || err.message.match(/column ([a-zA-Z0-9_]+)/i);
+                    if (match) {
+                        columnName = match[1];
+                    } else {
+                        if (err.message.includes('isStorno')) {
+                            columnName = 'isStorno';
+                        }
+                    }
+                    
+                    if (columnName && currentData.hasOwnProperty(columnName)) {
+                        console.warn(`[CLOUD] ${storeName} táblában nem létezik a(z) "${columnName}" oszlop. Eltávolítjuk a felhőbe küldés előtt és újrapróbáljuk.`);
+                        delete currentData[columnName];
+                        attempts++;
+                        continue;
+                    }
+                }
+                
+                if (err.code === '42P01' || (err.message && (err.message.includes('relation') || err.message.includes('does not exist')))) {
                     this.tablesMissing = true;
                 }
-                throw error;
+                throw err;
             }
-            console.log(`[CLOUD] ${storeName} egyedi upsert sikeres`);
-        } catch (err) {
-            if (err.code === '42P01' || (err.message && (err.message.includes('relation') || err.message.includes('does not exist')))) {
-                this.tablesMissing = true;
-            }
-            throw err;
         }
     }
 
@@ -793,12 +912,7 @@ export class CloudSync {
                     return;
                 }
 
-                const { error } = await this.client
-                    .from(storeName)
-                    .upsert(data, { onConflict: customKey });
-
-                if (error) throw error;
-                console.log(`[CLOUD] ${storeName} upsert successful`);
+                await this.upsert(storeName, data, customKey);
             }
 
         } catch (err) {
@@ -979,13 +1093,13 @@ export class CloudSync {
         }
 
         const tables = [
-            { name: 'items', key: 'id', type: 'bigint' },
+            { name: 'items', key: 'id', type: 'text' },
             { name: 'months', key: 'month', type: 'text' },
             { name: 'entries', key: 'id', type: 'text' },
-            { name: 'templates', key: 'id', type: 'bigint' },
-            { name: 'reminders', key: 'id', type: 'bigint' },
-            { name: 'incomings', key: 'id', type: 'bigint' },
-            { name: 'incoming_senders', key: 'id', type: 'bigint' },
+            { name: 'templates', key: 'id', type: 'text' },
+            { name: 'reminders', key: 'id', type: 'text' },
+            { name: 'incomings', key: 'id', type: 'text' },
+            { name: 'incoming_senders', key: 'id', type: 'text' },
             { name: 'deleted_records', key: 'id', type: 'text' }
         ];
 
@@ -1032,7 +1146,22 @@ export class IncomingManager {
      */
     async load() {
         this.incomings = await this.db.getAll('incomings') || [];
-        this.senders = await this.db.getAll('incoming_senders') || [];
+        const rawSenders = await this.db.getAll('incoming_senders') || [];
+        
+        // Öngyógyító beolvasás: Kiszűrjük az esetleges duplikátumokat az adatbázisból
+        const seenNames = new Set();
+        this.senders = [];
+        for (const sender of rawSenders) {
+            const nameNorm = String(sender.name || '').trim();
+            if (nameNorm && !seenNames.has(nameNorm)) {
+                seenNames.add(nameNorm);
+                this.senders.push(sender);
+            } else if (sender.id) {
+                // Ha duplikált névvel van bejegyzés, töröljük az adatbázisból is a tisztaság kedvéért
+                await this.db.delete('incoming_senders', sender.id);
+            }
+        }
+        
         // Senders lista frissítése a bejegyzésekből
         await this._updateSendersFromEntries();
     }
@@ -1043,16 +1172,26 @@ export class IncomingManager {
     async _updateSendersFromEntries() {
         const senderSet = new Set();
         this.incomings.forEach(entry => {
-            if (entry.sender) senderSet.add(entry.sender);
+            if (entry.sender) {
+                const nameNorm = String(entry.sender).trim();
+                if (nameNorm) senderSet.add(nameNorm);
+            }
         });
+        
         // Meglévő senders-eket megtartjuk, de újat is hozzáadunk
-        const existingSenders = new Set(this.senders.map(s => s.name));
+        const existingSenders = new Set(this.senders.map(s => String(s.name || '').trim()));
         const newSenders = [];
+        
         senderSet.forEach(name => {
             if (!existingSenders.has(name)) {
-                const sender = { id: Date.now() + '_' + name, name, createdAt: new Date().toISOString() };
+                const sender = { 
+                    id: Date.now() + '_' + Math.random().toString(36).substr(2, 6) + '_' + name, 
+                    name, 
+                    createdAt: new Date().toISOString() 
+                };
                 this.senders.push(sender);
                 newSenders.push(sender);
+                existingSenders.add(name);
             }
         });
 
@@ -1091,13 +1230,14 @@ export class IncomingManager {
         }
 
         const entry = {
+            id: generateUUID(),
             sender,
             date: normalizedDate,
             amount,
             updated_at: new Date().toISOString(),
             created_at: new Date().toISOString()
         };
-        entry.id = await this.db.save('incomings', entry);
+        await this.db.save('incomings', entry);
         this.incomings.push(entry);
         await this._updateSendersFromEntries();
         await this.syncService.push('incomings', entry);
@@ -1108,7 +1248,7 @@ export class IncomingManager {
      * Tétel frissítése
      */
     async update(id, data) {
-        const idx = this.incomings.findIndex(e => e.id === id);
+        const idx = this.incomings.findIndex(e => String(e.id) === String(id));
         if (idx === -1) return null;
         if (data.hasOwnProperty('amount')) {
             if (isNaN(data.amount) || data.amount <= 0) {
@@ -1141,9 +1281,10 @@ export class IncomingManager {
      * Tétel törlése
      */
     async delete(id) {
-        await this.db.delete('incomings', id);
-        this.incomings = this.incomings.filter(e => e.id !== id);
-        await this.syncService.push('incomings', id, true);
+        const key = !isNaN(id) && !isNaN(parseInt(id)) ? parseInt(id) : id;
+        await this.db.delete('incomings', key);
+        this.incomings = this.incomings.filter(e => String(e.id) !== String(id));
+        await this.syncService.push('incomings', key, true);
     }
 
     /**
@@ -1215,6 +1356,6 @@ export class IncomingManager {
      * Sender lista lekérése
      */
     getSenders() {
-        return this.senders.map(s => s.name).sort();
+        return [...new Set(this.senders.map(s => String(s.name || '').trim()))].sort();
     }
 }

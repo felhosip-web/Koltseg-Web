@@ -1,8 +1,86 @@
 {
-  "version": "4.3.6",
-  "build": "2026-07-12T14:46:00.000Z",
+  "version": "5.2.0",
+  "build": "2026-07-22T08:58:00.000Z",
   "release": "stable",
   "changelog": [
+    {
+      "version": "5.2.0",
+      "date": "2026-07-22",
+      "changes": [
+        "✅ Központi ModalManager bevezetése a modális ablakok egységes kezelésére",
+        "✅ Megújult vizuális animációk, finomított fade-in és scale-up effektek a felugró ablakokhoz",
+        "✅ Modális ablakok háttér kattintás és ESC gomb általi bezárásának egységesítése",
+        "✅ Code refactoring: classList hívások automatikus lekezelése a ModalManager-ben",
+        "🐛 Bugfix: Sync queue indokolatlan növekedésének javítása a szinkronizációs ciklusban",
+        "✅ Verziószám frissítése 5.2.0-ra"
+      ]
+    },
+    {
+      "version": "5.1.0",
+      "date": "2026-07-21",
+      "changes": [
+        "✅ Google Drive biztonsági mentés aszinkron felhő feltöltés támogatása",
+        "✅ Fejlett Hálózat & Státusz indikátorok: elkülönített ikonok a Supabase és a Google Drive kapcsolatok vizuális követéséhez",
+        "✅ Globális Offline/Online jelzések bevezetése a felső fejlécbe",
+        "✅ Finomított háttérfolyamatok és szinkronizációs ütközésfeloldás",
+        "✅ Verziószám frissítése 5.1.0-ra"
+      ]
+    },
+    {
+      "version": "5.0.1",
+      "date": "2026-07-19",
+      "changes": [
+        "✅ Munka Nyilvántartás Súgó: Részletes útmutató és felhasználói dokumentáció hozzáadása a beépített Súgó rendszerhez",
+        "✅ Törlés funkció stabilizálása: Kijavítottuk a munka bejegyzések törlésénél fellépő modális megerősítő és gomb-felirat/eseménykezelési hibát, így a törlés mostantól zökkenőmentesen és biztonságosan működik",
+        "✅ Navigáció és Menü elérés: A beállítások, a súgó és az adatkezelési/export menük mostantól közvetlenül elérhetőek és teljes mértékben használhatóak a Munka Nyilvántartás nézetből is",
+        "✅ Verziószám emelés: Rendszerszintű verziófrissítés v5.0.1-re minden felületen"
+      ]
+    },
+    {
+      "version": "5.0.0",
+      "date": "2026-07-18",
+      "changes": [
+        "🚀 Munka nyilvántartó (Work Log) modul teljes körű integrációja: egyéni munkák, feladatok, határidők és állapotok részletes, táblázatos követése",
+        "🚀 Dizájnos és modern indítóképernyő (Landing Page) két nagy bento-stílusú kártya-gombbal a modulok közötti választáshoz",
+        "🚀 Munka állapot-alapú intelligens sorszínezés: Elvégzett (zöld), Folyamatban (sárga), Meghiúsult (piros) vizuális kiemeléssel",
+        "🚀 Hosszú nyomásra (long press) vagy dupla kattintásra elérhető teljes körű Munka Szerkesztő / Felvivő modális ablak",
+        "🚀 Helyi IndexedDB v10 szintű tartós adattárolás a munka nyilvántartások számára"
+      ]
+    },
+    {
+      "version": "4.5.1",
+      "date": "2026-07-15",
+      "changes": [
+        "✅ Modális ablakok és megerősítő panelek z-index ütközésének javítása: A rendszer-szintű megerősítő és figyelmeztető ablakok (Confirm dialogs) mostantól mindig a hívó modális ablakok felett, láthatóan és akadálymentesen jelennek meg",
+        "✅ HMI Toast értesítések z-indexének emelése z-[300000]-ra, hogy minden felület és modal felett láthatóak maradjanak",
+        "✅ Alkalmazás szoftveres verziószám és változásnapló frissítése 4.5.1-re"
+      ]
+    },
+    {
+      "version": "4.5.0",
+      "date": "2026-07-14",
+      "changes": [
+        "✅ Sztornózás (cancellation/void) funkció: tételek fizikai törlés nélküli érvénytelenítése",
+        "✅ Sztornó vizuális visszajelzés a kiadás- és bejövő utalás táblázatokban (áthúzott számok, vörös SZTORNÓ felirat, egyedi háttérszín)",
+        "✅ Részlegesen sztornózott cellák figyelmeztető ikonos (ban icon) jelölése a fő táblázatban",
+        "✅ Sztornózott tételek teljes kizárása a pénzügyi összesítésekből, havi egyenlegekből, KPI kártyákból és az összes beépített grafikonból/kimutatásból",
+        "✅ Bejövő utalások törlési lehetősége közvetlenül a bejövő utalások táblázat celláiból",
+        "✅ Hónap törlése (Month Purge): Hosszú nyomással vagy dupla kattintással kezdeményezhető teljes havi adatkészlet-tisztítás a virtuális táblázat fejlécéből",
+        "✅ Alkalmazás szoftveres verziószám és változásnapló frissítése 4.5.0-ra"
+      ]
+    },
+    {
+      "version": "4.4.0",
+      "date": "2026-07-13",
+      "changes": [
+        "✅ Alkalmazás Hozzáférés-zár (Access Guard) PIN vagy tetszőleges jelszó beállításával a Beállítások -> Biztonság menüpont alatt",
+        "✅ Szerepkör-alapú hozzáférés-szabályozás külön Tulajdonos (Owner) és Vendég (User 2) feloldó kódokkal",
+        "✅ Vendég mód: zárolt beállítások, letiltott adatbázis törlés és rejtett Fejlesztői Panel, teljes megtekintés és tételrögzítés mellett",
+        "✅ Intelligens automatikus lezárás (Autolock) inaktivitás alapú időzítésekkel (1, 3, 5, 15, 30 perc vagy kikapcsolható)",
+        "✅ Részletes biztonsági audit: Sikeres és hibás bejelentkezések és automatikus zárolások naplózása az Eseménynaplóba",
+        "✅ Alkalmazás szoftveres verziószám és változásnapló frissítése 4.4.0-ra"
+      ]
+    },
     {
       "version": "4.3.6",
       "date": "2026-07-12",

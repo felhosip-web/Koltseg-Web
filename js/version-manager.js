@@ -14,7 +14,7 @@ export class VersionManager {
      */
     async load() {
         try {
-            const response = await fetch('./version.json');
+            const response = await fetch(`./version.json?v=${Date.now()}`);
             if (!response.ok) throw new Error('Version file not found');
             
             const data = await response.json();
@@ -65,7 +65,7 @@ export class VersionManager {
      */
     async checkForUpdate() {
         try {
-            const response = await fetch('./version.json', { cache: 'no-cache' });
+            const response = await fetch(`./version.json?v=${Date.now()}`, { cache: 'no-cache' });
             if (!response.ok) return null;
             
             const remote = await response.json();

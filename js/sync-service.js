@@ -62,12 +62,30 @@ export class SyncService {
     /**
      * Művelet hozzáadása a queue-hoz
      */
-    addToQueue(operation, data, table, priority = 'normal') {
+    addToQueue(operation, data, table, priority = 'normal', customKey = 'id') {
+        const keyValue = data[customKey] || data.id;
+        const existingIndex = keyValue ? this._syncQueue.findIndex(i => i.table === table && (i.data[customKey] === keyValue || i.data.id === keyValue)) : -1;
+        if (existingIndex !== -1) {
+            this._syncQueue[existingIndex] = {
+                ...this._syncQueue[existingIndex],
+                operation,
+                data,
+                priority,
+                timestamp: new Date().toISOString(),
+                status: 'pending',
+                retryCount: 0
+            };
+            this._saveSyncQueue();
+            return this._syncQueue[existingIndex];
+        }
+        console.log('[DEBUG_QUEUE] Added to queue:', operation, table, priority);
+        console.trace('[DEBUG_QUEUE] Trace:');
         const item = {
             id: Date.now() + '_' + Math.random().toString(36).substr(2, 6),
             operation, // 'create', 'update', 'delete'
             table,
             data,
+            customKey,
             priority, // 'high', 'normal', 'low'
             timestamp: new Date().toISOString(),
             retryCount: 0,
@@ -106,6 +124,14 @@ export class SyncService {
     }
 
     /**
+     * Teljes queue kiürítése
+     */
+    clearQueue() {
+        this._syncQueue = [];
+        this._saveSyncQueue();
+    }
+
+    /**
      * Queue státusz lekérése
      */
     getQueueStatus() {
@@ -132,6 +158,9 @@ export class SyncService {
         this._queueListeners.push(callback);
         // Azonnal meghívjuk az aktuális állapottal
         callback(this.getQueueStatus());
+        return () => {
+            this._queueListeners = this._queueListeners.filter(cb => cb !== callback);
+        };
     }
 
     _notifyQueueListeners() {
@@ -148,8 +177,8 @@ export class SyncService {
     /**
      * Queue feldolgozása (online állapotban)
      */
-    async processQueue() {
-        if (this.isSyncing) {
+    async processQueue(fromSync = false) {
+        if (this.isSyncing && !fromSync) {
             console.log('[SYNC] Már fut szinkronizáció, queue feldolgozás később');
             return { processed: 0, failed: 0 };
         }
@@ -175,6 +204,10 @@ export class SyncService {
                 if (result.success) {
                     this.updateQueueItem(item.id, { status: 'done' });
                     processed++;
+                } else if (result.unrecoverable) {
+                    console.warn(`[SYNC] Javíthatatlan hiba (${result.error}), elem eldobása a queue-ból.`);
+                    this.updateQueueItem(item.id, { status: 'done' }); // done-ra állítjuk, hogy kikerüljön
+                    failed++;
                 } else {
                     item.retryCount++;
                     if (item.retryCount >= 3) {
@@ -208,18 +241,30 @@ export class SyncService {
      * Queue elem végrehajtása
      */
     async _executeQueueItem(item) {
-        const { operation, table, data } = item;
+        const { operation, table } = item;
+        let { data } = item;
         
         // CloudSync használata a tényleges művelethez
         if (!this.cloud.client) {
             return { success: false, error: 'Nincs felhő kapcsolat' };
         }
 
+        const customKey = item.customKey || 'id';
+        
+        // Auto-fix invalid data
+        if (operation !== 'delete' && (!data || typeof data !== 'object')) {
+            if (table === 'months' && typeof data === 'string') {
+                data = { month: data, updated_at: new Date().toISOString() };
+            } else {
+                return { success: false, error: 'Érvénytelen adat az upsert művelethez', unrecoverable: true };
+            }
+        }
+
         try {
             if (operation === 'delete') {
-                await this.cloud.delete(table, data, 'id');
+                await this.cloud.delete(table, data, customKey);
             } else {
-                await this.cloud.upsert(table, data, 'id');
+                await this.cloud.upsert(table, data, customKey);
             }
             return { success: true };
         } catch (e) {
@@ -261,21 +306,19 @@ export class SyncService {
     /**
      * Push művelet (offline naplózással + queue)
      */
-    async push(storeName, data, isDelete = false, customKey = 'id') {
+    async push(storeName, data, isDelete = false, customKey = 'id', skipQueueOnError = false) {
         // Offline ellenőrzés
         if (!navigator.onLine) {
             console.log(`[SYNC] Offline, változtatás queue-ba: ${storeName}`);
             const operation = isDelete ? 'delete' : 'update';
-            this.addToQueue(operation, data, storeName, 'high');
-            // Megtartjuk a kompatibilitást a régi offline handler-rel
-            this.offline.addPendingChange(storeName, operation, data, customKey);
+            if (!skipQueueOnError) this.addToQueue(operation, data, storeName, 'high', customKey);
             return;
         }
 
         if (!this.cloud.client || !this.config.useSupabase) {
             // Ha nincs felhő, queue-ba tesszük
             const operation = isDelete ? 'delete' : 'update';
-            this.addToQueue(operation, data, storeName, 'normal');
+            if (!skipQueueOnError) this.addToQueue(operation, data, storeName, 'normal', customKey);
             return;
         }
 
@@ -289,8 +332,7 @@ export class SyncService {
         } catch (err) {
             console.warn('[SYNC] Sync error, data preserved locally:', err);
             const operation = isDelete ? 'delete' : 'update';
-            this.addToQueue(operation, data, storeName, 'high');
-            this.offline.addPendingChange(storeName, operation, data, customKey);
+            this.addToQueue(operation, data, storeName, 'high', customKey);
             throw err;
         }
     }
@@ -316,7 +358,7 @@ export class SyncService {
         try {
             if (storeName === 'all') {
                 const results = {};
-                const tables = ['items', 'months', 'entries', 'templates', 'reminders', 'incomings', 'incoming_senders', 'deleted_records'];
+                const tables = ['items', 'months', 'entries', 'templates', 'reminders', 'incomings', 'incoming_senders', 'works', 'deleted_records'];
                 
                 // Párhuzamos lekérdezés minden táblára, 4 mp-es timeouttal
                 await Promise.all(
@@ -376,7 +418,7 @@ export class SyncService {
         try {
             // === 2. QUEUE FELDOLGOZÁS (prioritás) ===
             console.log('[SYNC] 📋 Queue feldolgozása...');
-            const queueResult = await this.processQueue();
+            const queueResult = await this.processQueue(true);
             results.queueProcessed = queueResult.processed;
             if (queueResult.failed > 0) {
                 results.errors.push({ operation: 'queue', error: `${queueResult.failed} elem sikertelen` });
@@ -394,7 +436,7 @@ export class SyncService {
 
             // === 4. PULL: ADATOK LETÖLTÉSE A FELHŐBŐL ===
             console.log('[SYNC] ⬇️ Pull: Adatok letöltése a felhőből...');
-            const tables = ['items', 'months', 'entries', 'templates', 'reminders', 'incomings', 'incoming_senders', 'deleted_records'];
+            const tables = ['items', 'months', 'entries', 'templates', 'reminders', 'incomings', 'incoming_senders', 'works', 'deleted_records'];
             const cloudData = {};
 
             for (const table of tables) {
@@ -424,6 +466,7 @@ export class SyncService {
                 reminders: this._getLocalData('reminders'),
                 incomings: this._getLocalData('incomings'),
                 incoming_senders: this._getLocalData('incoming_senders'),
+                works: this._getLocalData('works'),
                 deleted_records: localDeletedRecords
             };
 
@@ -485,6 +528,76 @@ export class SyncService {
 
             this.lastSyncConflicts = [...this.currentSyncConflicts];
 
+
+            // === 5.5. APP_SETTINGS SZINKRONIZÁCIÓ ===
+            console.log('[SYNC] ⚙️ Beállítások szinkronizálása...');
+            try {
+                // Helyi beállítások JSON
+                const localSettings = {
+                    appearance_dark_mode: localStorage.getItem('appearance_dark_mode') || 'false',
+                    appearance_bg_theme: localStorage.getItem('appearance_bg_theme') || 'white',
+                    ai_api_key: localStorage.getItem('ai_api_key') || '',
+                    ai_model: localStorage.getItem('ai_model') || 'gemini-3.5-flash',
+                    default_eur_rate: localStorage.getItem('default_eur_rate') || '400',
+                    use_live_eur: localStorage.getItem('use_live_eur') || 'true',
+                    settings_updated_at: localStorage.getItem('settings_updated_at') || '1970-01-01T00:00:00.000Z'
+                };
+                
+                const cloudSettingsData = await this.cloud.pull('app_settings');
+                const cloudSettingsRow = cloudSettingsData && cloudSettingsData.find(s => s.id === 'user_settings');
+                
+                let shouldPush = false;
+                if (!cloudSettingsRow) {
+                    shouldPush = true;
+                } else {
+                    const cloudSettings = cloudSettingsRow.settings_json || {};
+                    const localTime = new Date(localSettings.settings_updated_at).getTime();
+                    const cloudTime = new Date(cloudSettingsRow.updated_at).getTime();
+                    
+                    if (cloudTime > localTime) {
+                        console.log('[SYNC] ☁️ Felhő beállítások frissebbek, helyi felülírása...');
+                        if (cloudSettings.appearance_dark_mode !== undefined) localStorage.setItem('appearance_dark_mode', cloudSettings.appearance_dark_mode);
+                        if (cloudSettings.appearance_bg_theme !== undefined) localStorage.setItem('appearance_bg_theme', cloudSettings.appearance_bg_theme);
+                        if (cloudSettings.ai_api_key !== undefined) localStorage.setItem('ai_api_key', cloudSettings.ai_api_key);
+                        if (cloudSettings.ai_model !== undefined) localStorage.setItem('ai_model', cloudSettings.ai_model);
+                        if (cloudSettings.default_eur_rate !== undefined) localStorage.setItem('default_eur_rate', String(cloudSettings.default_eur_rate));
+                        if (cloudSettings.use_live_eur !== undefined) localStorage.setItem('use_live_eur', String(cloudSettings.use_live_eur));
+                        localStorage.setItem('settings_updated_at', cloudSettingsRow.updated_at);
+                        
+                        // Frissítjük az aktív konfigurációkat
+                        const app = this._getApp();
+                        if (app && app.config) {
+                            app.config.aiConfig = {
+                                apiKey: cloudSettings.ai_api_key || '',
+                                model: cloudSettings.ai_model || 'gemini-3.5-flash'
+                            };
+                            app.config.defaultEurRate = parseFloat(cloudSettings.default_eur_rate) || 400;
+                            app.config.useLiveEur = cloudSettings.use_live_eur !== 'false';
+                        }
+                        
+                        // Kényszerítsük az UI frissítését, ha a dark mode / bg theme változott
+                        if (app && app.ui) {
+                            if (app.ui.initAppearanceSettings) app.ui.initAppearanceSettings();
+                            if (app.ui.populateSettingsForm) app.ui.populateSettingsForm();
+                        }
+                    } else if (localTime > cloudTime) {
+                        console.log('[SYNC] 📱 Helyi beállítások frissebbek, felhő felülírása...');
+                        shouldPush = true;
+                    }
+                }
+                
+                if (shouldPush) {
+                    await this.cloud.upsert('app_settings', {
+                        id: 'user_settings',
+                        settings_json: localSettings,
+                        updated_at: localSettings.settings_updated_at === '1970-01-01T00:00:00.000Z' ? new Date().toISOString() : localSettings.settings_updated_at
+                    }, 'id');
+                }
+                
+            } catch (err) {
+                console.warn('[SYNC] ⚠️ Beállítások szinkronizálása sikertelen (lehet, hogy az app_settings tábla nem létezik még?):', err);
+            }
+
             // === 6. SZELEKTÍV FELTÖLTÉS (Push): CSAK a helyben módosult/új adatokat töltjük fel! ===
             console.log('[SYNC] ⬆️ Szelektív Push: CSAK a helyben módosult vagy új adatok feltöltése...');
             
@@ -500,7 +613,8 @@ export class SyncService {
                     try {
                         // Letisztítjuk a belső metaadatokat a felhőbe küldés előtt
                         const { _source, _updated_at, ...cleanItem } = item;
-                        await this.push(table, cleanItem);
+                        const customKey = table === 'months' ? 'month' : 'id';
+                        await this.push(table, cleanItem, false, customKey, true);
                         pushedCount++;
                     } catch (err) {
                         console.warn(`[SYNC] ⚠️ Push hiba a(z) ${table} táblánál:`, err);
@@ -567,6 +681,7 @@ export class SyncService {
             case 'reminders': return app.reminderManager?.reminders || [];
             case 'incomings': return app.incomingManager?.incomings || [];
             case 'incoming_senders': return app.incomingManager?.senders || [];
+            case 'works': return app.workLogManager?.works || [];
             default: return [];
         }
     }
@@ -701,9 +816,12 @@ export class SyncService {
                         _source: 'merged (cloud wins)', 
                         _updated_at: item.updated_at || new Date().toISOString()
                     };
-                } else {
+                } else if (cloudTime < localTime) {
                     // Helyi frissebb → megtartjuk a helyit
                     keyMap[key]._source = 'merged (local wins)';
+                } else {
+                    // Megegyező timestamp → nincs teendő
+                    keyMap[key]._source = 'merged (identical)';
                 }
             } else {
                 // Nincs helyi → felhőből jön
@@ -737,7 +855,8 @@ export class SyncService {
             { name: 'templates', data: mergedData.templates || [], key: 'id' },
             { name: 'reminders', data: mergedData.reminders || [], key: 'id' },
             { name: 'incomings', data: mergedData.incomings || [], key: 'id' },
-            { name: 'incoming_senders', data: mergedData.incoming_senders || [], key: 'id' }
+            { name: 'incoming_senders', data: mergedData.incoming_senders || [], key: 'id' },
+            { name: 'works', data: mergedData.works || [], key: 'id' }
         ];
 
         for (const { name, data, key } of tables) {
@@ -774,10 +893,12 @@ export class SyncService {
                 app.entries?.load?.() || Promise.resolve(),
                 app.templates?.load?.() || Promise.resolve(),
                 app.reminderManager?.load?.() || Promise.resolve(),
-                app.incomingManager?.load?.() || Promise.resolve()
+                app.incomingManager?.load?.() || Promise.resolve(),
+                app.workLogManager?.load?.() || Promise.resolve()
             ]);
 
             app.renderer?.renderTable?.();
+            app.workLogRenderer?.render?.();
             app.renderer?.renderSummary?.();
             app.remindersRenderer?.renderList?.();
             app.incomingRenderer?.render?.();
@@ -1047,6 +1168,7 @@ export class SyncService {
             case 'reminders': return 'Emlékeztetők';
             case 'incomings': return 'Bejövő utalások';
             case 'incoming_senders': return 'Partnerek';
+            case 'works': return 'Munkák';
             default: return table;
         }
     }

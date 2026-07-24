@@ -383,3 +383,159 @@ body.dark-mode footer {
   border-color: var(--border-color) !important;
   color: var(--text-muted) !important;
 }
+
+/* ---------- Custom Animations ---------- */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-6px); }
+  40%, 80% { transform: translateX(6px); }
+}
+.animate-shake {
+  animation: shake 0.4s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in {
+  animation: fadeIn 0.2s ease-out forwards;
+}
+
+/* ========================================================
+   MODERN EMERALD SLATE TÉMA STÍLUSOK (Sötét)
+   ======================================================== */
+body.bg-theme-emerald-slate {
+  --app-bg: #090f1d !important;
+  --card-bg: #111d30 !important;
+  --text-main: #f1f5f9 !important;
+  --text-muted: #94a3b8 !important;
+  --border-color: #1e2e48 !important;
+
+  background-color: var(--app-bg) !important;
+  color: var(--text-main) !important;
+}
+
+/* Modálok, kártyák és panelek háttérszíne */
+body.bg-theme-emerald-slate .bg-white,
+body.bg-theme-emerald-slate #cellEditorModal .bg-white,
+body.bg-theme-emerald-slate #syncModal .bg-white,
+body.bg-theme-emerald-slate #settingsModal .bg-white,
+body.bg-theme-emerald-slate #hmiInputModal .bg-white,
+body.bg-theme-emerald-slate .modal-content {
+  background-color: #111d30 !important;
+  border-color: #1e2e48 !important;
+  color: #f1f5f9 !important;
+}
+
+/* Kiemelt kártyák a dashboardon */
+body.bg-theme-emerald-slate .bg-slate-50,
+body.bg-theme-emerald-slate .bg-gray-50,
+body.bg-theme-emerald-slate .bg-slate-100,
+body.bg-theme-emerald-slate .bg-gray-100 {
+  background-color: #16253b !important;
+  color: #f1f5f9 !important;
+  border-color: #1e2e48 !important;
+}
+
+/* Bevételi / bejövő utalás kártyák stílusai */
+body.bg-theme-emerald-slate .bg-gradient-to-br.from-emerald-50.to-emerald-100,
+body.bg-theme-emerald-slate .from-emerald-50.to-emerald-100 {
+  background: linear-gradient(135deg, #092c23 0%, #111d30 100%) !important;
+  border-color: rgba(16, 185, 129, 0.3) !important;
+  color: #34d399 !important;
+}
+
+body.bg-theme-emerald-slate .from-emerald-50.to-emerald-100 p,
+body.bg-theme-emerald-slate .from-emerald-50.to-emerald-100 span,
+body.bg-theme-emerald-slate .from-emerald-50.to-emerald-100 i {
+  color: #34d399 !important;
+}
+
+body.bg-theme-emerald-slate #dashIncomingTotal,
+body.bg-theme-emerald-slate #dashIncomingMonthly,
+body.bg-theme-emerald-slate #dashTopSender {
+  color: #34d399 !important;
+  text-shadow: 0 0 10px rgba(52, 211, 153, 0.2);
+}
+
+/* Kiadások és átlagok stílusa (Gyönyörű Korall/Rózsaszín) */
+body.bg-theme-emerald-slate #dashTotal,
+body.bg-theme-emerald-slate #dashMonthly {
+  color: #fb7185 !important; /* Coral pink 400 */
+  text-shadow: 0 0 10px rgba(251, 113, 133, 0.2);
+}
+body.bg-theme-emerald-slate #dashDailyAvg {
+  color: #fda4af !important; /* Coral rose 300 */
+}
+body.bg-theme-emerald-slate #dashTopCategory {
+  color: #f87171 !important; /* Soft rose red */
+}
+
+/* Táblázat cella értékek színezése (Korall a kiadás, Smaragd a bevétel) */
+body.bg-theme-emerald-slate .cell-interactive {
+  transition: all 0.2s ease;
+}
+body.bg-theme-emerald-slate .cell-interactive:hover {
+  background-color: #1e2e48 !important;
+}
+
+/* HUF összegek (Kiadás) korall-rózsaszínként jelennek meg */
+body.bg-theme-emerald-slate .cell-interactive div.text-xs > div:first-child {
+  color: #fb7185 !important;
+  font-weight: 700;
+}
+
+/* EUR összegek (Bevételek és megtakarítások) smaragd színben tündökölnek */
+body.bg-theme-emerald-slate .text-emerald-700 {
+  color: #34d399 !important;
+}
+
+/* Bejövő utalás tábla és egyéb grid cellák */
+body.bg-theme-emerald-slate .incoming-cell {
+  background-color: #111d30 !important;
+  color: #f1f5f9 !important;
+  border-color: #1e2e48 !important;
+}
+body.bg-theme-emerald-slate td.text-blue-600,
+body.bg-theme-emerald-slate td.text-blue-700,
+body.bg-theme-emerald-slate #dashBalance {
+  color: #34d399 !important;
+}
+
+/* Navigációs és tab gombok stílusa */
+body.bg-theme-emerald-slate .tab-btn.active {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
+  color: white !important;
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.4) !important;
+}
+body.bg-theme-emerald-slate .tab-btn:not(.active) {
+  background-color: #16253b !important;
+  color: #94a3b8 !important;
+  border: 1px solid #1e2e48 !important;
+}
+
+body.bg-theme-emerald-slate header {
+  background: linear-gradient(135deg, #111d30 0%, #0d1b2e 100%) !important;
+  border-bottom: 1px solid #1e2e48 !important;
+}
+
+body.bg-theme-emerald-slate footer {
+  background-color: #111d30 !important;
+  border-top: 1px solid #1e2e48 !important;
+}
+
+body.bg-theme-emerald-slate input,
+body.bg-theme-emerald-slate select,
+body.bg-theme-emerald-slate textarea {
+  background-color: #16253b !important;
+  color: #f1f5f9 !important;
+  border-color: #1e2e48 !important;
+}
+
+body.bg-theme-emerald-slate input:focus,
+body.bg-theme-emerald-slate select:focus,
+body.bg-theme-emerald-slate textarea:focus {
+  border-color: #10b981 !important;
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2) !important;
+}

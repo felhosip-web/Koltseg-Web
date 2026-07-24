@@ -14,9 +14,9 @@ export class ChartsRenderer {
 renderAll(filterMonth = 'all') {
     this.lastFilter = filterMonth;
 
-    const entries = this.app.entries.entries || [];
+    const entries = (this.app.entries.entries || []).filter(e => !e.isStorno);
     const items = this.app.items.items || [];
-    const incomings = this.app.incomingManager?.incomings || []; // ← EZ HIÁNYZOTT!
+    const incomings = (this.app.incomingManager?.incomings || []).filter(e => !e.isStorno);
     const eurRate = this.app.config?.eurRate || 400;
 
     const filteredEntries = filterMonth === 'all' 

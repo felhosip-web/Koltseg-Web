@@ -1,0 +1,24 @@
+name: Supabase Migráció Deploy
+
+on:
+  push:
+    branches:
+      - main # Vagy a saját alapértelmezett branched neve (pl. master)
+  workflow_dispatch: # Lehetővé teszi a manuális indítást is a GitHub felületén
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Forráskód letöltése
+        uses: actions/checkout@v4
+
+      - name: Supabase CLI beállítása
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Migrációk futtatása a távoli adatbázison
+        run: |
+          supabase db push --db-url "postgresql://postgres.${{ secrets.SUPABASE_PROJECT_ID }}:${{ secrets.SUPABASE_DB_PASSWORD }}@aws-0-eu-west-1.pooler.supabase.com:5432/postgres"

@@ -119,7 +119,7 @@ export class UIModalController {
                 document.removeEventListener('keydown', handleEscape);
             };
 
-            const cleanup = () => {
+            const doCleanup = () => {
                 this.modal.classList.add('hidden');
                 // Klónozás a duplikált listener-ek elkerülésére
                 const newOk = okBtn.cloneNode(true);
@@ -127,18 +127,15 @@ export class UIModalController {
                 okBtn.parentNode.replaceChild(newOk, okBtn);
                 cancelBtn.parentNode.replaceChild(newCancel, cancelBtn);
                 removeEscapeListener();
-                resolve(false);
             };
 
             const handleOk = () => {
-                this.modal.classList.add('hidden');
-                removeEscapeListener();
+                doCleanup();
                 resolve(true);
             };
 
             const handleCancel = () => {
-                this.modal.classList.add('hidden');
-                removeEscapeListener();
+                doCleanup();
                 resolve(false);
             };
 
@@ -271,7 +268,8 @@ showInputModal(options) {
         const { 
             title, label, value = '', placeholder = '', 
             inputType = 'text', confirmText = 'Mentés', 
-            onConfirm = null 
+            onConfirm = null, showDelete = false, onDelete = null,
+            showStorno = false, isStorno = false
         } = options;
 
         const modal = document.createElement('div');
@@ -284,7 +282,22 @@ showInputModal(options) {
                        class="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                        value="${this._escapeHtml(String(value))}" 
                        placeholder="${this._escapeHtml(placeholder)}" />
+                
+                ${showStorno ? `
+                    <div class="flex items-center gap-2 mt-4">
+                        <input type="checkbox" id="inputModalStorno" class="w-4 h-4 text-red-600 border-gray-300 rounded focus:ring-red-500 cursor-pointer" ${isStorno ? 'checked' : ''} />
+                        <label for="inputModalStorno" class="text-xs font-bold text-red-600 flex items-center gap-1 cursor-pointer select-none">
+                            <i class="fas fa-ban"></i> SZTORNÓ (Tétel érvénytelenítése)
+                        </label>
+                    </div>
+                ` : ''}
+
                 <div class="flex gap-2 mt-4">
+                    ${showDelete ? `
+                        <button id="inputModalDelete" class="px-4 py-3 bg-red-100 text-red-600 rounded-xl font-bold hover:bg-red-200 transition flex items-center justify-center gap-1.5 shadow-sm">
+                            <i class="fas fa-trash-can text-sm"></i> Törlés
+                        </button>
+                    ` : ''}
                     <button id="inputModalCancel" class="flex-1 py-3 bg-gray-100 text-gray-600 rounded-xl font-bold hover:bg-gray-200 transition">Mégse</button>
                     <button id="inputModalConfirm" class="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition">${confirmText}</button>
                 </div>
@@ -296,6 +309,7 @@ showInputModal(options) {
         const input = modal.querySelector('#inputModalValue');
         const confirmBtn = modal.querySelector('#inputModalConfirm');
         const cancelBtn = modal.querySelector('#inputModalCancel');
+        const deleteBtn = modal.querySelector('#inputModalDelete');
 
         const close = (result) => {
             modal.remove();
@@ -304,13 +318,22 @@ showInputModal(options) {
 
         confirmBtn.addEventListener('click', () => {
             const val = input.value.trim();
+            const stornoCheckbox = modal.querySelector('#inputModalStorno');
+            const isStornoChecked = stornoCheckbox ? stornoCheckbox.checked : false;
             if (onConfirm) {
-                onConfirm(val);
+                onConfirm(val, isStornoChecked);
             }
             close(val || null);
         });
 
         cancelBtn.addEventListener('click', () => close(null));
+
+        if (deleteBtn && onDelete) {
+            deleteBtn.addEventListener('click', () => {
+                close(null);
+                onDelete();
+            });
+        }
 
         input.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') confirmBtn.click();
@@ -422,12 +445,14 @@ showSimulatedPushNotification(title, body) {
         this.btnCloseHelpModal = document.getElementById('btnCloseHelpModal');
         this.btnHelp = document.getElementById('btnHelp');
         this.btnHelpInline = document.getElementById('btnHelpInline');
+        this.btnHelpWork = document.getElementById('btnHelpWork');
 
         if (!this.helpModal) return;
 
         // Eseménykezelők
         this.btnHelp?.addEventListener('click', () => this.openHelp());
         this.btnHelpInline?.addEventListener('click', () => this.openHelp());
+        this.btnHelpWork?.addEventListener('click', () => this.openHelp('work_log'));
         this.btnCloseHelpModal?.addEventListener('click', () => this.closeHelp());
         this.helpSearchInput?.addEventListener('input', (e) => this.filterHelp(e.target.value));
 
@@ -444,8 +469,13 @@ showSimulatedPushNotification(title, body) {
         this.renderHelpContent();
     }
 
-    openHelp() {
+    openHelp(categoryId = null) {
         if (!this.helpModal) return;
+        if (categoryId) {
+            this.selectedCategory = categoryId;
+            this.renderHelpCategories();
+            this.renderHelpContent();
+        }
         this.helpModal.classList.remove('hidden');
         // Animáció indítása
         const box = this.helpModal.querySelector('.bg-white');

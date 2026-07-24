@@ -15,8 +15,8 @@ const { CacheFirst, StaleWhileRevalidate, NetworkFirst, NetworkOnly } = workbox.
 const { ExpirationPlugin } = workbox.expiration;
 const { CacheableResponsePlugin } = workbox.cacheableResponse;
 
-const CACHE_VERSION = 'v4.3.3';
-const BUILD_DATE = '2026-07-11';
+const CACHE_VERSION = 'v4.5.0';
+const BUILD_DATE = '2026-07-14';
 const CACHE_NAME = `kny-${CACHE_VERSION}-cache`;
 
 // ===== FALLBACK OFFLINE HTML (beépítve) =====
@@ -155,6 +155,23 @@ registerRoute(
     })
 );
 
+// Google APIs (NetworkFirst)
+registerRoute(
+    ({url}) => 
+        url.hostname.includes('googleapis.com') ||
+        url.hostname.includes('accounts.google.com'),
+    new NetworkFirst({
+        cacheName: 'google-api-cache',
+        networkTimeoutSeconds: 5,
+        plugins: [
+            new ExpirationPlugin({
+                maxEntries: 30,
+                maxAgeSeconds: 60 * 60,
+            }),
+        ]
+    })
+);
+
 // Egyéb API-k (NetworkFirst)
 registerRoute(
     ({url}) => 
@@ -258,6 +275,9 @@ self.addEventListener('install', event => {
                     '/js/cell-modal-controller.js',
                     '/js/input-modal-controller.js',
                     '/js/sync-manager.js',
+                    '/js/uuid-utils.js',
+                    '/js/gdrive-backup.js',
+                    '/js/push-manager.js',
                     '/icons/icon-192.png'
                 ];
                 
@@ -359,3 +379,69 @@ self.addEventListener('message', event => {
 
 console.log('[SW] Workbox Service Worker betöltve!');
 console.log(`[SW] Verzió: ${CACHE_VERSION}, Építve: ${BUILD_DATE}`);
+
+// ===== PUSH ÉRTESÍTÉSEK =====
+self.addEventListener('push', event => {
+    console.log('[SW] Push esemény fogadva:', event);
+
+    let payload = {
+        title: 'Költség Nyilvántartó',
+        body: 'Új értesítés érkezett.',
+        icon: '/icons/icon-192.png',
+        badge: '/icons/icon-96.png',
+        data: { url: '/' }
+    };
+
+    if (event.data) {
+        try {
+            const data = event.data.json();
+            payload = { ...payload, ...data };
+        } catch (e) {
+            payload.body = event.data.text();
+        }
+    }
+
+    const options = {
+        body: payload.body,
+        icon: payload.icon || '/icons/icon-192.png',
+        badge: payload.badge || '/icons/icon-96.png',
+        vibrate: payload.vibrate || [200, 100, 200],
+        tag: payload.tag || 'koltseg-push',
+        requireInteraction: payload.requireInteraction || false,
+        data: payload.data || { url: '/' },
+        actions: payload.actions || []
+    };
+
+    event.waitUntil(
+        self.registration.showNotification(payload.title, options)
+    );
+});
+
+// ===== NOTIFICATION KATTINTÁS =====
+self.addEventListener('notificationclick', event => {
+    console.log('[SW] Notification kattintás:', event.notification.tag);
+    event.notification.close();
+
+    const urlToOpen = event.notification.data?.url || '/';
+
+    event.waitUntil(
+        self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+            .then(clientList => {
+                // Ha van már nyitott ablak, fókuszáljuk
+                for (const client of clientList) {
+                    if (client.url.includes(self.registration.scope) && 'focus' in client) {
+                        return client.focus();
+                    }
+                }
+                // Ha nincs nyitott ablak, nyissunk újat
+                if (self.clients.openWindow) {
+                    return self.clients.openWindow(urlToOpen);
+                }
+            })
+    );
+});
+
+// ===== NOTIFICATION BEZÁRÁS =====
+self.addEventListener('notificationclose', event => {
+    console.log('[SW] Notification bezárva:', event.notification.tag);
+});

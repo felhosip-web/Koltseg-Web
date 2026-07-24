@@ -39,6 +39,11 @@ export class CellModalController {
         document.getElementById('cellCurrencyInput').value = 'HUF';
         
         this.selectedColor = 'transparent';
+
+        const stornoCheckbox = document.getElementById('cellIsStorno');
+        if (stornoCheckbox) {
+            stornoCheckbox.checked = false;
+        }
         
         // Gomb szöveg visszaállítása
         const saveBtn = document.getElementById('btnSaveCellModal');
@@ -79,20 +84,30 @@ export class CellModalController {
                 ? entry.color 
                 : '#f8fafc';
             
+            const isStorno = !!entry.isStorno;
+            const stornoClass = isStorno ? 'line-through text-red-900 opacity-60' : '';
+            const stornoBg = isStorno ? 'background-color: #fef2f2;' : `background-color: ${bgColor}`;
+            const stornoBorder = isStorno ? 'border-red-200' : 'border-gray-100';
+
             html += `
-                <div class="p-3 rounded-2xl flex justify-between items-start border border-gray-100 hover:border-gray-200 transition-all group" 
-                     style="background-color: ${bgColor}">
+                <div class="p-3 rounded-2xl flex justify-between items-start border ${stornoBorder} hover:border-gray-200 transition-all group" 
+                     style="${stornoBg}">
                     <div class="flex-1 min-w-0">
-                        <div class="flex items-baseline gap-2">
-                            <span class="font-bold text-gray-900 text-base">
+                        <div class="flex items-baseline gap-2 flex-wrap">
+                            <span class="font-bold text-gray-900 text-base ${stornoClass}">
                                 ${entry.amount.toLocaleString('hu-HU')} ${entry.currency || 'HUF'}
                             </span>
                             <span class="px-2 py-0.5 text-[10px] font-mono bg-black/5 rounded">
                                 ${entry.paymentMethod}
                             </span>
+                            ${isStorno ? `
+                                <span class="px-2 py-0.5 text-[10px] font-black bg-red-100 text-red-600 rounded flex items-center gap-1">
+                                    <i class="fas fa-ban"></i> SZTORNÓ
+                                </span>
+                            ` : ''}
                         </div>
                         ${entry.note ? `
-                            <p class="text-xs text-gray-600 mt-1 line-clamp-2">${entry.note}</p>
+                            <p class="text-xs text-gray-600 mt-1 line-clamp-2 ${stornoClass}">${entry.note}</p>
                         ` : ''}
                     </div>
                     
@@ -121,10 +136,21 @@ export class CellModalController {
     _attachListEventListeners() {
         this._cleanupEvents(); // régi listener-ek eltávolítása
 
+        // Színválasztó gombok
+        document.querySelectorAll('.color-selector-btn').forEach(btn => {
+            const handler = (e) => {
+                this.selectedColor = e.currentTarget.getAttribute('data-color');
+                document.querySelectorAll('.color-selector-btn').forEach(b => b.classList.remove('ring-4', 'ring-black'));
+                e.currentTarget.classList.add('ring-4', 'ring-black');
+            };
+            btn.addEventListener('click', handler);
+            this.boundEvents.add({ element: btn, type: 'click', handler });
+        });
+
         // Szerkesztés gombok
         document.querySelectorAll('.btn-edit-sub-entry').forEach(btn => {
             const handler = (e) => {
-                const id = parseInt(e.currentTarget.getAttribute('data-id'));
+                const id = e.currentTarget.getAttribute('data-id');
                 this.editEntry(id);
             };
             btn.addEventListener('click', handler);
@@ -134,7 +160,7 @@ export class CellModalController {
         // Törlés gombok
         document.querySelectorAll('.btn-delete-sub-entry').forEach(btn => {
             const handler = async (e) => {
-                const id = parseInt(e.currentTarget.getAttribute('data-id'));
+                const id = e.currentTarget.getAttribute('data-id');
                 await this.deleteEntry(id);
             };
             btn.addEventListener('click', handler);
@@ -156,16 +182,21 @@ export class CellModalController {
      * Egy meglévő tétel szerkesztése
      */
     editEntry(id) {
-        const entry = this.app.entries.entries.find(ent => ent.id === id);
+        const entry = this.app.entries.entries.find(ent => String(ent.id) === String(id));
         if (!entry) return;
 
-        this.editingEntryId = id;
+        this.editingEntryId = entry.id;
 
         document.getElementById('cellAmountInput').value = entry.amount;
         document.getElementById('cellCurrencyInput').value = entry.currency || 'HUF';
         document.getElementById('cellMethodInput').value = entry.paymentMethod || 'Kártya';
         document.getElementById('cellNoteInput').value = entry.note || '';
         
+        const stornoCheckbox = document.getElementById('cellIsStorno');
+        if (stornoCheckbox) {
+            stornoCheckbox.checked = !!entry.isStorno;
+        }
+
         this.selectedColor = entry.color || 'transparent';
 
         // Szín gombok frissítése
@@ -184,7 +215,7 @@ export class CellModalController {
      * Rész-tétel törlése
      */
     async deleteEntry(id) {
-        const targetEntry = this.app.entries.entries.find(ent => ent.id === id);
+        const targetEntry = this.app.entries.entries.find(ent => String(ent.id) === String(id));
         if (!targetEntry) return;
 
         const confirmed = await this.app.hmiNotif.showConfirm({
@@ -196,7 +227,7 @@ export class CellModalController {
 
         if (!confirmed) return;
 
-        await this.app.entries.deleteEntry(id);
+        await this.app.entries.deleteEntry(targetEntry.id);
         await this.app.entries.load();
 
         this.app.hmiNotif.showToast('Rész-tétel törölve', 'success');
@@ -219,12 +250,15 @@ export class CellModalController {
         const currency = document.getElementById('cellCurrencyInput').value;
         const paymentMethod = document.getElementById('cellMethodInput').value;
         const note = document.getElementById('cellNoteInput').value.trim();
+        
+        const stornoCheckbox = document.getElementById('cellIsStorno');
+        const isStorno = stornoCheckbox ? stornoCheckbox.checked : false;
 
         let entryData;
 
         if (this.editingEntryId !== null) {
             // Módosítás
-            const oldEntry = this.app.entries.entries.find(e => e.id === this.editingEntryId);
+            const oldEntry = this.app.entries.entries.find(e => String(e.id) === String(this.editingEntryId));
             entryData = {
                 id: this.editingEntryId,
                 cellKey: oldEntry ? oldEntry.cellKey : `${this.currentCellBaseKey}_${Date.now()}`,
@@ -233,6 +267,7 @@ export class CellModalController {
                 paymentMethod,
                 note,
                 color: this._normalizeColor(this.selectedColor),
+                isStorno,
                 timestamp: new Date().toISOString(),
                 updated_at: new Date().toISOString()
             };
@@ -247,6 +282,7 @@ export class CellModalController {
                 paymentMethod,
                 note,
                 color: this._normalizeColor(this.selectedColor),
+                isStorno,
                 timestamp: new Date().toISOString(),
                 updated_at: new Date().toISOString()
             };

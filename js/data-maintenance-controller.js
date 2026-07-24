@@ -15,6 +15,7 @@ export class DataMaintenanceController {
             reminders: this.app.reminderManager?.reminders || [],
             incomings: this.app.incomingManager?.incomings || [],
             incoming_senders: this.app.incomingManager?.senders || [],
+            works: this.app.workLogManager?.works || [],
             supabaseConfig: {
                 url: this.app.config?.supabaseConfig?.url || '',
                 useCloud: this.app.config?.useSupabase || false
@@ -51,7 +52,7 @@ export class DataMaintenanceController {
             const dbRaw = this.app.db.db || this.app.db._db;
             if (!dbRaw) throw new Error('Nincs adatbázis kapcsolat!');
 
-            const activeStores = ['items', 'months', 'entries', 'templates', 'reminders', 'incomings', 'incoming_senders'];
+            const activeStores = ['items', 'months', 'entries', 'templates', 'reminders', 'incomings', 'incoming_senders', 'works'];
             if (dbRaw.objectStoreNames.contains('deleted_records')) {
                 activeStores.push('deleted_records');
             }
@@ -65,6 +66,7 @@ export class DataMaintenanceController {
             tx.objectStore('reminders').clear();
             tx.objectStore('incomings').clear();
             tx.objectStore('incoming_senders').clear();
+            tx.objectStore('works').clear();
             if (dbRaw.objectStoreNames.contains('deleted_records')) {
                 tx.objectStore('deleted_records').clear();
             }
@@ -91,10 +93,12 @@ export class DataMaintenanceController {
                 this.app.entries.load(),
                 this.app.templates?.load?.(),
                 this.app.reminderManager?.load?.(),
-                this.app.incomingManager?.load?.()
+                this.app.incomingManager?.load?.(),
+                this.app.workLogManager?.load?.()
             ]);
 
             this.app.renderer.renderTable();
+            this.app.workLogRenderer?.render?.();
             this.app.remindersRenderer?.renderList?.();
             this.app.incomingRenderer?.render?.();
             this.app.renderStats?.();

@@ -1,9 +1,12 @@
 // js/pwa-manager.js
 //PWA és Service Worker
+import { PushNotificationManager } from './push-manager.js';
+
 export class PwaManager {
     constructor(app) {
         this.app = app;
         this.deferredInstallPrompt = null;
+        this.pushManager = new PushNotificationManager(app);
     }
 
     registerServiceWorker() {
@@ -20,7 +23,7 @@ export class PwaManager {
         });
 
         navigator.serviceWorker.register('./service-worker.js')
-            .then(reg => {
+            .then(async reg => {
                 console.log('[PWA] Service Worker regisztrálva:', reg.scope);
 
                 // Verzió lekérése a SW-től
@@ -28,6 +31,14 @@ export class PwaManager {
                     if (reg.active) reg.active.postMessage('getVersion');
                 } catch (e) {
                     console.warn('[PWA] Verzió lekérése sikertelen:', e);
+                }
+
+                // Push Manager inicializálása
+                try {
+                    await this.pushManager.init(reg);
+                    console.log('[PWA] Push Manager inicializálva');
+                } catch (e) {
+                    console.warn('[PWA] Push Manager init hiba:', e);
                 }
 
                 // Update handling: ha új worker települ, jelezzük a felhasználónak

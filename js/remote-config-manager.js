@@ -76,13 +76,17 @@ export class RemoteConfigManager {
         if (cfg.USE_CLOUD !== undefined) {
             useCloud = cfg.USE_CLOUD === true || cfg.USE_CLOUD === 'true';
         }
+        // Ha van Google felhasználó összekapcsolva, automatikusan szinkronizálunk
+        else if (localStorage.getItem('googleUser') !== null) {
+            useCloud = true;
+        }
+        // Alapértelmezett: ha van URL és kulcs, de még nem volt elmentett beállítás, automatikusan bekapcsoljuk
+        else if (url && key && localStorage.getItem('supabase_use') === null) {
+            useCloud = true;
+        }
         // ConfigManager-ből
         else if (configManager.useSupabase !== undefined) {
             useCloud = configManager.useSupabase === true;
-        }
-        // Alapértelmezett: ha van URL és kulcs, akkor automatikusan bekapcsoljuk
-        else if (url && key) {
-            useCloud = true;
         }
 
         // 4. EUR árfolyam

@@ -125,8 +125,8 @@ export class RemindersRenderer {
         // Teljesítés
         document.querySelectorAll('.btn-complete-reminder').forEach(btn => {
             btn.addEventListener('click', async (e) => {
-                const id = parseInt(e.currentTarget.dataset.id);
-                const rem = this.app.reminderManager.reminders.find(r => r.id === id);
+                const id = e.currentTarget.dataset.id; // UUID string
+                const rem = this.app.reminderManager.reminders.find(r => String(r.id) === id);
                 if (!rem) return;
 
                 // 1. Megjelölés teljesítettnek
@@ -197,8 +197,8 @@ export class RemindersRenderer {
         // Szerkesztés
         document.querySelectorAll('.btn-edit-reminder').forEach(btn => {
             btn.addEventListener('click', (e) => {
-                const id = parseInt(e.currentTarget.dataset.id);
-                const rem = this.app.reminderManager.reminders.find(r => r.id === id);
+                const id = e.currentTarget.dataset.id; // UUID string
+                const rem = this.app.reminderManager.reminders.find(r => String(r.id) === id);
                 if (!rem) return;
 
                 document.getElementById('editRemId').value = rem.id;
@@ -215,8 +215,8 @@ export class RemindersRenderer {
         // Törlés
         document.querySelectorAll('.btn-delete-reminder').forEach(btn => {
             btn.addEventListener('click', async (e) => {
-                const id = parseInt(e.currentTarget.dataset.id);
-                const rem = this.app.reminderManager.reminders.find(r => r.id === id);
+                const id = e.currentTarget.dataset.id; // UUID string
+                const rem = this.app.reminderManager.reminders.find(r => String(r.id) === id);
                 if (!rem) return;
 
                 const confirmed = await this.hmiNotif.showConfirm({
@@ -324,7 +324,7 @@ export class RemindersApp {
     }
 
     async _updateReminder() {
-        const id = parseInt(document.getElementById('editRemId').value);
+        const id = document.getElementById('editRemId').value; // UUID string
         const title = document.getElementById('editRemTitle').value.trim();
         const amount = parseFloat(document.getElementById('editRemAmount').value);
         const currency = document.getElementById('editRemCurrency').value;
@@ -346,7 +346,7 @@ export class RemindersApp {
             return;
         }
 
-        const rem = this.app.reminderManager.reminders.find(r => r.id === id);
+        const rem = this.app.reminderManager.reminders.find(r => String(r.id) === String(id));
         if (rem) {
             Object.assign(rem, { title, amount, currency, due_date, frequency, updated_at: new Date().toISOString() });
             await this.app.reminderManager.db.save('reminders', rem);

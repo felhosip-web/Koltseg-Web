@@ -59,7 +59,7 @@
         const cleanPath = path.replace(/^\/|\/$/g, '').replace(/[^a-zA-Z0-9_-]/g, '_');
         
         // Csak akkor aktiváljuk, ha valódi alútvonalon/mappában vagyunk (pl. /repository-name/)
-        if (!cleanPath || cleanPath === 'index.html' || cleanPath === 'src') {
+        if (!cleanPath || cleanPath === 'index.html' || cleanPath === 'index_html' || cleanPath === 'src') {
             return; 
         }
 

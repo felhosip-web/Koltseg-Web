@@ -6,6 +6,12 @@ export class AiModalController {
     constructor(app) {
         this.app = app;
         this.parsedData = null;
+        
+        // Gomb bekötése
+        const btnOpen = document.getElementById('btnOpenAiModal');
+        if (btnOpen) {
+            btnOpen.addEventListener('click', () => this.open());
+        }
     }
 
     /**
@@ -227,7 +233,8 @@ export class AiModalController {
                     text,
                     categories,
                     months,
-                    currentDate
+                    currentDate,
+                    aiConfig: this.app.config.aiConfig
                 })
             });
 

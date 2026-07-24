@@ -43,7 +43,8 @@ export class BootManager {
             this.app.months.load(),
             this.app.entries.load(),
             this.app.templates.load(),
-            this.app.incomingManager?.load?.()
+            this.app.incomingManager?.load?.(),
+            this.app.workLogManager?.load?.()
         ]);
         this.app.hmiNotif?.showToast('Adatok betöltve', 'success');
     }
@@ -59,6 +60,69 @@ export class BootManager {
         this.app.renderer.renderTable();
         this.app.renderStats();
         this.app.updateReminderStatus();
+        
+        // Initial Work Log rendering
+        if (this.app.workLogRenderer) {
+            await this.app.workLogRenderer.render();
+        }
+
+        // Initialize Landing Page Module switcher
+        this._initLandingPage();
+    }
+
+    _initLandingPage() {
+        const landing = document.getElementById('appLandingScreen');
+        const costApp = document.getElementById('costAppView');
+        const workApp = document.getElementById('workAppView');
+
+        const btnLaunchCost = document.getElementById('btnLaunchCostApp');
+        const btnLaunchWork = document.getElementById('btnLaunchWorkApp');
+        const btnCostToMenu = document.getElementById('btnCostToMenu');
+        const btnWorkToMenu = document.getElementById('btnWorkToMenu');
+
+        // Restore selected module if any
+        const savedModule = localStorage.getItem('hmi_selected_module');
+        if (savedModule === 'cost') {
+            if (landing) landing.classList.add('hidden');
+            if (costApp) costApp.classList.remove('hidden');
+        } else if (savedModule === 'work') {
+            if (landing) landing.classList.add('hidden');
+            if (workApp) workApp.classList.remove('hidden');
+            this.app.workLogRenderer?.render?.();
+        }
+
+        if (btnLaunchCost) {
+            btnLaunchCost.addEventListener('click', () => {
+                if (landing) landing.classList.add('hidden');
+                if (costApp) costApp.classList.remove('hidden');
+                localStorage.setItem('hmi_selected_module', 'cost');
+            });
+        }
+
+        if (btnLaunchWork) {
+            btnLaunchWork.addEventListener('click', () => {
+                if (landing) landing.classList.add('hidden');
+                if (workApp) workApp.classList.remove('hidden');
+                localStorage.setItem('hmi_selected_module', 'work');
+                this.app.workLogRenderer?.render?.();
+            });
+        }
+
+        if (btnCostToMenu) {
+            btnCostToMenu.addEventListener('click', () => {
+                if (costApp) costApp.classList.add('hidden');
+                if (landing) landing.classList.remove('hidden');
+                localStorage.removeItem('hmi_selected_module');
+            });
+        }
+
+        if (btnWorkToMenu) {
+            btnWorkToMenu.addEventListener('click', () => {
+                if (workApp) workApp.classList.add('hidden');
+                if (landing) landing.classList.remove('hidden');
+                localStorage.removeItem('hmi_selected_module');
+            });
+        }
     }
 
     async _initCloud() {
@@ -91,11 +155,6 @@ export class BootManager {
 
     async _initBackup() {
         this.app.backupManager.startAutoBackup();
-        
-        // Tab bezárás előtti mentés
-        window.addEventListener('beforeunload', () => {
-            this.app.backupManager.performBackup();
-        });
     }
 
     async _initPWA() {
@@ -129,8 +188,9 @@ export class BootManager {
         } catch (e) {
             console.warn('[BOOT] Háttérfolyamatok indítása sikertelen:', e);
         }
-       // Alkalmazás bezárás előtti cleanup
+        // Alkalmazás bezárás előtti cleanup és mentés
         window.addEventListener('beforeunload', () => {
+            this.app.backupManager.performBackup();
             this.app.destroy();
         });
         

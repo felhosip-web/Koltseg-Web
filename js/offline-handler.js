@@ -27,6 +27,9 @@ export class OfflineHandler {
      * Függő változtatás hozzáadása
      */
     addPendingChange(table, operation, data, key = 'id') {
+        if (!this.pendingChanges[table]) {
+            this.pendingChanges[table] = [];
+        }
         this.pendingChanges[table].push({
             operation,
             data,
@@ -57,9 +60,9 @@ export class OfflineHandler {
             for (const change of changes) {
                 try {
                     if (change.operation === 'delete') {
-                        await this.app.cloud.push(table, change.data, true, change.key);
+                        await this.app.syncService.push(table, change.data, true, change.key);
                     } else {
-                        await this.app.cloud.push(table, change.data);
+                        await this.app.syncService.push(table, change.data);
                     }
                     processed++;
                 } catch (e) {

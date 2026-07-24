@@ -45,7 +45,10 @@ _setupSyncQueueBadge() {
     
     // Regisztráljuk a queue változás figyelőt
     if (this.app.syncService?.onQueueChange) {
-        this.app.syncService.onQueueChange((status) => {
+        if (this._unsubQueueChange) {
+            this._unsubQueueChange();
+        }
+        this._unsubQueueChange = this.app.syncService.onQueueChange((status) => {
             this._updateSyncQueueBadge(status);
         });
     }
@@ -189,38 +192,96 @@ _setupSyncQueueBadge() {
             const details = document.getElementById('syncDetails');
             if (details) {
                 let html = '<div class="space-y-2">';
-                html += `<div class="font-bold text-amber-700">🕐 ${status.total} függőben lévő művelet</div>`;
+                html += `<div class="font-bold text-amber-700 flex justify-between items-center pb-1 border-b border-gray-100">
+                    <span>🕐 ${status.total} függő művelet</span>
+                    <button id="btnClearAllQueue" class="text-[10px] bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 px-2 py-0.5 rounded transition">
+                        <i class="fas fa-trash-can"></i> Összes törlése
+                    </button>
+                </div>`;
                 
                 // Csoportosítás táblánként
                 const groups = {};
                 status.items.forEach(item => {
-                    if (item.status === 'pending' || item.status === 'failed') {
+                    if (item.status === 'pending' || item.status === 'failed' || item.status === 'processing') {
                         if (!groups[item.table]) groups[item.table] = [];
                         groups[item.table].push(item);
                     }
                 });
                 
                 for (const [table, items] of Object.entries(groups)) {
-                    html += `<div class="border-b border-gray-200 py-1">`;
-                    html += `<div class="font-medium text-gray-700 text-xs">${table} (${items.length})</div>`;
-                    items.slice(0, 5).forEach(item => {
+                    html += `<div class="border-b border-gray-150 py-1.5">`;
+                    html += `<div class="font-semibold text-gray-700 text-[11px] mb-1">${table} (${items.length})</div>`;
+                    items.forEach(item => {
                         const icon = item.status === 'failed' ? '❌' : '⏳';
                         const time = new Date(item.timestamp).toLocaleTimeString('hu-HU');
-                        html += `<div class="flex justify-between text-[10px] text-gray-500 pl-2 py-0.5">
-                            <span>${icon} ${item.operation}</span>
-                            <span>${time}</span>
-                            ${item.retryCount > 0 ? `<span class="text-amber-500">(${item.retryCount}x)</span>` : ''}
+                        const opLabel = item.operation === 'delete' ? 'Törlés' : 'Mentés';
+                        const opColor = item.operation === 'delete' ? 'text-red-500 font-bold' : 'text-emerald-600 font-bold';
+                        const recordInfo = item.data && item.data.id ? `ID: ${item.data.id}` : '';
+                        
+                        html += `<div class="flex justify-between items-center text-[10px] text-gray-600 pl-2 pr-1 py-1 bg-white hover:bg-gray-100 rounded border border-gray-100 my-0.5">
+                            <span class="flex items-center gap-1 truncate max-w-[60%]">
+                                <span>${icon}</span>
+                                <span class="${opColor}">${opLabel}</span>
+                                <span class="text-gray-400 font-mono truncate">(${recordInfo})</span>
+                            </span>
+                            <div class="flex items-center gap-2 flex-shrink-0">
+                                <span class="text-gray-400 font-mono text-[9px]">${time}</span>
+                                ${item.retryCount > 0 ? `<span class="text-amber-500 font-bold">${item.retryCount}x</span>` : ''}
+                                <button class="btn-delete-queue-item text-red-500 hover:text-red-700 hover:bg-red-50 p-1 rounded transition" data-id="${item.id}" title="Elem törlése">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </div>
                         </div>`;
                     });
-                    if (items.length > 5) {
-                        html += `<div class="text-[10px] text-gray-400 pl-2">... és ${items.length - 5} további</div>`;
-                    }
                     html += `</div>`;
                 }
                 
-                html += `<div class="pt-2 text-xs text-gray-400">Kattints a "Szinkronizáció indítása" gombra a feldolgozáshoz</div>`;
+                html += `<div class="pt-2 text-xs text-gray-400">Kattints a "Queue feldolgozása" gombra a végrehajtáshoz.</div>`;
                 html += '</div>';
                 details.innerHTML = html;
+
+                // Eseménykezelők hozzáadása
+                const clearAllBtn = details.querySelector('#btnClearAllQueue');
+                if (clearAllBtn) {
+                    clearAllBtn.addEventListener('click', async (e) => {
+                        e.stopPropagation();
+                        const confirmed = await this.app.hmiNotif.showConfirm({
+                            title: '🗑️ Várólista kiürítése',
+                            message: 'Biztosan törölni szeretnéd az összes függőben lévő változtatást? Így a felhőbe nem fognak feltöltődni.',
+                            confirmText: 'Igen, törlöm',
+                            cancelText: 'Mégse'
+                        });
+                        if (confirmed) {
+                            this.app.syncService.clearQueue();
+                            this.app.hmiNotif.showToast('✅ Várólista sikeresen kiürítve!', 'success');
+                            
+                            const freshStatus = this.app.syncService.getQueueStatus();
+                            if (freshStatus.total === 0) {
+                                modal.classList.add('hidden');
+                            } else {
+                                this._handleQueueClick();
+                            }
+                            this._updateSyncQueueBadge(freshStatus);
+                        }
+                    });
+                }
+
+                details.querySelectorAll('.btn-delete-queue-item').forEach(btn => {
+                    btn.addEventListener('click', async (e) => {
+                        e.stopPropagation();
+                        const itemId = btn.getAttribute('data-id');
+                        this.app.syncService.removeFromQueue(itemId);
+                        this.app.hmiNotif.showToast('✅ Elem eltávolítva a várólistából', 'success');
+                        
+                        const freshStatus = this.app.syncService.getQueueStatus();
+                        if (freshStatus.total === 0) {
+                            modal.classList.add('hidden');
+                        } else {
+                            this._handleQueueClick();
+                        }
+                        this._updateSyncQueueBadge(freshStatus);
+                    });
+                });
             }
             
             // Státusz frissítés
@@ -256,9 +317,25 @@ _setupSyncQueueBadge() {
             this.populateSettingsForm();
             this.togglePanel('settingsPanel');
         });
+        document.getElementById('btnSettingsWork')?.addEventListener('click', () => {
+            this.populateSettingsForm();
+            this.togglePanel('settingsPanel');
+        });
+        document.getElementById('btnCloseSettingsModal')?.addEventListener('click', () => {
+            this.togglePanel('settingsPanel');
+        });
+        document.getElementById('settingsPanel')?.addEventListener('click', (e) => {
+            if (e.target === e.currentTarget) {
+                this.togglePanel('settingsPanel');
+            }
+        });
         document.getElementById('btnDataControl')?.addEventListener('click', () => this.togglePanel('exportMenu'));
+        document.getElementById('btnDataControlWork')?.addEventListener('click', () => this.togglePanel('exportMenuWork'));
         document.getElementById('btnHelp')?.addEventListener('click', () => {
             this.app.hmiNotif?.openHelp?.();
+        });
+        document.getElementById('btnHelpWork')?.addEventListener('click', () => {
+            this.app.hmiNotif?.openHelp?.('work_log');
         });
         document.getElementById('btnHelpInline')?.addEventListener('click', () => {
             this.app.hmiNotif?.openHelp?.();
@@ -268,6 +345,10 @@ _setupSyncQueueBadge() {
         document.getElementById('btnForceSync')?.addEventListener('click', () => {
             this.togglePanel('exportMenu');
             this.openSyncModal();           // ← Eredeti metódus
+        });
+        document.getElementById('btnForceSyncWork')?.addEventListener('click', () => {
+            this.togglePanel('exportMenuWork');
+            this.openSyncModal();
         });
 
         const closeSyncModal = () => {
@@ -282,22 +363,38 @@ _setupSyncQueueBadge() {
         // ====================== EXPORT GOMBOK ======================
         document.getElementById('btnExportExcel')?.addEventListener('click', () => {
             this.togglePanel('exportMenu');
-            this.exportController.exportExcel();
+            this.exportController.exportWorkExcel();
+        });
+        document.getElementById('btnExportExcelWork')?.addEventListener('click', () => {
+            this.togglePanel('exportMenuWork');
+            this.exportController.exportWorkExcel();
         });
 
         document.getElementById('btnExportPdf')?.addEventListener('click', () => {
             this.togglePanel('exportMenu');
-            this.exportController.exportPdf();
+            this.exportController.exportWorkPdf();
+        });
+        document.getElementById('btnExportPdfWork')?.addEventListener('click', () => {
+            this.togglePanel('exportMenuWork');
+            this.exportController.exportWorkPdf();
         });
 
         document.getElementById('btnExportJson')?.addEventListener('click', () => {
             this.togglePanel('exportMenu');
-            this.exportController.exportJson();
+            this.exportController.exportWorkJson();
+        });
+        document.getElementById('btnExportJsonWork')?.addEventListener('click', () => {
+            this.togglePanel('exportMenuWork');
+            this.exportController.exportWorkJson();
         });
 
         document.getElementById('btnImportJson')?.addEventListener('click', () => {
             this.togglePanel('exportMenu');
-            this.exportController.importJson();
+            this.exportController.importWorkJson();
+        });
+        document.getElementById('btnImportJsonWork')?.addEventListener('click', () => {
+            this.togglePanel('exportMenuWork');
+            this.exportController.importWorkJson();
         });
 
         // ====================== KARANTARTÁS ======================
@@ -312,6 +409,10 @@ _setupSyncQueueBadge() {
         });
 
         document.getElementById('btnWipeDatabase')?.addEventListener('click', async () => {
+            if (this.app.securityGuard && this.app.securityGuard.currentUser === 'guest') {
+                this.app.hmiNotif?.showToast('❌ Művelet elutasítva: Vendég (User 2) módban az adatbázis törlése le van tiltva!', 'error');
+                return;
+            }
             this.togglePanel('exportMenu');
             await this.maintenanceController.wipeDatabase();
         });
@@ -340,18 +441,31 @@ _setupSyncQueueBadge() {
         });
 
         // Beállítások mentése
+        
+        // AI Settings
+        document.getElementById('btnSaveAiSettings')?.addEventListener('click', () => {
+            const aiApiKey = document.getElementById('aiApiKey').value.trim();
+            const aiModel = document.getElementById('aiModel').value;
+            
+            this.app.config.aiConfig = {
+                apiKey: aiApiKey,
+                model: aiModel
+            };
+            
+            localStorage.setItem('ai_api_key', aiApiKey);
+            localStorage.setItem('ai_model', aiModel);
+            localStorage.setItem('settings_updated_at', new Date().toISOString());
+            
+            this.app.hmiNotif?.showToast('AI beállítások mentve!', 'success');
+        });
+
         document.getElementById('btnSaveSettings')?.addEventListener('click', async () => {
             await this._handleSettingsSave();
         });
 
-        // Google Bejelentkezés gomb
-        document.getElementById('btnGoogleSignIn')?.addEventListener('click', () => {
-            this._handleGoogleSignIn();
-        });
-
-        // Google Kijelentkezés gomb
-        document.getElementById('btnGoogleSignOut')?.addEventListener('click', () => {
-            this._handleGoogleSignOut();
+        // Google Drive Client ID Mentés
+        document.getElementById('btnSaveGDriveClientGeneral')?.addEventListener('click', () => {
+            this._handleGoogleClientSave();
         });
 
         // Supabase Kapcsolat Tesztelése gomb
@@ -393,6 +507,13 @@ _setupSyncQueueBadge() {
                 else if (targetTab === 'logs') {
                     contentId = 'settingsContentLogs';
                     this.renderLogs();
+                } else if (targetTab === 'ai') {
+                    contentId = 'settingsContentAi';
+                } else if (targetTab === 'security') {
+                    contentId = 'settingsContentSecurity';
+                    if (this.app.securityGuard) {
+                        this.app.securityGuard.populateForm();
+                    }
                 }
                 
                 const targetContent = document.getElementById(contentId);
@@ -436,6 +557,25 @@ _setupSyncQueueBadge() {
                 }
             }
         });
+
+        // Click outside to close export menus
+        document.addEventListener('click', (e) => {
+            const dataControlBtn = document.getElementById('btnDataControl');
+            const exportMenu = document.getElementById('exportMenu');
+            if (exportMenu && !exportMenu.classList.contains('hidden')) {
+                if (dataControlBtn && !dataControlBtn.contains(e.target) && !exportMenu.contains(e.target)) {
+                    exportMenu.classList.add('hidden');
+                }
+            }
+
+            const dataControlBtnWork = document.getElementById('btnDataControlWork');
+            const exportMenuWork = document.getElementById('exportMenuWork');
+            if (exportMenuWork && !exportMenuWork.classList.contains('hidden')) {
+                if (dataControlBtnWork && !dataControlBtnWork.contains(e.target) && !exportMenuWork.contains(e.target)) {
+                    exportMenuWork.classList.add('hidden');
+                }
+            }
+        });
     }
 
     renderLogs() {
@@ -475,6 +615,11 @@ _setupSyncQueueBadge() {
     }
 
     async _handleSettingsSave() {
+        if (this.app.securityGuard && this.app.securityGuard.currentUser === 'guest') {
+            this.app.hmiNotif?.showToast('❌ Módosítás elutasítva: Vendég (User 2) módban nem módosíthatóak az alapbeállítások!', 'error');
+            this.app.renderer?.updateFooterStatus('Mentés elutasítva', true);
+            return;
+        }
         this.app.renderer.updateFooterStatus('Beállítások mentése...', false);
         console.log('[SETTINGS] _handleSettingsSave invoked');
         try {
@@ -515,6 +660,7 @@ _setupSyncQueueBadge() {
                 this.app.updateOnlineStatus(navigator.onLine);
             }
 
+            localStorage.setItem('settings_updated_at', new Date().toISOString());
             this.app.hmiNotif?.showToast('Beállítások sikeresen rögzítve!', 'success');
             this.togglePanel('settingsPanel');
             this.app.renderer.renderTable();
@@ -545,132 +691,50 @@ _setupSyncQueueBadge() {
         if (toggleEl) toggleEl.checked = Boolean(this.app.config.useSupabase);
         if (liveEurEl) liveEurEl.checked = this.app.config.useLiveEur !== false;
 
+        // Populate AI settings
+        const aiApiKeyEl = document.getElementById('aiApiKey');
+        const aiModelEl = document.getElementById('aiModel');
+        if (aiApiKeyEl) aiApiKeyEl.value = this.app.config.aiConfig?.apiKey || '';
+        if (aiModelEl) aiModelEl.value = this.app.config.aiConfig?.model || 'gemini-3.5-flash';
+
+
         // Frissítsük a Google Bejelentkezés UI-t is
         this._updateGoogleAuthUI();
     }
 
-    // ==================== GOOGLE & SUPABASE AUTH METHODS ====================
-    _handleGoogleSignIn() {
-        const modal = document.createElement('div');
-        modal.className = 'fixed inset-0 bg-black/60 flex items-center justify-center z-[99999] p-4';
-        modal.id = 'simulatedGoogleAuthModal';
-        modal.innerHTML = `
-            <div class="bg-white rounded-3xl max-w-sm w-full shadow-2xl overflow-hidden border border-gray-100 transform scale-95 transition-all duration-200">
-                <div class="p-6 text-center border-b border-gray-100 bg-slate-50">
-                    <svg class="w-10 h-10 mx-auto mb-3" viewBox="0 0 24 24">
-                        <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v3.92h6.69c-.29 1.5-.14 3.01-1.3 4a7.62 7.62 0 0 1-5.39 2.1c-4.42 0-8-3.58-8-8s3.58-8 8-8c1.97 0 3.77.7 5.17 2l3-3A11.83 11.83 0 0 0 12 0C5.37 0 0 5.37 0 12s5.37 12 12 12c6.33 0 11.745-4.5 11.745-11.73z"/>
-                    </svg>
-                    <h3 class="font-bold text-gray-800 text-base leading-tight">Bejelentkezés a Google-lel</h3>
-                    <p class="text-xs text-gray-400 mt-1">Válassz Google-fiókot a költségnyilvántartó szinkronizálásához:</p>
-                </div>
-                <div class="p-5 space-y-4 bg-white">
-                    <!-- Ajánlott fiók (Saját fiók) -->
-                    <button class="w-full p-3.5 bg-slate-50 hover:bg-indigo-50 hover:border-indigo-200 border border-slate-100 rounded-2xl flex items-center gap-3 transition-all text-left group" data-email="felhosip@gmail.com" data-name="Fellner Sándor">
-                        <div class="w-9 h-9 rounded-full bg-indigo-600 text-white font-bold flex items-center justify-center text-xs group-hover:scale-105 transition">
-                            FS
-                        </div>
-                        <div class="min-w-0 flex-1">
-                            <div class="text-xs font-bold text-slate-800 leading-tight">Fellner Sándor (Alapértelmezett)</div>
-                            <div class="text-[10px] text-slate-400 truncate">felhosip@gmail.com</div>
-                        </div>
-                    </button>
-                    
-                    <div class="border-t border-slate-100 my-2 pt-3">
-                        <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1.5">Egyedi Google e-mail használata</label>
-                        <div class="flex gap-2">
-                            <input type="email" id="customGoogleEmail" class="flex-1 px-3 py-2 border border-slate-200 rounded-xl text-xs bg-slate-50 focus:outline-none focus:border-indigo-500 font-semibold" placeholder="felhasznalo@gmail.com">
-                            <button id="btnGoogleUseCustom" class="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs transition shadow-sm">Ok</button>
-                        </div>
-                    </div>
-                </div>
-                <div class="p-4 bg-slate-50 border-t border-gray-100 flex gap-2">
-                    <button class="flex-1 py-3 bg-white border border-slate-200 hover:bg-slate-50 rounded-xl text-xs font-bold text-slate-600 transition" id="btnCancelGoogleSim">Mégse</button>
-                </div>
-            </div>
-        `;
-
-        document.body.appendChild(modal);
+    // ==================== GOOGLE DRIVE CLIENT ID METHODS ====================
+    _handleGoogleClientSave() {
+        const input = document.getElementById('gdriveClientIdGeneral');
+        if (!input) return;
         
-        // Animáció indítása
-        setTimeout(() => {
-            const card = modal.querySelector('.bg-white');
-            if (card) {
-                card.classList.remove('scale-95');
-                card.classList.add('scale-100');
-            }
-        }, 10);
-
-        // Fiók választás esemény
-        modal.querySelectorAll('button[data-email]').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const email = btn.getAttribute('data-email');
-                const name = btn.getAttribute('data-name');
-                this._completeGoogleSignIn(email, name);
-                modal.remove();
-            });
-        });
-
-        // Egyedi fiók használata gomb
-        modal.querySelector('#btnGoogleUseCustom')?.addEventListener('click', () => {
-            const inputVal = modal.querySelector('#customGoogleEmail')?.value?.trim();
-            if (inputVal && inputVal.includes('@')) {
-                const name = inputVal.split('@')[0];
-                const cleanName = name.charAt(0).toUpperCase() + name.slice(1);
-                this._completeGoogleSignIn(inputVal, cleanName);
-                modal.remove();
-            } else {
-                this.app.hmiNotif?.showToast('Kérjük, adj meg egy érvényes e-mail címet!', 'warning');
-            }
-        });
-
-        modal.querySelector('#btnCancelGoogleSim')?.addEventListener('click', () => {
-            modal.remove();
-        });
-    }
-
-    _completeGoogleSignIn(email, name) {
-        const userObj = { email, name };
-        localStorage.setItem('googleUser', JSON.stringify(userObj));
+        const val = input.value.trim();
+        if (!val) {
+            this.app.hmiNotif?.showToast('A Client ID nem lehet üres!', 'warning');
+            return;
+        }
+        
+        localStorage.setItem('gdrive_client_id', val);
+        this.app.hmiNotif?.showToast('Google Drive Client ID sikeresen mentve!', 'success');
         this._updateGoogleAuthUI();
-        this.app.hmiNotif?.showToast(`Üdvözöljük, ${name}! Sikeres Google összekapcsolás.`, 'success');
-    }
-
-    _handleGoogleSignOut() {
-        localStorage.removeItem('googleUser');
-        this._updateGoogleAuthUI();
-        this.app.hmiNotif?.showToast('Google fiók kapcsolat bontva.', 'info');
     }
 
     _updateGoogleAuthUI() {
-        const userStr = localStorage.getItem('googleUser');
+        const clientId = localStorage.getItem('gdrive_client_id');
         const badge = document.getElementById('googleStatusBadge');
-        const btnSignIn = document.getElementById('btnGoogleSignIn');
-        const sessionCard = document.getElementById('googleSessionCard');
-        const userEmailEl = document.getElementById('googleUserEmail');
-        const userNameEl = document.getElementById('googleUserName');
-        const userAvatarEl = document.getElementById('googleUserAvatar');
-
-        if (userStr) {
-            const user = JSON.parse(userStr);
-            if (badge) {
-                badge.textContent = 'Összekapcsolva';
+        const input = document.getElementById('gdriveClientIdGeneral');
+        
+        if (input && clientId) {
+            input.value = clientId;
+        }
+        
+        if (badge) {
+            if (clientId) {
+                badge.textContent = 'Beállítva';
                 badge.className = 'text-[9px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-600 uppercase';
-            }
-            if (btnSignIn) btnSignIn.classList.add('hidden');
-            if (sessionCard) sessionCard.classList.remove('hidden');
-            if (userEmailEl) userEmailEl.textContent = user.email;
-            if (userNameEl) userNameEl.textContent = user.name;
-            if (userAvatarEl) {
-                const initials = user.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
-                userAvatarEl.textContent = initials || 'G';
-            }
-        } else {
-            if (badge) {
-                badge.textContent = 'Nincs belépve';
+            } else {
+                badge.textContent = 'Nincs beállítva';
                 badge.className = 'text-[9px] font-bold px-2 py-0.5 rounded-full bg-slate-200 text-slate-500 uppercase';
             }
-            if (btnSignIn) btnSignIn.classList.remove('hidden');
-            if (sessionCard) sessionCard.classList.add('hidden');
         }
 
         if (this.app && typeof this.app.updateOnlineStatus === 'function') {
@@ -883,6 +947,48 @@ _setupSyncQueueBadge() {
                 console.error('[HMI PURGE CRITICAL ERROR]', error);
                 this.app.hmiNotif.showToast('Kritikus hiba, de a felület frissítve!', 'error');
                 this.app.renderer.updateFooterStatus('Törlési kényszerítés aktív', true);
+                this.app.renderer.renderTable();
+            }
+        }
+    }
+
+    async handleMonthDeleteSequence(month) {
+        if (!month) return;
+        const allEntries = this.app.entries.entries;
+        const associatedEntries = allEntries.filter(e => {
+            if (!e.cellKey) return false;
+            const parts = e.cellKey.split('_');
+            return parts[1] === month;
+        });
+
+        const confirmed = await this.app.hmiNotif.showConfirm({
+            title: '⚠️ KRITIKUS: Hónap lezárása / törlése',
+            message: `Biztosan törölni szeretné a(z) "${month}" hónapot az összes benne lévő rész-tételével (${associatedEntries.length} db) együtt?`,
+            type: 'danger',
+            confirmText: 'HÓNAP TÖRLÉSE'
+        });
+
+        if (confirmed) {
+            try {
+                this.app.renderer.updateFooterStatus('Havi tranzakciók törlése...', false);
+                for (const entry of associatedEntries) {
+                    await this.app.entries.deleteEntry(entry.id).catch(e => console.warn('Entry már törölve:', entry.id));
+                }
+                await this.app.months.delete(month);
+
+                await this.app.months.load().catch(() => {});
+                await this.app.entries.load().catch(() => {});
+
+                this.app.hmiNotif.showToast(`"${month}" hónap sikeresen eltávolítva.`, 'success');
+                this.app.renderer.updateFooterStatus('Sikeres fizikai törlés', false);
+                this.app.renderer.renderTable();
+                if (typeof this.app.refreshAllTabs === 'function') {
+                    this.app.refreshAllTabs();
+                }
+            } catch (error) {
+                console.error('[HMI PURGE MONTH CRITICAL ERROR]', error);
+                this.app.hmiNotif.showToast('Kritikus hiba a hónap törlésekor!', 'error');
+                this.app.renderer.updateFooterStatus('Törlési hiba', true);
                 this.app.renderer.renderTable();
             }
         }
@@ -1278,7 +1384,7 @@ _checkPendingChanges() {
             darkModeToggle.addEventListener('change', (e) => {
                 const isDark = e.target.checked;
                 this.applyDarkMode(isDark);
-                localStorage.setItem('appearance_dark_mode', String(isDark));
+                localStorage.setItem('appearance_dark_mode', String(isDark)); localStorage.setItem('settings_updated_at', new Date().toISOString());
                 this.app.logger?.log('Megjelenés', `Sötét mód ${isDark ? 'bekapcsolva' : 'kikapcsolva'}`);
             });
         }
@@ -1287,7 +1393,7 @@ _checkPendingChanges() {
             btn.addEventListener('click', (e) => {
                 const theme = btn.getAttribute('data-bg-theme');
                 this.applyBgTheme(theme);
-                localStorage.setItem('appearance_bg_theme', theme);
+                localStorage.setItem('appearance_bg_theme', theme); localStorage.setItem('settings_updated_at', new Date().toISOString());
                 this.updateBgThemeSelectorUI(theme);
                 this.app.logger?.log('Megjelenés', `Háttér téma módosítva: ${theme}`);
             });
@@ -1297,8 +1403,8 @@ _checkPendingChanges() {
             btnResetAppearance.addEventListener('click', () => {
                 this.applyDarkMode(false);
                 this.applyBgTheme('white');
-                localStorage.setItem('appearance_dark_mode', 'false');
-                localStorage.setItem('appearance_bg_theme', 'white');
+                localStorage.setItem('appearance_dark_mode', 'false'); localStorage.setItem('settings_updated_at', new Date().toISOString());
+                localStorage.setItem('appearance_bg_theme', 'white'); localStorage.setItem('settings_updated_at', new Date().toISOString());
                 if (darkModeToggle) darkModeToggle.checked = false;
                 this.updateBgThemeSelectorUI('white');
                 this.app.hmiNotif?.showToast('Megjelenés visszaállítva alapértelmezettre!', 'info');
@@ -1326,11 +1432,23 @@ _checkPendingChanges() {
         const body = document.body;
         
         // Eltávolítjuk a meglévő témákat
-        body.classList.remove('bg-theme-cream', 'bg-theme-sage', 'bg-theme-ice', 'bg-theme-lavender', 'bg-theme-slate', 'theme-custom-bg');
+        body.classList.remove('bg-theme-cream', 'bg-theme-sage', 'bg-theme-ice', 'bg-theme-lavender', 'bg-theme-slate', 'bg-theme-emerald-slate', 'theme-custom-bg');
         
         if (theme !== 'white') {
             body.classList.add('theme-custom-bg');
             body.classList.add(`bg-theme-${theme}`);
+        }
+
+        // Ha az emerald-slate van kiválasztva, kényszerítsük a sötét módot, különben állítsuk be a bejelöltnek megfelelően
+        if (theme === 'emerald-slate') {
+            body.classList.add('dark-mode');
+        } else {
+            const savedDarkMode = localStorage.getItem('appearance_dark_mode') === 'true';
+            if (savedDarkMode) {
+                body.classList.add('dark-mode');
+            } else {
+                body.classList.remove('dark-mode');
+            }
         }
     }
 

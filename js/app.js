@@ -1,4 +1,4 @@
-// js/app.js – v4.3.3 – Dashboard + 6 tabos felület verziókezeléssel
+// js/app.js – v5.2.0 – Dashboard + 6 tabos felület verziókezeléssel
 import './local-storage-sandbox.js';
 // ================================================================
 // 1. RÉSZ: Importok, Konstruktor, Segédfüggvények
@@ -22,6 +22,7 @@ import { PwaManager } from './pwa-manager.js';
 import { RemoteConfigManager } from './remote-config-manager.js';
 import { OfflineHandler } from './offline-handler.js';
 import { getVersionManager } from './version-manager.js';
+import { MESSAGES, formatMessage } from './messages.js';
 import { VirtualTableRenderer } from './virtual-table-renderer.js';
 import { DatabaseAudit } from './db-audit.js';
 import { SingletonLock } from './singleton-lock.js';
@@ -31,6 +32,10 @@ import { DataMaintenanceController } from './data-maintenance-controller.js';
 import { ServiceDevManager } from './service-dev-manager.js';
 import { IncomingRenderer } from './incoming-renderer.js';
 import { LogManager } from './log-manager.js';
+import { SecurityGuard } from './security-guard.js';
+import { WorkLogManager, WorkLogRenderer } from './work-log.js';
+import { GoogleDriveBackup } from './gdrive-backup.js';
+import { ModalManager } from './modal-manager.js';
 
 // ================================================================
 // === APP OSZTÁLY ===
@@ -48,6 +53,10 @@ class App {
 
         // === 2. VERZIÓKEZELÉS ===
         this.version = getVersionManager();
+        this.messages = MESSAGES;
+        this.formatMessage = formatMessage;
+        window.messages = MESSAGES;
+        window.formatMessage = formatMessage;
 
         // === 3. OFFLINE KEZELÉS ===
         this.offline = new OfflineHandler(this);
@@ -73,6 +82,7 @@ class App {
 
         // === 7. UI RENDEREREK ===
         this.renderer = new VirtualTableRenderer(this);
+        this.modalManager = new ModalManager(this);
         this.uiController = new UIController(this);
         this.aiModal = new AiModalController(this);
         this.chartsRenderer = new ChartsRenderer(this);
@@ -81,15 +91,21 @@ class App {
 
         // === 8. TOVÁBBI MENEDZSEREK ===
         this.backupManager = new BackupManager(this);
+        this.gdriveBackup = new GoogleDriveBackup(this);
         this.pwaManager = new PwaManager(this);
         this.remoteConfig = new RemoteConfigManager(this);
         this.bootManager = new BootManager(this);
         this.dbAudit = new DatabaseAudit(this);
         this.serviceDev = new ServiceDevManager(this);
+        this.securityGuard = new SecurityGuard(this);
 
         // === 9. BEJÖVŐ UTALÁSOK ===
         this.incomingManager = new IncomingManager(this.db, this.syncService);
         this.incomingRenderer = new IncomingRenderer(this);
+
+        // === 9.5. MUNKA NYILVÁNTARTÁS ===
+        this.workLogManager = new WorkLogManager(this.db, this.syncService);
+        this.workLogRenderer = new WorkLogRenderer(this, this.workLogManager);
 
         // === 10. HÁTTÉR ÉS ÁLLAPOTOK ===
         this.backgroundTasks = null;
@@ -200,6 +216,11 @@ class App {
         try {
             console.log('[APP] 🚀 Alkalmazás indítása...');
 
+            // === BIZTONSÁGI ZÁR KORAI INDÍTÁSA ===
+            if (this.securityGuard) {
+                this.securityGuard.init();
+            }
+
             // === OFFLINE MÓD ELLENŐRZÉS ===
             const params = new URLSearchParams(window.location.search);
             const isSupabaseConfigured = localStorage.getItem('supabase_use') === 'true' && 
@@ -257,9 +278,6 @@ class App {
             // === RENDSZER INDÍTÁSA ===
             await this.bootManager.boot();
             this.logger?.log('system', 'success', `Alkalmazás sikeresen elindult. Verzió: ${this.version.toString()}`);
-
-            // === BEJÖVŐ ADATOK BETÖLTÉSE ===
-            await this.incomingManager.load();
 
             // === VERZIÓ MEGJELENÍTÉSE ===
             this._updateVersionDisplay();
@@ -361,30 +379,65 @@ class App {
     // ================================================================
 
     updateOnlineStatus(isOnline) {
-        const statusBadge = document.getElementById('supabaseStatus');
-        const statusText = document.getElementById('statusText');
-        if (!statusBadge || !statusText) return;
-
         const hasInternet = isOnline && !this.isOfflineMode;
+        
         const useSupabase = this.config?.useSupabase;
+        // Check if GDrive is active. A simple check is if we have gdriveBackup configured.
+        const useGDrive = this.gdriveBackup && this.gdriveBackup.isConfigured && this.gdriveBackup.isConfigured();
+        
         const isLoggedIn = localStorage.getItem('googleUser') !== null;
+        
+        // Update global network badges
+        document.querySelectorAll('.global-network-badge').forEach(badge => {
+            if (!hasInternet) {
+                badge.className = 'global-network-badge text-[10px] px-2 py-0.5 rounded-full bg-red-100 text-red-600 font-medium flex items-center gap-1 transition-colors';
+            } else {
+                badge.className = 'global-network-badge text-[10px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-600 font-medium flex items-center gap-1 transition-colors';
+            }
+        });
+        
+        document.querySelectorAll('.global-status-text').forEach(text => {
+            if (!hasInternet) {
+                text.textContent = 'Offline';
+            } else if (useSupabase) {
+                text.textContent = isLoggedIn ? 'Szerver Online (Fiók)' : 'Szerver Online';
+            } else {
+                text.textContent = isLoggedIn ? 'Online (Helyi + Fiók)' : 'Online (Helyi)';
+            }
+        });
 
-        if (!hasInternet) {
-            statusBadge.className = 'text-[10px] px-2 py-0.5 rounded-full bg-red-100 text-red-600 font-medium flex items-center gap-1';
-            statusText.textContent = 'Offline';
-            const eurLed = document.getElementById('eurLed');
-            if (eurLed) eurLed.className = 'w-3 h-3 rounded-full bg-red-400';
-        } else if (useSupabase) {
-            statusBadge.className = 'text-[10px] px-2 py-0.5 rounded-full bg-green-100 text-green-600 font-medium flex items-center gap-1';
-            statusText.textContent = isLoggedIn ? 'Szerver Online (Fiók)' : 'Szerver Online';
-            const eurLed = document.getElementById('eurLed');
-            if (eurLed) eurLed.className = 'w-3 h-3 rounded-full bg-green-400';
-        } else {
-            statusBadge.className = 'text-[10px] px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700 font-medium flex items-center gap-1';
-            statusText.textContent = isLoggedIn ? 'Online (Helyi + Fiók)' : 'Online (Helyi)';
-            const eurLed = document.getElementById('eurLed');
-            if (eurLed) eurLed.className = 'w-3 h-3 rounded-full bg-yellow-400';
+        const eurLed = document.getElementById('eurLed');
+        if (eurLed) {
+            eurLed.className = hasInternet ? 'w-3 h-3 rounded-full bg-blue-400' : 'w-3 h-3 rounded-full bg-red-400';
         }
+
+        // Update Supabase indicators
+        document.querySelectorAll('.supabase-status-icon').forEach(icon => {
+            if (!hasInternet) {
+                icon.className = 'supabase-status-icon w-5 h-5 flex items-center justify-center rounded-full bg-gray-100 text-gray-400 border border-transparent transition-all opacity-50';
+                icon.title = 'Supabase (Offline)';
+            } else if (useSupabase) {
+                icon.className = 'supabase-status-icon w-5 h-5 flex items-center justify-center rounded-full bg-emerald-100 text-emerald-600 border border-emerald-200 shadow-sm transition-all';
+                icon.title = 'Supabase (Aktív)';
+            } else {
+                icon.className = 'supabase-status-icon w-5 h-5 flex items-center justify-center rounded-full bg-gray-100 text-gray-400 border border-transparent transition-all';
+                icon.title = 'Supabase (Inaktív)';
+            }
+        });
+
+        // Update GDrive indicators
+        document.querySelectorAll('.gdrive-status-icon').forEach(icon => {
+            if (!hasInternet) {
+                icon.className = 'gdrive-status-icon w-5 h-5 flex items-center justify-center rounded-full bg-gray-100 text-gray-400 border border-transparent transition-all opacity-50';
+                icon.title = 'Google Drive (Offline)';
+            } else if (useGDrive) {
+                icon.className = 'gdrive-status-icon w-5 h-5 flex items-center justify-center rounded-full bg-indigo-100 text-indigo-600 border border-indigo-200 shadow-sm transition-all';
+                icon.title = 'Google Drive (Aktív)';
+            } else {
+                icon.className = 'gdrive-status-icon w-5 h-5 flex items-center justify-center rounded-full bg-gray-100 text-gray-400 border border-transparent transition-all';
+                icon.title = 'Google Drive (Inaktív)';
+            }
+        });
     }
 
     _setupNetworkListeners() {
@@ -515,10 +568,10 @@ class App {
     // ================================================================
 
     renderDashboard() {
-        const entries = this.entries.entries || [];
+        const entries = (this.entries.entries || []).filter(e => !e.isStorno);
         const items = this.items.items || [];
         const months = this.months.months || [];
-        const incomings = this.incomingManager?.incomings || [];
+        const incomings = (this.incomingManager?.incomings || []).filter(e => !e.isStorno);
         const eurRate = this.config.eurRate || 400;
 
         // === 1. KIADÁSOK ÖSSZESÍTÉSE ===
@@ -652,7 +705,7 @@ class App {
     }
 
     _calculateMonthlyAvg() {
-        const entries = this.entries.entries || [];
+        const entries = (this.entries.entries || []).filter(e => !e.isStorno);
         const eurRate = this.config.eurRate || 400;
         const monthlyData = {};
 
@@ -683,7 +736,7 @@ class App {
             this._dashboardChart = null;
         }
 
-        const entries = this.entries.entries || [];
+        const entries = (this.entries.entries || []).filter(e => !e.isStorno);
         const eurRate = this.config.eurRate || 400;
         const monthlyData = {};
 
@@ -823,7 +876,7 @@ class App {
         }
 
         // 3. Havi kiadás figyelmeztetés
-        const entries = this.entries.entries || [];
+        const entries = (this.entries.entries || []).filter(e => !e.isStorno);
         const eurRate = this.config.eurRate || 400;
         const currentMonth = now.format('YYYY-MM');
         let monthlyTotal = 0;
@@ -881,10 +934,10 @@ class App {
     // ================================================================
 
     renderStats() {
-        const entries = this.entries.entries || [];
+        const entries = (this.entries.entries || []).filter(e => !e.isStorno);
         const items = this.items.items || [];
         const months = this.months.months || [];
-        const incomings = this.incomingManager?.incomings || [];
+        const incomings = (this.incomingManager?.incomings || []).filter(e => !e.isStorno);
         const eurRate = this.config.eurRate || 400;
 
         // === KIADÁS STATISZTIKA ===
@@ -1282,8 +1335,38 @@ refreshAllTabs() {
         return created;
     }
 
+    async generateTestWorks(count = 10) {
+        const names = ['Karbantartás', 'Takarítás', 'Fejlesztés', 'Design tervezés', 'Adatbázis migráció', 'Szerver beállítás', 'Dokumentáció írás'];
+        const locations = ['Iroda', 'Otthon', 'Helyszínen', 'Távmunka'];
+        const statuses = ['folyamatban', 'elvégzett', 'meghiúsult'];
+        let created = 0;
+
+        for (let i = 0; i < count; i++) {
+            const name = names[i % names.length] + ' ' + (i + 1);
+            const description = 'Ez egy automatikusan generált teszt munka leírás.';
+            const location = locations[Math.floor(Math.random() * locations.length)];
+            const date = dayjs().subtract(Math.floor(Math.random() * 15), 'day').format('YYYY-MM-DD');
+            const duration = Math.floor(Math.random() * 8) + 1;
+            const status = statuses[Math.floor(Math.random() * statuses.length)];
+
+            const work = {
+                name,
+                description,
+                location,
+                date,
+                duration,
+                status,
+                updated_at: new Date().toISOString()
+            };
+            await this.workLogManager.save(work);
+            created++;
+        }
+
+        return created;
+    }
+
     async clearAllData() {
-        const stores = ['entries', 'items', 'months', 'templates', 'reminders', 'incomings', 'incoming_senders'];
+        const stores = ['entries', 'items', 'months', 'templates', 'reminders', 'incomings', 'incoming_senders', 'works'];
         for (const store of stores) {
             const rows = await this.db.getAll(store);
             await Promise.all(rows.map(row => {
@@ -1299,6 +1382,7 @@ refreshAllTabs() {
         this.reminderManager.reminders = [];
         this.incomingManager.incomings = [];
         this.incomingManager.senders = [];
+        if (this.workLogManager) this.workLogManager.works = [];
     }
 }
 
@@ -1360,6 +1444,7 @@ function initDebugPanel() {
                 updateDebugLogs();
                 updateSupabaseDebugInfo();
                 updateNotificationPermissionStatus();
+            updateGDriveDebugInfo();
             }
         }
         clickTimer = setTimeout(() => { clickCount = 0; }, 800);
@@ -1396,18 +1481,20 @@ function initDebugPanel() {
     const tabBtnActions = document.getElementById('tabBtnDebugActions');
     const tabBtnSupabase = document.getElementById('tabBtnDebugSupabase');
     const tabBtnReminders = document.getElementById('tabBtnDebugReminders');
+    const tabBtnGDrive = document.getElementById('tabBtnDebugGDrive');
 
     const tabActions = document.getElementById('debugTabActions');
     const tabSupabase = document.getElementById('debugTabSupabase');
     const tabReminders = document.getElementById('debugTabReminders');
+    const tabGDrive = document.getElementById('debugTabGDrive');
 
     const switchTab = (activeBtn, activeTab) => {
-        [tabBtnActions, tabBtnSupabase, tabBtnReminders].forEach(btn => {
+        [tabBtnActions, tabBtnSupabase, tabBtnReminders, tabBtnGDrive].forEach(btn => {
             if (btn) {
                 btn.className = "flex-1 py-2 text-xs font-bold rounded-xl text-slate-500 hover:text-slate-800 hover:bg-white/50 transition";
             }
         });
-        [tabActions, tabSupabase, tabReminders].forEach(tab => {
+        [tabActions, tabSupabase, tabReminders, tabGDrive].forEach(tab => {
             if (tab) tab.classList.add('hidden');
         });
 
@@ -1423,6 +1510,10 @@ function initDebugPanel() {
     tabBtnReminders?.addEventListener('click', () => {
         switchTab(tabBtnReminders, tabReminders);
         updateNotificationPermissionStatus();
+    });
+    tabBtnGDrive?.addEventListener('click', () => {
+        switchTab(tabBtnGDrive, tabGDrive);
+        updateGDriveDebugInfo();
     });
 
     // Debug gombok
@@ -1512,11 +1603,57 @@ function initDebugPanel() {
         }
     });
 
+    // Google Drive Kapcsolati teszt
+    const btnTestGDrive = document.getElementById('btnTestGDriveConnDebug');
+    btnTestGDrive?.addEventListener('click', async () => {
+        const app = window.app;
+        if (!app) return;
+        const clientId = app.config?.gdriveClientId;
+        const resultDiv = document.getElementById('debugGDriveConnResult');
+        if (!resultDiv) return;
+
+        resultDiv.classList.remove('hidden');
+        resultDiv.className = "p-3 rounded-lg text-xs font-mono bg-amber-50 text-amber-800 border border-amber-200";
+        resultDiv.textContent = "OAuth kapcsolat ellenőrzése folyamatban...";
+
+        if (!clientId) {
+            resultDiv.className = "p-3 rounded-lg text-xs font-mono bg-red-50 text-red-800 border border-red-200";
+            resultDiv.textContent = "Hiba: Google OAuth Client ID nincs megadva a beállításokban!";
+            return;
+        }
+
+        try {
+            if (app.gdriveBackup) {
+                // Meghívjuk az authorize-t interaktív móddal
+                const token = await app.gdriveBackup.authorize(true);
+                if (token) {
+                    resultDiv.className = "p-3 rounded-lg text-xs font-mono bg-emerald-50 text-emerald-800 border border-emerald-200";
+                    resultDiv.textContent = `🟢 SIKERES KAPCSOLAT!\nAz OAuth token sikeresen lekérve.\nGoogle Drive API készen áll a biztonsági mentésekre.`;
+                } else {
+                    resultDiv.className = "p-3 rounded-lg text-xs font-mono bg-rose-50 text-rose-800 border border-rose-200";
+                    resultDiv.textContent = `🔴 HITELESÍTÉSI HIBA!\nA felugró ablak be lett zárva, vagy a hitelesítés meghiúsult.`;
+                }
+            } else {
+                resultDiv.className = "p-3 rounded-lg text-xs font-mono bg-rose-50 text-rose-800 border border-rose-200";
+                resultDiv.textContent = "Hiba: GDrive modul nincs betöltve.";
+            }
+        } catch (err) {
+            resultDiv.className = "p-3 rounded-lg text-xs font-mono bg-rose-50 text-rose-800 border border-rose-200";
+            resultDiv.textContent = `🔴 HÁLÓZATI/OAUTH HIBA!\nRészletek: ${err.message}\nJavaslat: Ellenőrizd a Client ID helyességét és az engedélyeket!`;
+        }
+    });
+
+    // Supabase felhő adatbázis teljes törlése (RESET)
     // Supabase felhő adatbázis teljes törlése (RESET)
     const btnWipeSupa = document.getElementById('btnWipeSupabaseCloudDebug');
     btnWipeSupa?.addEventListener('click', async () => {
         const app = window.app;
         if (!app) return;
+
+        if (app.securityGuard && app.securityGuard.currentUser === 'guest') {
+            app.hmiNotif?.showToast('❌ Törlés elutasítva: Vendég (User 2) módban ez a funkció le van tiltva!', 'error');
+            return;
+        }
 
         const resultDiv = document.getElementById('debugSupabaseWipeResult');
         if (!resultDiv) return;
@@ -1579,18 +1716,30 @@ function initDebugPanel() {
     // Értesítés kérése gomb
     const btnReqNotif = document.getElementById('btnRequestNotificationPerm');
     btnReqNotif?.addEventListener('click', async () => {
-        if (!('Notification' in window)) {
-            alert('A böngésző nem támogatja az értesítéseket.');
-            return;
+        try {
+            if (!window.app?.pwa?.pushManager) throw new Error("Push Manager nem elérhető");
+            
+            const btnOriginalText = btnReqNotif.innerHTML;
+            btnReqNotif.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Regisztráció...';
+            btnReqNotif.disabled = true;
+
+            await window.app.pwa.pushManager.subscribe();
+            updateNotificationPermissionStatus();
+            window.app.hmiNotif.showToast('Sikeres feliratkozás a Web Push értesítésekre!', 'success');
+            
+            btnReqNotif.innerHTML = btnOriginalText;
+            btnReqNotif.disabled = false;
+        } catch (err) {
+            console.error('[PUSH] Regisztráció hiba:', err);
+            window.app?.hmiNotif?.showToast(`Hiba: ${err.message}`, 'error');
+            btnReqNotif.disabled = false;
+            btnReqNotif.innerHTML = '<i class="fas fa-key"></i> Engedély Kérése';
         }
-        const perm = await Notification.requestPermission();
-        updateNotificationPermissionStatus();
-        window.app?.hmiNotif?.showToast(`Értesítések állapota: ${perm}`, 'info');
     });
 
     // Értesítés teszt
     const btnTestNotif = document.getElementById('btnTriggerTestNotification');
-    btnTestNotif?.addEventListener('click', () => {
+    btnTestNotif?.addEventListener('click', async () => {
         const title = 'Költségnyilvántartó Diagnosztika';
         const body = 'Sikeresen tesztelted az értesítéseket! A határidők emlékeztetői is így fognak megjelenni.';
         const icon = 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png';
@@ -1598,12 +1747,19 @@ function initDebugPanel() {
         // 1. Mindig futtatjuk a csodás belső szimulált Push Notification-t!
         window.app?.hmiNotif?.showSimulatedPushNotification(title, body);
 
-        // 2. Ha engedélyezve van és támogatott, megpróbáljuk a valódi natív értesítést is
-        if ('Notification' in window && Notification.permission === 'granted') {
+        // 2. Ha van aktív push subscription, szerveren keresztül teszteljük!
+        if (window.app?.pwa?.pushManager?.isSubscribed) {
+            try {
+                await window.app.pwa.pushManager.triggerPushFromServer({ title, body, icon });
+            } catch (e) {
+                console.warn('[NOTIF] Szerver oldali push sikertelen:', e);
+            }
+        } else if ('Notification' in window && Notification.permission === 'granted') {
+            // 3. Fallback helyi natív értesítésre
             try {
                 new Notification(title, { body, icon });
             } catch (e) {
-                console.warn('[NOTIF] Natív értesítés sikertelen (lehet, hogy sandbox-olt iframe):', e);
+                console.warn('[NOTIF] Natív értesítés sikertelen:', e);
             }
         }
     });
@@ -1695,11 +1851,90 @@ function updateDebugStatus() {
             <div>📥 Bejövő: <strong class="text-emerald-600">${incomings} db</strong></div>
             <div>📶 Hálózat: <span class="${isOnline ? 'text-emerald-600 font-bold' : 'text-rose-600 font-bold'}">${isOnline ? '🟢 Online (Van net)' : '🔴 Offline (Nincs net)'}</span></div>
             <div class="col-span-2 text-gray-400 text-[10px] mt-1 border-t pt-2 flex justify-between">
-                <span>Rendszer verzió: ${app.version?.toString() || 'v4.3.3'}</span>
+                <span>Rendszer verzió: ${app.version?.toString() || 'v5.2.0'}</span>
                 <span>Időbélyeg: ${new Date().toLocaleTimeString('hu-HU')}</span>
             </div>
         </div>
     `;
+}
+
+
+// === GOOGLE DRIVE DEBUG ===
+function updateGDriveDebugInfo() {
+    const container = document.getElementById('debugGDriveContainer');
+    if (!container) return;
+    
+    const backupService = window.app?.gdriveBackup;
+    if (!backupService) {
+        container.innerHTML = '<div class="text-rose-500 font-bold p-4 bg-rose-50 rounded-xl text-xs">Google Drive modul nem elérhető.</div>';
+        return;
+    }
+    
+    const status = backupService.getStatus();
+    
+    let html = '<div class="bg-gray-50 p-4 rounded-xl space-y-3">';
+    
+    html += '<div class="grid grid-cols-2 gap-y-2 text-[10px] sm:text-xs font-mono">';
+    html += '<div>Konfigurálva (ID):</div>';
+    html += `<div class="font-bold ${status.isConfigured ? 'text-emerald-600' : 'text-amber-500 text-right'}">${status.isConfigured ? 'Igen' : 'Nem'}</div>`;
+    html += '<div>Hitelesítve:</div>';
+    html += `<div class="font-bold ${status.isAuthorized ? 'text-emerald-600' : 'text-amber-500 text-right'}">${status.isAuthorized ? 'Igen' : 'Nem'}</div>`;
+    if (status.tokenExpiry) {
+        html += '<div>Token lejár:</div>';
+        html += `<div class="text-gray-600 text-right">${status.tokenExpiry}</div>`;
+    }
+    if (status.folderId) {
+        html += '<div>Mappa azonosító:</div>';
+        html += `<div class="text-gray-600 truncate text-right">${status.folderId}</div>`;
+    }
+    html += '</div>';
+    
+    html += '<div class="pt-3">';
+    html += '<button id="btnTestGDriveDebug" class="w-full py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-2">';
+    html += '<i class="fas fa-satellite-dish"></i> Átfogó Diagnosztika Futtatása';
+    html += '</button>';
+    html += '</div>';
+    
+    html += '<div id="debugGDriveResult" class="hidden mt-3 p-3 bg-slate-900 text-green-400 rounded-lg text-[10px] font-mono leading-relaxed max-h-[250px] overflow-y-auto"></div>';
+    
+    html += '</div>'; // bg-gray-50
+    
+    container.innerHTML = html;
+    
+    // Eseménykezelő
+    document.getElementById('btnTestGDriveDebug')?.addEventListener('click', async () => {
+        const btn = document.getElementById('btnTestGDriveDebug');
+        const resDiv = document.getElementById('debugGDriveResult');
+        if (!btn || !resDiv) return;
+        
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Tesztelés folyamatban...';
+        btn.disabled = true;
+        resDiv.classList.remove('hidden');
+        resDiv.innerHTML = 'Diagnosztika indítása...\n';
+        
+        try {
+            const results = await backupService.runDiagnostic();
+            
+            let logHtml = `Eredmény: <strong class="${results.overallSuccess ? 'text-green-500' : 'text-red-500'}">${results.overallSuccess ? 'SIKERES' : 'HIBÁS'}</strong>\n\n`;
+            
+            results.steps.forEach(step => {
+                const icon = step.success ? '✅' : '❌';
+                logHtml += `${icon} ${step.name}\n`;
+                if (step.detail) logHtml += `   > ${step.detail}\n`;
+            });
+            
+            resDiv.innerHTML = logHtml;
+            if (!results.overallSuccess) {
+                resDiv.classList.replace('text-green-400', 'text-amber-400');
+            }
+        } catch (e) {
+            resDiv.innerHTML += `\nKivétel történt: ${e.message}`;
+            resDiv.classList.replace('text-green-400', 'text-red-400');
+        } finally {
+            btn.innerHTML = '<i class="fas fa-satellite-dish"></i> Átfogó Diagnosztika Futtatása';
+            btn.disabled = false;
+        }
+    });
 }
 
 function updateSupabaseDebugInfo() {
@@ -1775,7 +2010,7 @@ function getSupabaseSQLScript() {
 
 -- 1. ITEMS (Kategóriák)
 CREATE TABLE IF NOT EXISTS items (
-    id BIGINT PRIMARY KEY,
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT NOT NULL,
     color TEXT,
     updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -1795,7 +2030,7 @@ CREATE POLICY "Mindenki elérheti" ON months FOR ALL USING (true) WITH CHECK (tr
 
 -- 3. ENTRIES (Bejegyzések / Rész-tételek)
 CREATE TABLE IF NOT EXISTS entries (
-    id TEXT PRIMARY KEY,
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     "cellKey" TEXT NOT NULL,
     amount NUMERIC NOT NULL,
     currency TEXT DEFAULT 'HUF',
@@ -1811,7 +2046,7 @@ CREATE POLICY "Mindenki elérheti" ON entries FOR ALL USING (true) WITH CHECK (t
 
 -- 4. TEMPLATES (Sablonok)
 CREATE TABLE IF NOT EXISTS templates (
-    id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     title TEXT NOT NULL,
     amount NUMERIC,
     currency TEXT DEFAULT 'HUF',
@@ -1825,7 +2060,7 @@ CREATE POLICY "Mindenki elérheti" ON templates FOR ALL USING (true) WITH CHECK 
 
 -- 5. REMINDERS (Határidők)
 CREATE TABLE IF NOT EXISTS reminders (
-    id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     title TEXT NOT NULL,
     amount NUMERIC NOT NULL,
     currency TEXT DEFAULT 'HUF',
@@ -1840,7 +2075,7 @@ CREATE POLICY "Mindenki elérheti" ON reminders FOR ALL USING (true) WITH CHECK 
 
 -- 6. INCOMINGS (Bejövő utalások)
 CREATE TABLE IF NOT EXISTS incomings (
-    id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     sender TEXT NOT NULL,
     date TEXT NOT NULL,
     amount NUMERIC NOT NULL,
@@ -1853,7 +2088,7 @@ CREATE POLICY "Mindenki elérheti" ON incomings FOR ALL USING (true) WITH CHECK 
 
 -- 7. INCOMING_SENDERS (Bejövő küldők)
 CREATE TABLE IF NOT EXISTS incoming_senders (
-    id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT NOT NULL,
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -1863,7 +2098,7 @@ CREATE POLICY "Mindenki elérheti" ON incoming_senders FOR ALL USING (true) WITH
 
 -- 8. DELETED_RECORDS (Törölt rekordok követése - Tombstone)
 CREATE TABLE IF NOT EXISTS deleted_records (
-    id TEXT PRIMARY KEY,
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     record_id TEXT NOT NULL,
     table_name TEXT NOT NULL,
     deleted_at TIMESTAMPTZ DEFAULT NOW(),
@@ -1871,7 +2106,33 @@ CREATE TABLE IF NOT EXISTS deleted_records (
 );
 ALTER TABLE deleted_records ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Mindenki elérheti" ON deleted_records;
-CREATE POLICY "Mindenki elérheti" ON deleted_records FOR ALL USING (true) WITH CHECK (true);`;
+CREATE POLICY "Mindenki elérheti" ON deleted_records FOR ALL USING (true) WITH CHECK (true);
+
+-- 9. WORKS (Munka nyilvántartás)
+CREATE TABLE IF NOT EXISTS works (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT NOT NULL,
+    description TEXT,
+    location TEXT,
+    date TEXT NOT NULL,
+    duration NUMERIC DEFAULT 1,
+    status TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE works ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Mindenki elérheti" ON works;
+CREATE POLICY "Mindenki elérheti" ON works FOR ALL USING (true) WITH CHECK (true);
+
+-- 10. APP_SETTINGS (Beállítások)
+CREATE TABLE IF NOT EXISTS app_settings (
+    id TEXT PRIMARY KEY,
+    settings_json JSONB NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE app_settings ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Mindenki elérheti" ON app_settings;
+CREATE POLICY "Mindenki elérheti" ON app_settings FOR ALL USING (true) WITH CHECK (true);`;
 }
 
 // ================================================================

@@ -103,12 +103,30 @@ export class BackgroundTaskManager {
         if (overdue > 0) {
             this.app.updateReminderStatus?.();
             
+            // Foreground notification (ha az app aktív)
             if ('Notification' in window && Notification.permission === 'granted') {
                 new Notification(`${overdue} lejárt határidő!`, {
                     body: 'Kérjük, ellenőrizze a Határidők fület.',
                     icon: '/icons/icon-192.png',
                     tag: 'overdue-reminders'
                 });
+            }
+
+            // Web Push trigger (háttér értesítéshez, szerveren keresztül)
+            try {
+                const pushManager = this.app.pwaManager?.pushManager;
+                if (pushManager?.isSubscribed && navigator.onLine) {
+                    await pushManager.triggerPushFromServer({
+                        title: `⏰ ${overdue} lejárt határidő!`,
+                        body: 'Kérjük, ellenőrizze a Határidők fület a Költség Nyilvántartóban.',
+                        icon: '/icons/icon-192.png',
+                        badge: '/icons/icon-96.png',
+                        tag: 'overdue-reminders-push',
+                        data: { url: '/', tab: 'reminders' }
+                    });
+                }
+            } catch (e) {
+                console.warn('[BACKGROUND] Push trigger hiba:', e);
             }
         }
     }

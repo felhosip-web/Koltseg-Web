@@ -279,8 +279,9 @@ export class ServiceDevManager {
                     <div class="grid grid-cols-2 gap-2">
                         <button id="btnGenerateEntries" class="btn-service px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-xl text-xs font-bold transition"><i class="fas fa-table"></i> <span class="btn-text">Táblázat (30-40)</span> <span class="spinner"></span></button>
                         <button id="btnGenerateReminders" class="btn-service px-3 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold transition"><i class="fas fa-clock"></i> <span class="btn-text">Határidők (10)</span> <span class="spinner"></span></button>
+                        <button id="btnGenerateWorks" class="btn-service px-3 py-2 bg-rose-500 hover:bg-rose-600 text-white rounded-xl text-xs font-bold transition"><i class="fas fa-briefcase"></i> <span class="btn-text">Munkák (10)</span> <span class="spinner"></span></button>
                         <button id="btnGenerateMassive" class="btn-service px-3 py-2 bg-purple-500 hover:bg-purple-600 text-white rounded-xl text-xs font-bold transition"><i class="fas fa-layer-group"></i> <span class="btn-text">Tömeges (500+)</span> <span class="spinner"></span></button>
-                        <button id="btnGenerateMixed" class="btn-service px-3 py-2 bg-teal-500 hover:bg-teal-600 text-white rounded-xl text-xs font-bold transition"><i class="fas fa-mix"></i> <span class="btn-text">Mindkettő</span> <span class="spinner"></span></button>
+                        <button id="btnGenerateMixed" class="btn-service px-3 py-2 bg-teal-500 hover:bg-teal-600 text-white rounded-xl text-xs font-bold transition col-span-2"><i class="fas fa-mix"></i> <span class="btn-text">Mindhárom</span> <span class="spinner"></span></button>
                     </div>
                 </div>
                 <div class="border-b border-gray-100 pb-3">
@@ -319,12 +320,23 @@ export class ServiceDevManager {
                         <button id="btnClearServiceData" class="btn-service px-3 py-2 bg-red-500 hover:bg-red-600 text-white rounded-xl text-xs font-bold transition"><span class="btn-text">🗑️ Törlés</span><span class="spinner"></span></button>
                     </div>
                 </div>
+                <div class="border-b border-gray-100 pb-3">
+                    <p class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2"><i class="fas fa-bell text-purple-500"></i> Push Értesítések</p>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button id="btnPushStatus" class="btn-service px-3 py-2 bg-purple-500 hover:bg-purple-600 text-white rounded-xl text-xs font-bold transition"><span class="btn-text">📊 Státusz</span><span class="spinner"></span></button>
+                        <button id="btnPushSubscribe" class="btn-service px-3 py-2 bg-purple-500 hover:bg-purple-600 text-white rounded-xl text-xs font-bold transition"><span class="btn-text">🔔 Feliratkozás</span><span class="spinner"></span></button>
+                        <button id="btnPushTest" class="btn-service px-3 py-2 bg-purple-500 hover:bg-purple-600 text-white rounded-xl text-xs font-bold transition"><span class="btn-text">📨 Teszt</span><span class="spinner"></span></button>
+                        <button id="btnPushUnsubscribe" class="btn-service px-3 py-2 bg-red-500 hover:bg-red-600 text-white rounded-xl text-xs font-bold transition"><span class="btn-text">🔕 Leiratkozás</span><span class="spinner"></span></button>
+                    </div>
+                    <div id="pushResult" class="text-[10px] text-gray-500 mt-1.5 font-mono hidden"></div>
+                </div>
                 <div>
                     <p class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2"><i class="fas fa-info-circle text-gray-600"></i> Rendszer info</p>
                     <div id="serviceInfo" class="text-[10px] text-gray-600 space-y-0.5 font-mono bg-gray-50 p-2 rounded-xl">
                         <div class="flex justify-between"><span>Verzió:</span><span id="srvVersion">-</span></div>
                         <div class="flex justify-between"><span>Bejegyzések:</span><span id="srvEntryCount">-</span></div>
                         <div class="flex justify-between"><span>Határidők:</span><span id="srvReminderCount">-</span></div>
+                        <div class="flex justify-between"><span>Munkák:</span><span id="srvWorkCount">-</span></div>
                         <div class="flex justify-between"><span>Adatbázis:</span><span id="srvDbStatus">-</span></div>
                         <div class="flex justify-between"><span>SW:</span><span id="srvSWStatus">-</span></div>
                         <div class="flex justify-between"><span>Memória:</span><span id="srvMemory">-</span></div>
@@ -387,6 +399,14 @@ export class ServiceDevManager {
                 this._refreshUI();
             });
         });
+        document.getElementById('btnGenerateWorks')?.addEventListener('click', async () => {
+            await this._withLoading('btnGenerateWorks', async () => {
+                const count = await this.app.generateTestWorks(10);
+                this._showToast(`✅ ${count} teszt munka bejegyzés generálva!`, 'success');
+                this._updateInfo();
+                this._refreshUI();
+            });
+        });
         document.getElementById('btnGenerateMassive')?.addEventListener('click', async () => {
             await this._withLoading('btnGenerateMassive', async () => {
                 const start = performance.now();
@@ -403,11 +423,12 @@ export class ServiceDevManager {
                 const start = performance.now();
                 const e = await this.app.generateTestData(30);
                 const r = await this.app.generateTestReminders(8);
+                const w = await this.app.generateTestWorks(5);
                 const duration = ((performance.now() - start) / 1000).toFixed(2);
-                this._showToast(`✅ ${e} bejegyzés + ${r} határidő (${duration}s)`, 'success');
+                this._showToast(`✅ ${e} bej + ${r} hat + ${w} munka (${duration}s)`, 'success');
                 this._updateInfo();
                 this._refreshUI();
-                this._addLog('info', `Vegyes: ${e} bejegyzés, ${r} határidő, ${duration}s`);
+                this._addLog('info', `Vegyes: ${e} bejegyzés, ${r} határidő, ${w} munka, ${duration}s`);
             });
         });
 
@@ -494,6 +515,190 @@ export class ServiceDevManager {
                 this._addLog('warn', 'Összes adat törölve');
             }
         });
+
+        // ==================== GOOGLE DRIVE TESZT GOMBOK ====================
+
+        // Client ID mentése az inputból
+        const gdriveInput = document.getElementById('gdriveClientIdInput');
+        if (gdriveInput) {
+            gdriveInput.value = this.app.gdriveBackup?.getClientId() || '';
+            gdriveInput.addEventListener('change', () => {
+                const val = gdriveInput.value.trim();
+                if (val && this.app.gdriveBackup) {
+                    this.app.gdriveBackup.setClientId(val);
+                    this._showToast('✅ Google Drive Client ID mentve', 'success');
+                    this._addLog('info', `GDrive Client ID beállítva: ${val.substring(0, 20)}...`);
+                }
+            });
+        }
+
+        document.getElementById('btnGDriveStatus')?.addEventListener('click', async () => {
+            await this._withLoading('btnGDriveStatus', async () => {
+                const status = this.app.gdriveBackup?.getStatus();
+                const el = document.getElementById('gdriveResult');
+                el.classList.remove('hidden');
+                el.innerHTML = `
+                    <div class="bg-gray-50 p-2 rounded-lg space-y-0.5 text-[10px]">
+                        <div>Konfigurálva: <span class="font-bold ${status?.isConfigured ? 'text-emerald-600' : 'text-red-500'}">${status?.isConfigured ? '✅ Igen' : '❌ Nem'}</span></div>
+                        <div>Hitelesítve: <span class="font-bold ${status?.isAuthorized ? 'text-emerald-600' : 'text-gray-400'}">${status?.isAuthorized ? '✅ Igen' : '❌ Nem'}</span></div>
+                        ${status?.clientId ? `<div>Client ID: <span class="font-bold">${status.clientId}</span></div>` : ''}
+                        ${status?.tokenExpiry ? `<div>Token lejárat: <span class="font-bold">${status.tokenExpiry}</span></div>` : ''}
+                        ${status?.lastAuth ? `<div>Utolsó auth: <span class="font-bold">${status.lastAuth}</span></div>` : ''}
+                        ${status?.folderId ? `<div>Mappa ID: <span class="font-bold">${status.folderId}</span></div>` : ''}
+                    </div>
+                `;
+                this._addLog('info', `GDrive státusz: ${status?.isAuthorized ? 'hitelesítve' : 'nincs'}`);
+            });
+        });
+
+        document.getElementById('btnGDriveAuth')?.addEventListener('click', async () => {
+            await this._withLoading('btnGDriveAuth', async () => {
+                if (!this.app.gdriveBackup?.isConfigured()) {
+                    this._showToast('❌ Először adja meg a Client ID-t!', 'error');
+                    return;
+                }
+                await this.app.gdriveBackup.authorize();
+                this._showToast('✅ Google Drive csatlakoztatva!', 'success');
+                this._addLog('success', 'GDrive hitelesítés sikeres');
+            });
+        });
+
+        document.getElementById('btnGDriveList')?.addEventListener('click', async () => {
+            await this._withLoading('btnGDriveList', async () => {
+                const backups = await this.app.gdriveBackup.listBackups();
+                const el = document.getElementById('gdriveResult');
+                el.classList.remove('hidden');
+                if (backups.length === 0) {
+                    el.innerHTML = '<div class="bg-gray-50 p-2 rounded-lg text-[10px] text-gray-400">Nincs mentett backup a Drive-on.</div>';
+                } else {
+                    el.innerHTML = `
+                        <div class="bg-gray-50 p-2 rounded-lg text-[10px] space-y-1 max-h-[150px] overflow-y-auto">
+                            <div class="font-bold text-gray-700">${backups.length} backup:</div>
+                            ${backups.map(f => `
+                                <div class="flex justify-between items-center py-0.5 border-b border-gray-100">
+                                    <span class="text-gray-600">${f.name}</span>
+                                    <span class="text-gray-400">${f.size ? Math.round(parseInt(f.size) / 1024) + ' KB' : ''}</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    `;
+                }
+                this._addLog('info', `GDrive backups: ${backups.length} fájl`);
+            });
+        });
+
+        document.getElementById('btnGDriveUpload')?.addEventListener('click', async () => {
+            await this._withLoading('btnGDriveUpload', async () => {
+                const backupData = this.app.backupManager._buildBackupData();
+                const result = await this.app.gdriveBackup.uploadBackup(backupData);
+                this._showToast(`✅ Backup feltöltve: ${result.name}`, 'success');
+                this._addLog('success', `GDrive upload: ${result.name} (${result.id})`);
+            });
+        });
+
+        document.getElementById('btnGDriveDiagnostic')?.addEventListener('click', async () => {
+            await this._withLoading('btnGDriveDiagnostic', async () => {
+                const results = await this.app.gdriveBackup.runDiagnostic();
+                const el = document.getElementById('gdriveResult');
+                el.classList.remove('hidden');
+                el.innerHTML = `
+                    <div class="bg-gray-50 p-2 rounded-lg text-[10px] space-y-1">
+                        <div class="font-bold ${results.overallSuccess ? 'text-emerald-600' : 'text-red-500'}">
+                            ${results.overallSuccess ? '✅ Minden teszt sikeres!' : '⚠️ Hibák találhatók'}
+                        </div>
+                        ${results.steps.map(s => `
+                            <div class="flex items-center gap-1 py-0.5">
+                                <span>${s.success ? '✅' : '❌'}</span>
+                                <span class="font-bold">${s.name}:</span>
+                                <span class="text-gray-500 truncate">${s.detail}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+                results.steps.forEach(s => {
+                    this._addLog(s.success ? 'success' : 'error', `GDrive ${s.name}: ${s.detail}`);
+                });
+            });
+        });
+
+        document.getElementById('btnGDriveDisconnect')?.addEventListener('click', async () => {
+            this.app.gdriveBackup?.disconnect();
+            this._showToast('🔌 Google Drive lecsatlakoztatva', 'warning');
+            this._addLog('warn', 'GDrive lecsatlakoztatva');
+            document.getElementById('gdriveResult')?.classList.add('hidden');
+        });
+
+        // ==================== PUSH ÉRTESÍTÉS TESZT GOMBOK ====================
+
+        document.getElementById('btnPushStatus')?.addEventListener('click', async () => {
+            await this._withLoading('btnPushStatus', async () => {
+                const pushMgr = this.app.pwaManager?.pushManager;
+                const status = pushMgr?.getStatus() || {};
+                const el = document.getElementById('pushResult');
+                el.classList.remove('hidden');
+
+                // Szerver oldali státusz is
+                let serverStatus = null;
+                try {
+                    const resp = await fetch('/api/push/status');
+                    if (resp.ok) serverStatus = await resp.json();
+                } catch (e) {}
+
+                el.innerHTML = `
+                    <div class="bg-gray-50 p-2 rounded-lg space-y-0.5 text-[10px]">
+                        <div>Támogatott: <span class="font-bold ${status.supported ? 'text-emerald-600' : 'text-red-500'}">${status.supported ? '✅ Igen' : '❌ Nem'}</span></div>
+                        <div>Engedély: <span class="font-bold">${status.permission || 'ismeretlen'}</span></div>
+                        <div>Feliratkozva: <span class="font-bold ${status.isSubscribed ? 'text-emerald-600' : 'text-gray-400'}">${status.isSubscribed ? '✅ Igen' : '❌ Nem'}</span></div>
+                        ${status.endpoint ? `<div>Endpoint: <span class="font-bold">${status.endpoint}</span></div>` : ''}
+                        ${serverStatus ? `
+                            <div class="border-t border-gray-200 pt-1 mt-1">
+                                <div class="font-bold text-gray-700">Szerver:</div>
+                                <div>VAPID: <span class="font-bold ${serverStatus.configured ? 'text-emerald-600' : 'text-red-500'}">${serverStatus.configured ? '✅' : '❌'}</span></div>
+                                <div>Feliratkozások: <span class="font-bold">${serverStatus.subscriptionCount}</span></div>
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+                this._addLog('info', `Push státusz: ${status.isSubscribed ? 'feliratkozva' : 'nincs'}`);
+            });
+        });
+
+        document.getElementById('btnPushSubscribe')?.addEventListener('click', async () => {
+            await this._withLoading('btnPushSubscribe', async () => {
+                const pushMgr = this.app.pwaManager?.pushManager;
+                if (!pushMgr) {
+                    this._showToast('❌ Push Manager nem elérhető!', 'error');
+                    return;
+                }
+                await pushMgr.subscribe();
+                this._showToast('✅ Push értesítésekre feliratkozva!', 'success');
+                this._addLog('success', 'Push feliratkozás sikeres');
+            });
+        });
+
+        document.getElementById('btnPushTest')?.addEventListener('click', async () => {
+            await this._withLoading('btnPushTest', async () => {
+                const pushMgr = this.app.pwaManager?.pushManager;
+                if (!pushMgr) {
+                    this._showToast('❌ Push Manager nem elérhető!', 'error');
+                    return;
+                }
+                await pushMgr.sendTestNotification();
+                this._showToast('📨 Teszt értesítés elküldve!', 'success');
+                this._addLog('success', 'Teszt push notification elküldve');
+            });
+        });
+
+        document.getElementById('btnPushUnsubscribe')?.addEventListener('click', async () => {
+            await this._withLoading('btnPushUnsubscribe', async () => {
+                const pushMgr = this.app.pwaManager?.pushManager;
+                if (!pushMgr) return;
+                await pushMgr.unsubscribe();
+                this._showToast('🔕 Leiratkozva a push értesítésekről', 'warning');
+                this._addLog('warn', 'Push leiratkozás');
+                document.getElementById('pushResult')?.classList.add('hidden');
+            });
+        });
     }
     
     // ================================================================
@@ -508,6 +713,7 @@ export class ServiceDevManager {
         this.app.renderDashboard?.();
         this.app.renderer?.renderTable?.();
         this.app.remindersRenderer?.renderList?.();
+        this.app.workLogRenderer?.render?.();
         this.app.renderStats?.();
         this.app.updateReminderStatus?.();
         if (this.app.incomingRenderer) this.app.incomingRenderer.render();
@@ -728,9 +934,13 @@ export class ServiceDevManager {
 
     async _updateInfo() {
         const app = this.app;
-        document.getElementById('srvVersion').textContent = app.version?.toString() || 'v4.3.3';
+        document.getElementById('srvVersion').textContent = app.version?.toString() || 'v5.2.0';
         document.getElementById('srvEntryCount').textContent = app.entries?.entries?.length || 0;
         document.getElementById('srvReminderCount').textContent = app.reminderManager?.reminders?.length || 0;
+        const srvWorkCount = document.getElementById('srvWorkCount');
+        if (srvWorkCount) {
+            srvWorkCount.textContent = app.workLogManager?.works?.length || 0;
+        }
         document.getElementById('srvDbStatus').textContent = app.db?.db ? '✅ Csatlakozva' : '❌ Nincs kapcsolat';
         const sw = await this._getSWStatus();
         document.getElementById('srvSWStatus').textContent = sw.registered ? '✅ Aktív' : '❌ Nincs';

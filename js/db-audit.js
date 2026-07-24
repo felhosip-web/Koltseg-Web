@@ -29,7 +29,7 @@ export class DatabaseAudit {
     }
 
     async _auditAllStores() {
-        const storeNames = ['items', 'months', 'entries', 'templates', 'reminders', 'incomings', 'incoming_senders'];
+        const storeNames = ['items', 'months', 'entries', 'templates', 'reminders', 'incomings', 'incoming_senders', 'works'];
         
         for (const storeName of storeNames) {
             const data = await this.app.db.getAll(storeName);
