@@ -1,10 +1,11 @@
-// js/modules/fuel-log.js - v1.1.0 - Tankolási & Km Nyilvántartó Modul
+// js/modules/fuel-log.js - v1.2.0 - Tankolási & Km Nyilvántartó Modul
 export const fuelLogModuleScript = `
 return {
     id: 'plugin_fuel_log',
     name: 'Tankolás & Km Napló',
-    version: '1.1.0',
+    version: '1.2.0',
     changelog: [
+        'Automatikus költségvetés átvezetés meglévő/új tételként',
         'Statisztikák és átlagfogyasztás grafikon vizualizáció',
         'Benzinkút helymeghatározás finomhangolása',
         'Üzemanyagárak grafikonos követése és exportálása'
@@ -32,7 +33,7 @@ return {
                             <p class="text-xs text-gray-500">Km óra állás, tankolások és benzinkutak nyilvántartása</p>
                         </div>
                         <span class="px-2.5 py-1 bg-emerald-50 text-emerald-700 text-[10px] font-bold rounded-full uppercase border border-emerald-200">
-                            Modul v1.1
+                            Modul v1.2
                         </span>
                     </div>
 
@@ -400,8 +401,13 @@ return {
                             // 4. Megjegyzés és rész-tétel elmentése
                             const noteText = (station ? ('Tankolás: ' + liters + 'L @ ' + price + ' Ft/l (' + station + ')') : ('Tankolás: ' + liters + 'L @ ' + price + ' Ft/l')) + (note ? (' - ' + note) : '');
                             
+                            const isNewEntry = !existingEntries || existingEntries.length === 0;
+                            const entryCellKey = isNewEntry
+                                ? cellBaseKey
+                                : cellBaseKey + '_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+
                             const expenseEntry = {
-                                cellKey: cellBaseKey + '_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
+                                cellKey: entryCellKey,
                                 amount: totalCost,
                                 currency: 'HUF',
                                 paymentMethod: paymentMethod,
