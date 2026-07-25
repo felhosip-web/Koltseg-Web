@@ -1,5 +1,7 @@
 // js/backup-manager.js
 //Backup kezelés
+import { setBootstrapping } from './store.js';
+
 export class BackupManager {
     constructor(app) {
         this.app = app;
@@ -176,16 +178,21 @@ export class BackupManager {
                 tx.onerror = () => reject(new Error(`DB restore hiba: ${tx.error}`));
             });
             
-            // Memória és UI frissítés
-            await Promise.all([
-                this.app.items?.load?.(),
-                this.app.months?.load?.(),
-                this.app.entries?.load?.(),
-                this.app.templates?.load?.(),
-                this.app.reminderManager?.load?.(),
-                this.app.incomingManager?.load?.(),
-                this.app.workLogManager?.load?.()
-            ]);
+            // Memória és UI frissítés (Zustand store feltöltésével)
+            setBootstrapping(true);
+            try {
+                await Promise.all([
+                    this.app.items?.load?.(),
+                    this.app.months?.load?.(),
+                    this.app.entries?.load?.(),
+                    this.app.templates?.load?.(),
+                    this.app.reminderManager?.load?.(),
+                    this.app.incomingManager?.load?.(),
+                    this.app.workLogManager?.load?.()
+                ]);
+            } finally {
+                setBootstrapping(false);
+            }
             
             this.app.renderer?.renderTable?.();
             this.app.workLogRenderer?.render?.();

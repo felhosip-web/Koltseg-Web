@@ -1,4 +1,6 @@
 // js/data-export-controller.js - Teljes Export funkciók (Excel, PDF, JSON)
+import { setBootstrapping } from './store.js';
+
 export class DataExportController {
     constructor(app) {
         this.app = app;
@@ -233,15 +235,20 @@ export class DataExportController {
             tx.onerror = () => reject(tx.error || new Error('Import tranzakciós hiba'));
         });
 
-        await Promise.all([
-            this.app.items.load(),
-            this.app.months.load(),
-            this.app.entries.load(),
-            this.app.templates?.load?.(),
-            this.app.reminderManager?.load?.(),
-            this.app.incomingManager?.load?.(),
-            this.app.workLogManager?.load?.()
-        ]);
+        setBootstrapping(true);
+        try {
+            await Promise.all([
+                this.app.items.load(),
+                this.app.months.load(),
+                this.app.entries.load(),
+                this.app.templates?.load?.(),
+                this.app.reminderManager?.load?.(),
+                this.app.incomingManager?.load?.(),
+                this.app.workLogManager?.load?.()
+            ]);
+        } finally {
+            setBootstrapping(false);
+        }
 
         this.app.renderer.renderTable();
         this.app.workLogRenderer?.render?.();

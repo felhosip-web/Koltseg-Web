@@ -17,8 +17,21 @@ import { chromium } from 'playwright-core';
     console.log('Navigating to', url);
     await page.goto(url, { waitUntil: 'networkidle', timeout: 20000 });
 
-    await page.waitForSelector('.version-text, #mainTableContainegitr, .tab-btn', { timeout: 15000 });
+    // Wait for app boot first to ensure event listeners are bound
     await page.waitForFunction(() => window.app?.isBooted === true, { timeout: 20000 });
+
+    // Click launch button if landing screen is visible
+    try {
+      const launchBtn = page.locator('#btnLaunchCostApp');
+      if (await launchBtn.isVisible()) {
+        console.log('Landing screen detected, clicking launch cost app...');
+        await launchBtn.click();
+      }
+    } catch (e) {
+      console.log('No landing screen launch button clicked or needed:', e.message);
+    }
+
+    await page.waitForSelector('.version-text, #mainTableContainer, .tab-btn', { timeout: 15000 });
 
     const booted = await page.evaluate(() => ({
       isBooted: window.app?.isBooted || false,
@@ -82,22 +95,28 @@ import { chromium } from 'playwright-core';
     const timestamp = Date.now();
     const newItemName = `AUTOTEST item ${timestamp}`;
 
+    // Dismiss covering modals before starting main actions
+    await page.evaluate(() => {
+      document.getElementById('moduleUpdatesModal')?.remove();
+      document.getElementById('settingsPanel')?.classList.add('hidden');
+    });
+
     // 1) Open item modal and save a new category
     await page.click('#btnNewItem');
     await page.waitForSelector('#hmiInputModal:not(.hidden)', { timeout: 10000 });
     await page.fill('#hmiInputValue', newItemName);
     await page.click('button.hmi-color-option[data-color="#d1fae5"]');
     await page.click('#hmiInputSaveBtn');
-    await page.waitForFunction(() => document.getElementById('hmiInputModal')?.classList.contains('hidden'), { timeout: 10000 });
-    const itemModalClosed = await page.evaluate(() => document.getElementById('hmiInputModal')?.classList.contains('hidden'));
+    await page.waitForFunction(() => !document.getElementById('hmiInputModal')?.classList.contains('modal-show'), { timeout: 10000 });
+    const itemModalClosed = await page.evaluate(() => !document.getElementById('hmiInputModal')?.classList.contains('modal-show'));
     console.log('Item modal saved and closed:', itemModalClosed);
 
     // 2) Open month modal and save current month
     await page.click('#btnNewMonth');
-    await page.waitForSelector('#hmiInputModal:not(.hidden)', { timeout: 10000 });
+    await page.waitForSelector('#hmiInputModal', { timeout: 10000 });
     await page.click('#hmiInputSaveBtn');
-    await page.waitForFunction(() => document.getElementById('hmiInputModal')?.classList.contains('hidden'), { timeout: 10000 });
-    const monthModalClosed = await page.evaluate(() => document.getElementById('hmiInputModal')?.classList.contains('hidden'));
+    await page.waitForFunction(() => !document.getElementById('hmiInputModal')?.classList.contains('modal-show'), { timeout: 10000 });
+    const monthModalClosed = await page.evaluate(() => !document.getElementById('hmiInputModal')?.classList.contains('modal-show'));
     console.log('Month modal saved and closed:', monthModalClosed);
 
     // 3) Open a table cell modal, add a sub-entry, then delete it via confirm
@@ -135,15 +154,16 @@ import { chromium } from 'playwright-core';
 
     // delete the created sub-entry and confirm
     await page.click('#subEntriesContainer .btn-delete-sub-entry');
-    await page.waitForSelector('#globalConfirmModal:not(.hidden)', { timeout: 10000 });
+    await page.waitForSelector('#globalConfirmModal', { timeout: 10000 });
     await page.click('#globalConfirmOkBtn');
-    await page.waitForFunction(() => document.getElementById('globalConfirmModal')?.classList.contains('hidden'), { timeout: 10000 });
+    await page.waitForFunction(() => !document.getElementById('globalConfirmModal')?.classList.contains('modal-show'), { timeout: 10000 });
     await page.click('#btnCancelCellModal');
-    await page.waitForFunction(() => document.getElementById('cellEditorModal')?.classList.contains('hidden'), { timeout: 10000 });
+    await page.waitForFunction(() => !document.getElementById('cellEditorModal')?.classList.contains('modal-show'), { timeout: 10000 });
 
     // 4) Open DB Audit modal and rebuild indexes
+    await page.click('#btnDataControl');
     await page.click('#btnDbAudit');
-    await page.waitForSelector('#dbAuditModal:not(.hidden)', { timeout: 10000 });
+    await page.waitForSelector('#dbAuditModal', { timeout: 10000 });
     await page.waitForFunction(() => {
       const container = document.getElementById('auditReportContainer');
       return container && container.innerText.trim().length > 0;
@@ -151,7 +171,7 @@ import { chromium } from 'playwright-core';
     console.log('DB Audit report rendered');
     await page.click('#btnRebuildIndexes');
     await page.waitForTimeout(1500);
-    const auditModalVisible = await page.evaluate(() => !document.getElementById('dbAuditModal')?.classList.contains('hidden'));
+    const auditModalVisible = await page.evaluate(() => document.getElementById('dbAuditModal')?.classList.contains('modal-show'));
     console.log('DB Audit modal still visible after rebuild click:', auditModalVisible);
 
     await browser.close();
