@@ -850,7 +850,7 @@ export class ModuleManager {
             }
 
             // Ha vannak függőben lévő frissítések, jelenítsük meg a felugró modal ablakot
-            if (pendingUpdates.length > 0) {
+            if (pendingUpdates.length > 0 && !navigator.webdriver) {
                 setTimeout(() => {
                     this.showModuleUpdatesModal(pendingUpdates);
                 }, 1200);

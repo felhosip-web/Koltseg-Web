@@ -1,5 +1,7 @@
 // js/boot-manager.js
 //Indítási logika
+import { setBootstrapping } from './store.js';
+
 export class BootManager {
     constructor(app) {
         this.app = app;
@@ -37,16 +39,21 @@ export class BootManager {
     }
 
     async _loadAllData() {
-        await Promise.all([
-            this.app.reminderManager.load(),
-            this.app.items.load(),
-            this.app.months.load(),
-            this.app.entries.load(),
-            this.app.templates.load(),
-            this.app.incomingManager?.load?.(),
-            this.app.workLogManager?.load?.()
-        ]);
-        this.app.hmiNotif?.showToast('Adatok betöltve', 'success');
+        setBootstrapping(true);
+        try {
+            await Promise.all([
+                this.app.reminderManager.load(),
+                this.app.items.load(),
+                this.app.months.load(),
+                this.app.entries.load(),
+                this.app.templates.load(),
+                this.app.incomingManager?.load?.(),
+                this.app.workLogManager?.load?.()
+            ]);
+            this.app.hmiNotif?.showToast('Adatok betöltve', 'success');
+        } finally {
+            setBootstrapping(false);
+        }
     }
 
     async _initUI() {

@@ -1,5 +1,6 @@
 // js/oop-core.js - OOP HMI Core Infrastruktúra v5.0 (UUID-alapú IndexedDB)
 import { generateUUID } from './uuid-utils.js';
+import { useAppStore } from './store.js';
 export class SecurityManager {
     static async generateChecksum(obj) {
         const { checksum, ...cleanObj } = obj;
@@ -563,17 +564,25 @@ export class ItemManager {
     constructor(db, syncService) { 
         this.db = db; 
         this.syncService = syncService;
-        this.items = []; 
+    }
+
+    get items() {
+        return useAppStore.getState().items;
+    }
+
+    set items(val) {
+        useAppStore.setState({ items: val });
     }
     
     async load() { 
-        this.items = await this.db.getAll('items'); 
+        const data = await this.db.getAll('items');
+        this.items = data;
     }
     
     async add(name, color = '#dbeafe') {
         const item = { id: generateUUID(), name, color, updated_at: new Date().toISOString() };
         await this.db.save('items', item);
-        this.items.push(item);
+        this.items = [...this.items, item];
         await this.syncService.push('items', item);
         return item;
     }
@@ -583,7 +592,9 @@ export class ItemManager {
         if (idx === -1) return;
         const item = { ...this.items[idx], ...updatedData, updated_at: new Date().toISOString() };
         await this.db.save('items', item);
-        this.items[idx] = item;
+        const newItems = [...this.items];
+        newItems[idx] = item;
+        this.items = newItems;
         await this.syncService.push('items', item);
         return item;
     }
@@ -599,7 +610,14 @@ export class MonthManager {
     constructor(db, syncService) { 
         this.db = db; 
         this.syncService = syncService;
-        this.months = []; 
+    }
+
+    get months() {
+        return useAppStore.getState().months;
+    }
+
+    set months(val) {
+        useAppStore.setState({ months: val });
     }
     
     async load() { 
@@ -610,8 +628,9 @@ export class MonthManager {
     async add(month) {
         const data = { month, updated_at: new Date().toISOString() };
         await this.db.save('months', data);
-        this.months.push(month);
-        this.months.sort();
+        const newMonths = [...this.months, month];
+        newMonths.sort();
+        this.months = newMonths;
         await this.syncService.push('months', data, false, 'month');
     }
     
@@ -626,7 +645,14 @@ export class EntryManager {
     constructor(db, syncService) { 
         this.db = db; 
         this.syncService = syncService;
-        this.entries = []; 
+    }
+
+    get entries() {
+        return useAppStore.getState().entries;
+    }
+
+    set entries(val) {
+        useAppStore.setState({ entries: val });
     }
     
     async load() { 
@@ -643,8 +669,10 @@ export class EntryManager {
         await this.db.save('entries', entry);
         
         const idx = this.entries.findIndex(e => e.id === entry.id);
-        if (idx !== -1) this.entries[idx] = entry;
-        else this.entries.push(entry);
+        const newEntries = [...this.entries];
+        if (idx !== -1) newEntries[idx] = entry;
+        else newEntries.push(entry);
+        this.entries = newEntries;
         
         await this.syncService.push('entries', entry);
         return entry;
