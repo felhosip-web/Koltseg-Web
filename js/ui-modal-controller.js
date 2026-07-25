@@ -10,6 +10,7 @@ export class UIModalController {
 
     // ==================== TOAST (NEM BLOKKOLÓ) ====================
     showToast(message, type = 'success', duration = 3000) {
+        if (!this.toastContainer) this.toastContainer = document.getElementById('hmiToastContainer');
         if (!this.toastContainer) return;
         
         const configs = {
@@ -52,7 +53,8 @@ export class UIModalController {
                 confirmButtonClass = ''
             } = options;
 
-            if (!this.modal) return resolve(false);
+            if (!this.modal) this.modal = document.getElementById('globalConfirmModal');
+            if (!this.modal) return resolve(window.confirm(message || title || 'Biztosan folytatja?'));
 
             // Konfigurációk a típus alapján
             const configs = {
@@ -629,12 +631,60 @@ showSimulatedPushNotification(title, body) {
         }
     }
 
+    getDynamicModulesListHTML() {
+        const app = this.app || window.app;
+        if (!app || !app.moduleManager || !app.moduleManager.modules) {
+            return '<div class="p-3 bg-slate-100 text-slate-500 rounded-xl text-xs font-semibold">A modulkezelő nem elérhető.</div>';
+        }
+
+        const modules = app.moduleManager.modules;
+        if (!modules || modules.size === 0) {
+            return '<div class="p-4 bg-amber-50 text-amber-700 border border-amber-200 rounded-xl text-xs font-medium">Jelenleg egyetlen modul sincs regisztrálva.</div>';
+        }
+
+        let html = '<div class="space-y-2.5 mt-2">';
+        for (const [id, mod] of modules.entries()) {
+            const isEnabled = mod.enabled !== false;
+            const statusBadge = isEnabled 
+                ? '<span class="text-[9px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 uppercase">🟢 AKTÍV</span>' 
+                : '<span class="text-[9px] font-black px-2 py-0.5 rounded-full bg-slate-200 text-slate-500 uppercase">⚪ INAKTÍV</span>';
+            const typeBadge = mod.isCore 
+                ? '<span class="text-[9px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700">Rendszer modul</span>' 
+                : '<span class="text-[9px] font-bold px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">Kiegészítő bővítmény</span>';
+
+            html += `
+                <div class="p-3 bg-white border border-slate-200 rounded-xl shadow-sm flex items-start justify-between gap-3">
+                    <div class="flex items-start gap-3 min-w-0">
+                        <div class="w-8 h-8 rounded-lg bg-indigo-50 border border-indigo-100 text-indigo-600 flex items-center justify-center shrink-0 mt-0.5">
+                            <i class="${mod.icon || 'fas fa-puzzle-piece'} text-sm"></i>
+                        </div>
+                        <div class="min-w-0">
+                            <div class="flex items-center gap-2 flex-wrap">
+                                <span class="text-xs font-extrabold text-slate-800">${mod.name || id}</span>
+                                ${statusBadge}
+                                ${typeBadge}
+                            </div>
+                            <p class="text-[11px] text-slate-500 mt-1 leading-normal">${mod.description || 'Kiegészítő modul'}</p>
+                            <div class="text-[9px] text-slate-400 font-mono mt-1">v${mod.version || '1.0.0'} • ${mod.author || 'Modul'}</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+        html += '</div>';
+        return html;
+    }
+
     createArticleCard(article, highlightKeyword = '') {
         const card = document.createElement('div');
         card.className = "bg-slate-50 border border-slate-200/80 rounded-2xl p-5 mb-4 text-left shadow-sm";
 
         let title = article.title;
         let content = article.content;
+
+        if (article.id === 'dynamic_modules_list' || (content && content.includes('__DYNAMIC_MODULES_LIST__'))) {
+            content = content.replace('__DYNAMIC_MODULES_LIST__', this.getDynamicModulesListHTML());
+        }
 
         if (highlightKeyword) {
             const regex = new RegExp(`(${highlightKeyword})`, 'gi');

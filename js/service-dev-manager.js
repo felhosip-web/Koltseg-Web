@@ -9,6 +9,7 @@ export class ServiceDevManager {
         this.isLoggingEnabled = true;
         this.logs = [];
         this.maxLogs = 500;
+        this.generationHistory = [];
         this.testResults = null;
         this.menuElement = null;
         this.isMenuVisible = false;
@@ -277,12 +278,18 @@ export class ServiceDevManager {
                 <div class="border-b border-gray-100 pb-3">
                     <p class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2"><i class="fas fa-database text-blue-500"></i> Adatgenerálás</p>
                     <div class="grid grid-cols-2 gap-2">
-                        <button id="btnGenerateEntries" class="btn-service px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-xl text-xs font-bold transition"><i class="fas fa-table"></i> <span class="btn-text">Táblázat (30-40)</span> <span class="spinner"></span></button>
-                        <button id="btnGenerateReminders" class="btn-service px-3 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold transition"><i class="fas fa-clock"></i> <span class="btn-text">Határidők (10)</span> <span class="spinner"></span></button>
-                        <button id="btnGenerateWorks" class="btn-service px-3 py-2 bg-rose-500 hover:bg-rose-600 text-white rounded-xl text-xs font-bold transition"><i class="fas fa-briefcase"></i> <span class="btn-text">Munkák (10)</span> <span class="spinner"></span></button>
-                        <button id="btnGenerateMassive" class="btn-service px-3 py-2 bg-purple-500 hover:bg-purple-600 text-white rounded-xl text-xs font-bold transition"><i class="fas fa-layer-group"></i> <span class="btn-text">Tömeges (500+)</span> <span class="spinner"></span></button>
-                        <button id="btnGenerateMixed" class="btn-service px-3 py-2 bg-teal-500 hover:bg-teal-600 text-white rounded-xl text-xs font-bold transition col-span-2"><i class="fas fa-mix"></i> <span class="btn-text">Mindhárom</span> <span class="spinner"></span></button>
+                        <button id="btnGenerateEntries" class="btn-service px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1"><i class="fas fa-table"></i> <span class="btn-text">Táblázat (30-40)</span> <span class="spinner"></span></button>
+                        <button id="btnGenerateReminders" class="btn-service px-3 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1"><i class="fas fa-clock"></i> <span class="btn-text">Határidők (10)</span> <span class="spinner"></span></button>
+                        <button id="btnGenerateWorks" class="btn-service px-3 py-2 bg-rose-500 hover:bg-rose-600 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1"><i class="fas fa-briefcase"></i> <span class="btn-text">Munkák (10)</span> <span class="spinner"></span></button>
+                        <button id="btnGenerateMassive" class="btn-service px-3 py-2 bg-purple-500 hover:bg-purple-600 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1"><i class="fas fa-layer-group"></i> <span class="btn-text">Tömeges (500+)</span> <span class="spinner"></span></button>
+                        <button id="btnGenerateMixed" class="btn-service px-3 py-2 bg-teal-500 hover:bg-teal-600 text-white rounded-xl text-xs font-bold transition col-span-2 flex items-center justify-center gap-1"><i class="fas fa-box-open"></i> <span class="btn-text">Mindhárom</span> <span class="spinner"></span></button>
                     </div>
+                    <div class="mt-2">
+                        <button id="btnUndoGeneration" class="btn-service w-full px-3 py-2 bg-rose-100 hover:bg-rose-200 text-rose-700 border border-rose-200 disabled:opacity-40 disabled:cursor-not-allowed rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5" disabled>
+                            <i class="fas fa-undo-alt"></i> <span class="btn-text">Utolsó generálás visszavonása</span> <span class="spinner"></span>
+                        </button>
+                    </div>
+                    <div id="generationStatusResult" class="text-[10px] mt-2 p-2 bg-slate-50 border border-slate-200 rounded-xl font-mono hidden"></div>
                 </div>
                 <div class="border-b border-gray-100 pb-3">
                     <p class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2"><i class="fas fa-gauge-high text-emerald-500"></i> Teljesítmény teszt</p>
@@ -383,52 +390,168 @@ export class ServiceDevManager {
         document.getElementById('btnCloseServiceMenu')?.addEventListener('click', () => this.hideMenu());
         document.getElementById('btnExitDevMode')?.addEventListener('click', () => this._exitDevMode());
 
+        document.getElementById('btnUndoGeneration')?.addEventListener('click', () => this._undoLastGeneration());
+
         document.getElementById('btnGenerateEntries')?.addEventListener('click', async () => {
             await this._withLoading('btnGenerateEntries', async () => {
-                const count = await this.app.generateTestData(35);
-                this._showToast(`✅ ${count} teszt bejegyzés generálva!`, 'success');
-                this._updateInfo();
-                this._refreshUI();
+                await this._withSyncMuted(async () => {
+                    const start = performance.now();
+                    const res = await this.app.generateTestData(35);
+                    const duration = Math.round(performance.now() - start);
+                    const count = typeof res === 'object' ? res.count : res;
+                    const ids = typeof res === 'object' ? (res.ids || []) : [];
+
+                    this.generationHistory.push({
+                        type: 'entries',
+                        summary: `${count} táblázat bejegyzés`,
+                        entries: ids,
+                        reminders: [],
+                        works: [],
+                        duration
+                    });
+
+                    const timeStr = duration >= 1000 ? `${(duration / 1000).toFixed(2)}s` : `${duration}ms`;
+                    this._updateGenerationStatus(
+                        'success',
+                        `Generálás sikeres: ${count} bejegyzés létrehozva!`,
+                        `<i class="fas fa-clock mr-1"></i>Futási idő: <strong>${timeStr}</strong> (${duration} ms) | 🧪 Törlési tesztre kész`
+                    );
+                    this._showToast(`✅ ${count} teszt bejegyzés generálva! (${timeStr})`, 'success');
+                    this._addLog('success', `Adatgenerálás: ${count} bejegyzés, ${timeStr}`);
+                    this._updateInfo();
+                    this._refreshUI();
+                });
             });
         });
         document.getElementById('btnGenerateReminders')?.addEventListener('click', async () => {
             await this._withLoading('btnGenerateReminders', async () => {
-                const count = await this.app.generateTestReminders(10);
-                this._showToast(`✅ ${count} teszt határidő generálva!`, 'success');
-                this._updateInfo();
-                this._refreshUI();
+                await this._withSyncMuted(async () => {
+                    const start = performance.now();
+                    const res = await this.app.generateTestReminders(10);
+                    const duration = Math.round(performance.now() - start);
+                    const count = typeof res === 'object' ? res.count : res;
+                    const ids = typeof res === 'object' ? (res.ids || []) : [];
+
+                    this.generationHistory.push({
+                        type: 'reminders',
+                        summary: `${count} határidő`,
+                        entries: [],
+                        reminders: ids,
+                        works: [],
+                        duration
+                    });
+
+                    const timeStr = duration >= 1000 ? `${(duration / 1000).toFixed(2)}s` : `${duration}ms`;
+                    this._updateGenerationStatus(
+                        'success',
+                        `Generálás sikeres: ${count} határidő létrehozva!`,
+                        `<i class="fas fa-clock mr-1"></i>Futási idő: <strong>${timeStr}</strong> (${duration} ms) | 🧪 Törlési tesztre kész`
+                    );
+                    this._showToast(`✅ ${count} teszt határidő generálva! (${timeStr})`, 'success');
+                    this._addLog('success', `Adatgenerálás: ${count} határidő, ${timeStr}`);
+                    this._updateInfo();
+                    this._refreshUI();
+                });
             });
         });
         document.getElementById('btnGenerateWorks')?.addEventListener('click', async () => {
             await this._withLoading('btnGenerateWorks', async () => {
-                const count = await this.app.generateTestWorks(10);
-                this._showToast(`✅ ${count} teszt munka bejegyzés generálva!`, 'success');
-                this._updateInfo();
-                this._refreshUI();
+                await this._withSyncMuted(async () => {
+                    const start = performance.now();
+                    const res = await this.app.generateTestWorks(10);
+                    const duration = Math.round(performance.now() - start);
+                    const count = typeof res === 'object' ? res.count : res;
+                    const ids = typeof res === 'object' ? (res.ids || []) : [];
+
+                    this.generationHistory.push({
+                        type: 'works',
+                        summary: `${count} munka bejegyzés`,
+                        entries: [],
+                        reminders: [],
+                        works: ids,
+                        duration
+                    });
+
+                    const timeStr = duration >= 1000 ? `${(duration / 1000).toFixed(2)}s` : `${duration}ms`;
+                    this._updateGenerationStatus(
+                        'success',
+                        `Generálás sikeres: ${count} munka bejegyzés létrehozva!`,
+                        `<i class="fas fa-clock mr-1"></i>Futási idő: <strong>${timeStr}</strong> (${duration} ms) | 🧪 Törlési tesztre kész`
+                    );
+                    this._showToast(`✅ ${count} teszt munka generálva! (${timeStr})`, 'success');
+                    this._addLog('success', `Adatgenerálás: ${count} munka, ${timeStr}`);
+                    this._updateInfo();
+                    this._refreshUI();
+                });
             });
         });
         document.getElementById('btnGenerateMassive')?.addEventListener('click', async () => {
             await this._withLoading('btnGenerateMassive', async () => {
-                const start = performance.now();
-                const count = await this.app.generateTestData(500);
-                const duration = ((performance.now() - start) / 1000).toFixed(2);
-                this._showToast(`✅ ${count} bejegyzés (${duration}s)`, 'success');
-                this._updateInfo();
-                this._refreshUI();
-                this._addLog('info', `Tömeges: ${count} bejegyzés, ${duration}s`);
+                await this._withSyncMuted(async () => {
+                    const start = performance.now();
+                    const res = await this.app.generateTestData(500);
+                    const duration = Math.round(performance.now() - start);
+                    const count = typeof res === 'object' ? res.count : res;
+                    const ids = typeof res === 'object' ? (res.ids || []) : [];
+
+                    this.generationHistory.push({
+                        type: 'massive',
+                        summary: `${count} tömeges bejegyzés`,
+                        entries: ids,
+                        reminders: [],
+                        works: [],
+                        duration
+                    });
+
+                    const timeStr = duration >= 1000 ? `${(duration / 1000).toFixed(2)}s` : `${duration}ms`;
+                    this._updateGenerationStatus(
+                        'success',
+                        `Generálás sikeres: ${count} bejegyzés tömegesen generálva!`,
+                        `<i class="fas fa-clock mr-1"></i>Futási idő: <strong>${timeStr}</strong> (${duration} ms) | 🧪 Törlési tesztre kész`
+                    );
+                    this._showToast(`✅ ${count} bejegyzés generálva! (${timeStr})`, 'success');
+                    this._addLog('success', `Tömeges generálás: ${count} bejegyzés, ${timeStr}`);
+                    this._updateInfo();
+                    this._refreshUI();
+                });
             });
         });
         document.getElementById('btnGenerateMixed')?.addEventListener('click', async () => {
             await this._withLoading('btnGenerateMixed', async () => {
-                const start = performance.now();
-                const e = await this.app.generateTestData(30);
-                const r = await this.app.generateTestReminders(8);
-                const w = await this.app.generateTestWorks(5);
-                const duration = ((performance.now() - start) / 1000).toFixed(2);
-                this._showToast(`✅ ${e} bej + ${r} hat + ${w} munka (${duration}s)`, 'success');
-                this._updateInfo();
-                this._refreshUI();
-                this._addLog('info', `Vegyes: ${e} bejegyzés, ${r} határidő, ${w} munka, ${duration}s`);
+                await this._withSyncMuted(async () => {
+                    const start = performance.now();
+                    const eRes = await this.app.generateTestData(30);
+                    const rRes = await this.app.generateTestReminders(8);
+                    const wRes = await this.app.generateTestWorks(5);
+                    const duration = Math.round(performance.now() - start);
+
+                    const eCount = typeof eRes === 'object' ? eRes.count : eRes;
+                    const eIds = typeof eRes === 'object' ? (eRes.ids || []) : [];
+                    const rCount = typeof rRes === 'object' ? rRes.count : rRes;
+                    const rIds = typeof rRes === 'object' ? (rRes.ids || []) : [];
+                    const wCount = typeof wRes === 'object' ? wRes.count : wRes;
+                    const wIds = typeof wRes === 'object' ? (wRes.ids || []) : [];
+
+                    this.generationHistory.push({
+                        type: 'mixed',
+                        summary: `${eCount} bej + ${rCount} hat + ${wCount} munka`,
+                        entries: eIds,
+                        reminders: rIds,
+                        works: wIds,
+                        duration
+                    });
+
+                    const timeStr = duration >= 1000 ? `${(duration / 1000).toFixed(2)}s` : `${duration}ms`;
+                    this._updateGenerationStatus(
+                        'success',
+                        `Vegyes generálás sikeres: ${eCount} bej + ${rCount} hat + ${wCount} munka!`,
+                        `<i class="fas fa-clock mr-1"></i>Futási idő: <strong>${timeStr}</strong> (${duration} ms) | 🧪 Törlési tesztre kész`
+                    );
+                    this._showToast(`✅ Vegyes adatok generálva! (${timeStr})`, 'success');
+                    this._addLog('success', `Vegyes generálás: ${eCount} bej, ${rCount} hat, ${wCount} munka, ${timeStr}`);
+                    this._updateInfo();
+                    this._refreshUI();
+                });
             });
         });
 
@@ -826,18 +949,176 @@ export class ServiceDevManager {
         this._showToast(`📥 ${this.logs.length} log exportálva`, 'success');
     }
 
+    async _withSyncMuted(fn) {
+        const sync = this.app.syncService || this.app.syncManager;
+        const wasMuted = sync ? (sync.isMuted || sync.service?.isMuted) : false;
+        if (sync) {
+            if (typeof sync.setMuted === 'function') sync.setMuted(true);
+            else if (sync.service && typeof sync.service.setMuted === 'function') sync.service.setMuted(true);
+            else sync.isMuted = true;
+        }
+        try {
+            return await fn();
+        } finally {
+            if (sync) {
+                if (typeof sync.setMuted === 'function') sync.setMuted(wasMuted);
+                else if (sync.service && typeof sync.service.setMuted === 'function') sync.service.setMuted(wasMuted);
+                else sync.isMuted = wasMuted;
+            }
+        }
+    }
+
     // ================================================================
-    // === TELJESÍTMÉNY TESZT ===
+    // === TELJESÍTMÉNY TESZT ÉS VISSZAVONÁS ===
     // ================================================================
+
+    _updateUndoButtonState() {
+        const btn = document.getElementById('btnUndoGeneration');
+        if (!btn) return;
+        const hasHistory = this.generationHistory.length > 0;
+        btn.disabled = !hasHistory;
+        const textEl = btn.querySelector('.btn-text');
+        if (textEl) {
+            if (hasHistory) {
+                const lastBatch = this.generationHistory[this.generationHistory.length - 1];
+                textEl.textContent = `Visszavonás: ${lastBatch.summary} (${this.generationHistory.length})`;
+            } else {
+                textEl.textContent = 'Utolsó generálás visszavonása';
+            }
+        }
+    }
+
+    _updateGenerationStatus(type, message, details = '') {
+        const el = document.getElementById('generationStatusResult');
+        if (!el) return;
+        el.classList.remove('hidden');
+
+        let bgClass = 'bg-slate-50 border-slate-200 text-slate-700';
+        let icon = 'ℹ️';
+
+        if (type === 'success') {
+            bgClass = 'bg-emerald-50 border-emerald-200 text-emerald-800';
+            icon = '🟢';
+        } else if (type === 'undo') {
+            bgClass = 'bg-amber-50 border-amber-200 text-amber-800';
+            icon = '↩️';
+        } else if (type === 'error') {
+            bgClass = 'bg-rose-50 border-rose-200 text-rose-800';
+            icon = '🔴';
+        }
+
+        el.className = `text-[10px] mt-2 p-2 rounded-xl border font-mono ${bgClass}`;
+        el.innerHTML = `
+            <div class="flex items-start gap-1.5">
+                <span class="text-xs flex-shrink-0">${icon}</span>
+                <div class="flex-1 min-w-0">
+                    <div class="font-bold leading-tight break-words">${message}</div>
+                    ${details ? `<div class="text-[9px] opacity-85 mt-1 leading-snug break-words">${details}</div>` : ''}
+                </div>
+            </div>
+        `;
+        this._updateUndoButtonState();
+    }
+
+    async _undoLastGeneration() {
+        if (this.generationHistory.length === 0) {
+            this._updateGenerationStatus('error', 'Nincs visszavonható generálás!');
+            return;
+        }
+
+        await this._withLoading('btnUndoGeneration', async () => {
+            await this._withSyncMuted(async () => {
+                const batch = this.generationHistory.pop();
+                const start = performance.now();
+
+                let deletedEntries = 0;
+                let deletedReminders = 0;
+                let deletedWorks = 0;
+
+                // Törlési funkció tesztelése a törlési metódusok meghívásával
+                if (batch.entries && batch.entries.length > 0) {
+                    for (const id of batch.entries) {
+                        try {
+                            await this.app.entries.deleteEntry(id);
+                            deletedEntries++;
+                        } catch (e) {
+                            console.warn('[DEV] Hiba bejegyzés törlésekor:', id, e);
+                        }
+                    }
+                }
+
+                if (batch.reminders && batch.reminders.length > 0) {
+                    for (const id of batch.reminders) {
+                        try {
+                            await this.app.reminderManager.delete(id);
+                            deletedReminders++;
+                        } catch (e) {
+                            console.warn('[DEV] Hiba határidő törlésekor:', id, e);
+                        }
+                    }
+                }
+
+                if (batch.works && batch.works.length > 0) {
+                    for (const id of batch.works) {
+                        try {
+                            await this.app.workLogManager.delete(id);
+                            deletedWorks++;
+                        } catch (e) {
+                            console.warn('[DEV] Hiba munka törlésekor:', id, e);
+                        }
+                    }
+                }
+
+                const duration = Math.round(performance.now() - start);
+                const timeStr = duration >= 1000 ? `${(duration / 1000).toFixed(2)}s` : `${duration}ms`;
+                const totalDeleted = deletedEntries + deletedReminders + deletedWorks;
+
+                const detailParts = [];
+                if (deletedEntries > 0) detailParts.push(`${deletedEntries} bejegyzés`);
+                if (deletedReminders > 0) detailParts.push(`${deletedReminders} határidő`);
+                if (deletedWorks > 0) detailParts.push(`${deletedWorks} munka`);
+                const detailStr = detailParts.join(', ') || `${totalDeleted} tétel`;
+
+                this._updateGenerationStatus(
+                    'undo',
+                    `Visszavonás lezajlott: ${totalDeleted} tétel sikeresen törölve!`,
+                    `<i class="fas fa-trash-alt mr-1"></i>Törlési idő: <strong>${timeStr}</strong> (${detailStr}) | 🧪 Törlés funkció tesztelve! | Várakozó visszavonások: ${this.generationHistory.length}`
+                );
+
+                this._showToast(`↩️ Visszavonva: ${detailStr} törölve (${timeStr})`, 'info');
+                this._addLog('info', `Visszavonás (Törlés teszt): ${totalDeleted} tétel törölve, ${timeStr}`);
+
+                this._updateInfo();
+                this._refreshUI();
+            });
+        });
+    }
 
     async _runPerformanceTest(targetCount) {
         const resultEl = document.getElementById('perfResult');
         resultEl.classList.remove('hidden');
         resultEl.innerHTML = '⏳ Teszt folyamatban...';
-        const start = performance.now();
         try {
-            const generated = await this.app.generateTestData(targetCount);
-            const genTime = ((performance.now() - start) / 1000).toFixed(2);
+            let res;
+            let genDuration;
+            await this._withSyncMuted(async () => {
+                const startGen = performance.now();
+                res = await this.app.generateTestData(targetCount);
+                genDuration = Math.round(performance.now() - startGen);
+            });
+            const generated = typeof res === 'object' ? res.count : res;
+            const ids = typeof res === 'object' ? (res.ids || []) : [];
+
+            this.generationHistory.push({
+                type: 'perf',
+                summary: `${generated} teszt bejegyzés`,
+                entries: ids,
+                reminders: [],
+                works: [],
+                duration: genDuration
+            });
+
+            const genTime = (genDuration / 1000).toFixed(2);
             const renderStart = performance.now();
             this.app.renderer.renderTable();
             const renderTime = ((performance.now() - renderStart)).toFixed(1);
@@ -855,6 +1136,11 @@ export class ServiceDevManager {
                     <div>🏷️ Kategóriák: <span class="font-bold">${this.app.items.items.length}</span></div>
                 </div>
             `;
+            this._updateGenerationStatus(
+                'success',
+                `Teljesítmény teszt generálás kész: ${generated} bejegyzés!`,
+                `<i class="fas fa-clock mr-1"></i>Futási idő: <strong>${genDuration}ms</strong> | 🧪 Törlési tesztre kész`
+            );
             this._addLog('success', `Teljesítmény teszt: ${generated} bejegyzés, ${genTime}s`);
             this._showToast(`✅ Teszt kész: ${generated} bejegyzés (${genTime}s)`, 'success');
             this._updateInfo();

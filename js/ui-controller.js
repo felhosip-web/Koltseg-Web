@@ -514,6 +514,11 @@ _setupSyncQueueBadge() {
                     if (this.app.securityGuard) {
                         this.app.securityGuard.populateForm();
                     }
+                } else if (targetTab === 'modules') {
+                    contentId = 'settingsContentModules';
+                    if (this.app.moduleManager) {
+                        this.app.moduleManager.renderModuleSettingsUI();
+                    }
                 }
                 
                 const targetContent = document.getElementById(contentId);
@@ -700,6 +705,11 @@ _setupSyncQueueBadge() {
 
         // Frissítsük a Google Bejelentkezés UI-t is
         this._updateGoogleAuthUI();
+
+        // Modulok & Bővítmények felület frissítése
+        if (this.app.moduleManager) {
+            this.app.moduleManager.renderModuleSettingsUI();
+        }
     }
 
     // ==================== GOOGLE DRIVE CLIENT ID METHODS ====================

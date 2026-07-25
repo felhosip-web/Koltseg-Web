@@ -42,6 +42,12 @@ export class VirtualTableRenderer {
             return;
         }
 
+        const currMonth = new Date().toISOString().substring(0, 7);
+        const currMonthIdx = months.indexOf(currMonth);
+        if (currMonthIdx >= 0 && currMonthIdx >= this.loadedMonths) {
+            this.loadedMonths = currMonthIdx + 1;
+        }
+
         this._initContainer();
         this._renderHeader(months);
         this._renderVisibleRows(items, months, entries, true);
@@ -369,8 +375,7 @@ export class VirtualTableRenderer {
         const cellBaseKey = `${itemId}_${month}`;
         const cellEntries = entries.filter(e => {
             if (!e.cellKey) return false;
-            const parts = e.cellKey.split('_');
-            return parts[0] === String(itemId) && parts[1] === month;
+            return e.cellKey === cellBaseKey || e.cellKey.startsWith(cellBaseKey + '_');
         });
 
         let huf = 0, eur = 0;

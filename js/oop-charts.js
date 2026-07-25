@@ -6,7 +6,10 @@ export class ChartsRenderer {
             bar: null, 
             doughnut: null, 
             currency: null,
-            incomingTrend: null  // ← ÚJ
+            incomingTrend: null,
+            fuelOdo: null,
+            fuelCons: null,
+            fuelPrice: null
         };
         this.lastFilter = null;
     }
@@ -36,6 +39,10 @@ renderAll(filterMonth = 'all') {
     // Csak akkor hívjuk, ha létezik a metódus
     if (typeof this._drawIncomingTrendChart === 'function') {
         this._drawIncomingTrendChart(filteredIncomings);
+    }
+
+    if (typeof this._drawFuelCharts === 'function') {
+        this._drawFuelCharts(filterMonth);
     }
 
     console.log(`[Charts] Renderelve ${filteredEntries.length} tranzakcióval, ${filteredIncomings.length} bejövővel`);
@@ -245,6 +252,189 @@ renderAll(filterMonth = 'all') {
                 }
             }
         });
+    }
+
+    _drawFuelCharts(filterMonth = 'all') {
+        const container = document.getElementById('fuelChartsSection');
+        if (!container) return;
+
+        // Ellenőrizzük, hogy a Tankolási Modul aktiválva van-e
+        if (this.app.moduleManager && typeof this.app.moduleManager.modules?.get === 'function') {
+            const fuelMod = this.app.moduleManager.modules.get('plugin_fuel_log') || this.app.moduleManager.modules.get('plugin_fuel');
+            if (fuelMod && fuelMod.enabled === false) {
+                container.classList.add('hidden');
+                return;
+            }
+        }
+
+        const raw = localStorage.getItem('plugin_fuel_logs');
+        if (!raw) {
+            container.classList.add('hidden');
+            return;
+        }
+
+        let fuelLogs = [];
+        try {
+            fuelLogs = JSON.parse(raw);
+        } catch (e) {
+            fuelLogs = [];
+        }
+
+        if (!Array.isArray(fuelLogs) || fuelLogs.length === 0) {
+            container.classList.add('hidden');
+            return;
+        }
+
+        // Hónap szűrés ha aktív
+        if (filterMonth !== 'all') {
+            fuelLogs = fuelLogs.filter(l => {
+                if (l.timestamp && typeof l.timestamp === 'string') {
+                    return l.timestamp.startsWith(filterMonth);
+                }
+                if (l.date && typeof l.date === 'string') {
+                    return l.date.includes(filterMonth);
+                }
+                return true;
+            });
+        }
+
+        if (fuelLogs.length === 0) {
+            container.classList.add('hidden');
+            return;
+        }
+
+        container.classList.remove('hidden');
+
+        // Időrendi sorrendbe rendezés (legrégibb előre)
+        fuelLogs.sort((a, b) => new Date(a.timestamp || 0) - new Date(b.timestamp || 0));
+
+        // 1. Km-óra állás
+        const odoCtx = document.getElementById('fuelOdoChart')?.getContext('2d');
+        const validOdos = fuelLogs.filter(l => l.odo > 0);
+        if (odoCtx && validOdos.length > 0) {
+            const labels = validOdos.map(l => (l.date || '').split(' ')[0]);
+            const data = validOdos.map(l => l.odo);
+            this.instances.fuelOdo = new Chart(odoCtx, {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: [{
+                        label: 'Km állás (km)',
+                        data,
+                        borderColor: '#3b82f6',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        fill: true,
+                        tension: 0.3,
+                        pointRadius: 4,
+                        pointBackgroundColor: '#3b82f6'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: (ctx) => `${ctx.parsed.y.toLocaleString('hu-HU')} km`
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // 2. Átlagfogyasztás
+        const consCtx = document.getElementById('fuelConsumptionChart')?.getContext('2d');
+        const consLabels = [];
+        const consData = [];
+        if (validOdos.length >= 2) {
+            for (let i = 1; i < validOdos.length; i++) {
+                const prev = validOdos[i - 1];
+                const curr = validOdos[i];
+                const dist = curr.odo - prev.odo;
+                if (dist > 0 && curr.liters > 0) {
+                    const avg = Math.round((curr.liters * 100 / dist) * 10) / 10;
+                    consLabels.push((curr.date || '').split(' ')[0]);
+                    consData.push(avg);
+                }
+            }
+        }
+
+        if (consCtx) {
+            if (consData.length > 0) {
+                this.instances.fuelCons = new Chart(consCtx, {
+                    type: 'line',
+                    data: {
+                        labels: consLabels,
+                        datasets: [{
+                            label: 'Átlagfogyasztás (l/100km)',
+                            data: consData,
+                            borderColor: '#10b981',
+                            backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                            fill: true,
+                            tension: 0.3,
+                            pointRadius: 4,
+                            pointBackgroundColor: '#10b981'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                callbacks: {
+                                    label: (ctx) => `${ctx.parsed.y} l/100km`
+                                }
+                            }
+                        }
+                    }
+                });
+            } else {
+                consCtx.clearRect(0, 0, consCtx.canvas.width, consCtx.canvas.height);
+                consCtx.fillStyle = '#9ca3af';
+                consCtx.font = '12px system-ui';
+                consCtx.textAlign = 'center';
+                consCtx.fillText('Legalább 2 tankolási rekord szükséges', consCtx.canvas.width / 2, consCtx.canvas.height / 2);
+            }
+        }
+
+        // 3. Litervétel ár (Ft/l)
+        const priceCtx = document.getElementById('fuelPriceChart')?.getContext('2d');
+        const validPrices = fuelLogs.filter(l => l.price > 0);
+        if (priceCtx && validPrices.length > 0) {
+            const labels = validPrices.map(l => (l.date || '').split(' ')[0]);
+            const data = validPrices.map(l => l.price);
+            this.instances.fuelPrice = new Chart(priceCtx, {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: [{
+                        label: 'Üzemanyagár (Ft/l)',
+                        data,
+                        borderColor: '#f59e0b',
+                        backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                        fill: true,
+                        tension: 0.3,
+                        pointRadius: 4,
+                        pointBackgroundColor: '#f59e0b'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: (ctx) => `${ctx.parsed.y.toLocaleString('hu-HU')} Ft/l`
+                            }
+                        }
+                    }
+                }
+            });
+        }
     }
 
     populateFilter(months) {

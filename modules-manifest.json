@@ -1,0 +1,90 @@
+{
+  "modules": [
+    {
+      "id": "plugin_quick_notes",
+      "name": "Gyors Jegyzetek",
+      "version": "1.2.0",
+      "changelog": [
+        "Sötét mód támogatása a jegyzetelő felületen",
+        "Automatikus mentés gépelés közben (Debounce)",
+        "Karakterszámláló hozzáadása"
+      ],
+      "category": "utilities",
+      "author": "KöltségWeb Lab",
+      "description": "Gyors feljegyzések, pénzügyi megjegyzések és teendők tárolása",
+      "icon": "fas fa-sticky-note text-amber-500"
+    },
+    {
+      "id": "plugin_fx_calculator",
+      "name": "EUR / HUF Árfolyam Kalkulátor",
+      "version": "1.1.0",
+      "changelog": [
+        "Már élő MNB árfolyam lekérdezés támogatása",
+        "Mentett egyéni átváltási előzmények",
+        "Reszponzívabb mobilnézet"
+      ],
+      "category": "finance",
+      "author": "KöltségWeb Lab",
+      "description": "Gyors euró-forint átváltó és számoló modul",
+      "icon": "fas fa-coins text-emerald-500"
+    },
+    {
+      "id": "plugin_calculator",
+      "name": "Gyors Pénzügyi Számológép",
+      "version": "1.2.0",
+      "changelog": [
+        "Továbbfejlesztett tizedesjegy-kezelés",
+        "Százalékszámítási hibák javítása",
+        "Új gyorsbillentyű-támogatás"
+      ],
+      "category": "utilities",
+      "author": "KöltségWeb Lab",
+      "description": "Gyors pénzügyi számológép ÁFA kerekítéssel és előzményekkel",
+      "icon": "fas fa-calculator text-blue-500"
+    },
+    {
+      "id": "plugin_mileage_calculator",
+      "name": "Üzemanyag & Útiköltség Kalkulátor",
+      "version": "1.2.0",
+      "changelog": [
+        "NAV kiküldetési rendelvény sablonok integrációja",
+        "Részletes távolság alapú útvonaltervező link",
+        "Megosztási funkció finomhangolása"
+      ],
+      "category": "finance",
+      "author": "KöltségWeb Lab",
+      "description": "Üzemanyag-fogyasztás, utazási költség és NAV km-elszámolás kalkulátor helyi tárolással",
+      "icon": "fas fa-car text-orange-500"
+    },
+    {
+      "id": "plugin_fuel_log",
+      "name": "Tankolási & Km Nyilvántartó",
+      "version": "1.2.0",
+      "changelog": [
+        "Statisztikai kördiagramok a benzinkutak szerinti megoszlásról",
+        "Havi limit riasztások és e-mail értesítések előkészítése",
+        "CSV/XLSX exportálási hibák javítása"
+      ],
+      "category": "automotive",
+      "author": "KöltségWeb Lab",
+      "description": "Km állás, tankolt liter, egységár és benzinkút megjegyzés rögzítése helyi tárolóval és felhő-szinkron előkészítéssel",
+      "icon": "fas fa-gas-pump text-emerald-500"
+    },
+    {
+      "id": "plugin_shopping_list",
+      "name": "Intelligens Bevásárlólista",
+      "version": "1.0.0",
+      "changelog": [
+        "Első kiadás",
+        "Pipálható tételek helyi tárolással",
+        "Gyors hozzáadás és kategória szerinti szűrés",
+        "Összeg kalkuláció és kijelöltek törlése",
+        "Egyedi költségkeret figyelő és vágólapra másolás"
+      ],
+      "category": "utilities",
+      "author": "KöltségWeb Lab",
+      "description": "Interaktív, kategóriákra bontható és pipálható bevásárlólista összeghatár számolással, gyors hozzáadás sablonokkal és helyi tárolással.",
+      "icon": "fas fa-shopping-basket text-rose-500"
+    }
+  ]
+}

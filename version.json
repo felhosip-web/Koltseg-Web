@@ -1,8 +1,32 @@
 {
-  "version": "5.2.0",
-  "build": "2026-07-22T08:58:00.000Z",
+  "version": "5.4.0",
+  "build": "2026-07-24T09:40:00.000Z",
   "release": "stable",
   "changelog": [
+    {
+      "version": "5.4.0",
+      "date": "2026-07-24",
+      "changes": [
+        "🚀 Tankolási & Km Napló modul: Tankolási adatok, üzemanyagárak, kilométerórák és átlagfogyasztás követése",
+        "🚀 Automatikus Átvezetés a Költségvetési Táblázatba: Tankolás rögzítésekor megerősítéssel a fizetendő összeg felvétele az aktuális havi költségvetés 'Tankolás' kategóriájába (ha már volt tankolás, automatikus rész-tétel képzéssel)",
+        "🚀 Supabase Felhő Szinkronizáció: Tankolási és Km adatok automatikus kétirányú felhőszinkronizálása",
+        "🚀 Dinamikus Modul Követés a Súgóban: A Súgó élőben kilistázza a telepített és aktív modulokat (modul hozzáadásakor és törlésekor a lista automatikusan frissül)",
+        "✅ Rendszerszintű verziószám frissítése v5.4.0-ra"
+      ]
+    },
+    {
+      "version": "5.3.0",
+      "date": "2026-07-24",
+      "changes": [
+        "🚀 Dinamikus Modul & Bővítmény Architektúra (Plugin Engine / ModuleManager) bevezetése a jövőbeni bővíthetőségért",
+        "🚀 Beépített és egyedi dinamikus modulok független életciklus-, hook- és event-bus kezelése (onBoot, onTabChange, onSync, onDataChange)",
+        "🚀 Modul Kezelő és Bővítmény Telepítő felület integrálása a Beállítások menübe ('Modulok & Bővítmények' fül)",
+        "🚀 Dinamikus navigációs gombok és egyedi fül-tartalmak (Tabs) futásidejű hozzáadásának és megjelenítésének támogatása",
+        "🚀 Gyárilag előkészített minta modulok: Gyors Jegyzetek & Memo modul, valamint EUR/HUF Árfolyam Kalkulátor bővítmény",
+        "🚀 Beállítások (app_settings) felhőalapú Supabase szinkronizációjának automatizálása és időbélyeg-alapú összefésülése",
+        "✅ Rendszerszintű verziószám frissítése v5.3.0-ra"
+      ]
+    },
     {
       "version": "5.2.0",
       "date": "2026-07-22",

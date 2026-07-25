@@ -301,4 +301,14 @@ export class SyncManager {
         console.warn('[SyncManager] Queue nem elérhető');
         return null;
     }
+
+    /**
+     * Szinkronizáció némítása
+     */
+    setMuted(muted) {
+        this.isMuted = !!muted;
+        if (this.service && typeof this.service.setMuted === 'function') {
+            this.service.setMuted(muted);
+        }
+    }
 }

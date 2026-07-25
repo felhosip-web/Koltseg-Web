@@ -9,6 +9,7 @@ export class SyncService {
         this.offline = offlineHandler;
         this.cloud = new CloudSync(configManager);
         this.isSyncing = false;
+        this.isMuted = false;
         
         // ===== ÚJ: LAST SYNC TIME PERSISTENCE =====
         try {
@@ -26,6 +27,14 @@ export class SyncService {
         this._syncQueue = [];
         this._queueListeners = [];
         this._loadSyncQueue();
+    }
+
+    /**
+     * Némítás beállítása a fejlesztői generáláshoz
+     */
+    setMuted(muted) {
+        this.isMuted = !!muted;
+        console.log(`[SYNC] Szinkronizáció némítva: ${this.isMuted}`);
     }
 
  // ========================================================
@@ -63,6 +72,9 @@ export class SyncService {
      * Művelet hozzáadása a queue-hoz
      */
     addToQueue(operation, data, table, priority = 'normal', customKey = 'id') {
+        if (this.isMuted) {
+            return null;
+        }
         const keyValue = data[customKey] || data.id;
         const existingIndex = keyValue ? this._syncQueue.findIndex(i => i.table === table && (i.data[customKey] === keyValue || i.data.id === keyValue)) : -1;
         if (existingIndex !== -1) {
@@ -307,6 +319,10 @@ export class SyncService {
      * Push művelet (offline naplózással + queue)
      */
     async push(storeName, data, isDelete = false, customKey = 'id', skipQueueOnError = false) {
+        if (this.isMuted) {
+            console.log(`[SYNC] Muted, skipping push/queue for table: ${storeName}`);
+            return;
+        }
         // Offline ellenőrzés
         if (!navigator.onLine) {
             console.log(`[SYNC] Offline, változtatás queue-ba: ${storeName}`);

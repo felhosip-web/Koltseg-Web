@@ -152,13 +152,53 @@ export const HELP_SECTIONS = [
         ]
     },
     {
+        id: "installed_modules",
+        title: "🧩 Aktív & Telepített Modulok",
+        icon: "fas fa-cubes text-purple-500",
+        description: "A rendszerben jelenleg elérhető, futó vagy telepített bővítmények és modulok dinamikus listája.",
+        articles: [
+            {
+                id: "dynamic_modules_list",
+                title: "🔌 Telepített Modulok és Bővítmények (Valós idejű élő lista)",
+                content: `A rendszerben telepített és regisztrált modulok állapota dinamikusan, élőben követhető. Amennyiben új modult adsz hozzá, az azonnal megjelenik itt; ha törölsz egy modult, automatikusan kikerül a listából.<br><br>
+                __DYNAMIC_MODULES_LIST__`
+            }
+        ]
+    },
+    {
         id: "version_changelog",
         title: "🔄 Verziókövetés & Újdonságok",
         icon: "fas fa-code-branch text-blue-500",
         description: "Az alkalmazás legújabb funkciói, javításai és a verziótörténet részletes listája.",
         articles: [
             {
-                title: "v5.2.0 — Központi ModalManager és vizuális tuning (Aktuális verzió)",
+                title: "v5.4.0 — Tankolási Napló, Autómatikus Átvezetés & Dinamikus Modul Követés (Aktuális verzió)",
+                content: `<strong>Megjelenés:</strong> 2026-07-24<br><br>
+                <strong>Újdonságok és fejlesztések:</strong>
+                <ul class="list-disc pl-5 mt-2 space-y-1">
+                    <li><strong>Tankolási & Km Napló modul:</strong> Részletes üzemanyag-, kilométeróra- és fogyasztásnyilvántartó modul.</li>
+                    <li><strong>Automatikus Átvezetés a Költségvetésbe:</strong> Tankolási adat rögzítésekor a rendszer rákérdez, hogy szeretnéd-e a fizetendő összeget automatikusan bevinni az aktuális havi költségvetésbe ("Tankolás" kategória). Ha már volt tankolás az adott hónapban, automatikusan új rész-tételként képződik meg!</li>
+                    <li><strong>Supabase Felhőszinkronizáció:</strong> A tankolási és km-napló bejegyzések automatikusan felkerülnek a Supabase felhőbe.</li>
+                    <li><strong>Dinamikus Modul Követés a Súgóban:</strong> A Súgóban megjelenő modul lista élőben követi a telepített, bekapcsolt vagy törölt bővítményeket. Új modul hozzáadásakor vagy meglévő törlésekor a lista automatikusan frissül!</li>
+                    <li><strong>Verziószám emelés:</strong> Rendszerszintű verzió frissítés v5.4.0-ra.</li>
+                </ul>`
+            },
+            {
+                title: "v5.3.0 — Dinamikus Modul & Bővítmény Architektúra",
+                content: `<strong>Megjelenés:</strong> 2026-07-24<br><br>
+                <strong>Újdonságok és fejlesztések:</strong>
+                <ul class="list-disc pl-5 mt-2 space-y-1">
+                    <li><strong>Dinamikus Modul Kezelő (ModuleManager):</strong> Felkészítettük az alkalmazást a futásidejű, egyedi bővítmények és modulok dinamikus betöltésére és futtatására.</li>
+                    <li><strong>Modul Kezelő UI:</strong> A Beállítások ablakban elérhető 'Modulok & Bővítmények' fülön keresztül áttekinthetőek a rendszer- és egyedi modulok, be/kikapcsolhatóak vagy törölhetőek.</li>
+                    <li><strong>Egyedi Plugin Telepítés:</strong> Új JavaScript alapú dinamikus modulok telepíthetőek közvetlenül a felületről.</li>
+                    <li><strong>Dinamikus Navigáció:</strong> A modulok automatikusan regisztrálhatnak új fül gombokat és egyedi nézeteket a fő navigációban.</li>
+                    <li><strong>Előre telepített minta modulok:</strong> Gyors Jegyzetek modul (offline jegyzetfüzet) és EUR/HUF Árfolyam Kalkulátor bővítmény.</li>
+                    <li><strong>Supabase Beállítás Szinkronizáció:</strong> Az 'app_settings' tábla automatikusan szinkronizálja a beállításokat a felhővel.</li>
+                    <li><strong>Verziószám emelés:</strong> Rendszerszintű frissítés v5.3.0-ra.</li>
+                </ul>`
+            },
+            {
+                title: "v5.2.0 — Központi ModalManager és vizuális tuning",
                 content: `<strong>Megjelenés:</strong> 2026-07-22<br><br>
                 <strong>Újdonságok és fejlesztések:</strong>
                 <ul class="list-disc pl-5 mt-2 space-y-1">

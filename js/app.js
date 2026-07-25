@@ -1,4 +1,4 @@
-// js/app.js – v5.2.0 – Dashboard + 6 tabos felület verziókezeléssel
+// js/app.js – v5.3.0 – Dashboard + Dinamikus Modul Kezelő & Plugin Architektúra
 import './local-storage-sandbox.js';
 // ================================================================
 // 1. RÉSZ: Importok, Konstruktor, Segédfüggvények
@@ -36,6 +36,7 @@ import { SecurityGuard } from './security-guard.js';
 import { WorkLogManager, WorkLogRenderer } from './work-log.js';
 import { GoogleDriveBackup } from './gdrive-backup.js';
 import { ModalManager } from './modal-manager.js';
+import { ModuleManager } from './module-manager.js';
 
 // ================================================================
 // === APP OSZTÁLY ===
@@ -98,6 +99,7 @@ class App {
         this.dbAudit = new DatabaseAudit(this);
         this.serviceDev = new ServiceDevManager(this);
         this.securityGuard = new SecurityGuard(this);
+        this.moduleManager = new ModuleManager(this);
 
         // === 9. BEJÖVŐ UTALÁSOK ===
         this.incomingManager = new IncomingManager(this.db, this.syncService);
@@ -277,6 +279,12 @@ class App {
 
             // === RENDSZER INDÍTÁSA ===
             await this.bootManager.boot();
+
+            // === DINAMIKUS MODULOK ÉS BŐVÍTMÉNYEK INICIALIZÁLÁSA ===
+            if (this.moduleManager) {
+                await this.moduleManager.init();
+            }
+
             this.logger?.log('system', 'success', `Alkalmazás sikeresen elindult. Verzió: ${this.version.toString()}`);
 
             // === VERZIÓ MEGJELENÍTÉSE ===
@@ -510,6 +518,7 @@ class App {
             return;
         }
 
+        const oldTab = this.activeTab;
         this.activeTab = tab;
 
         // Pane-ek elrejtése
@@ -521,6 +530,11 @@ class App {
 
         // Renderer hívása
         this.tabStateMachine[tab]();
+
+        // Modul hook esemény kiváltása
+        if (this.moduleManager) {
+            this.moduleManager.triggerHook('onTabChange', { newTab: tab, oldTab });
+        }
     }
 
     _initTabs() {
@@ -1277,7 +1291,7 @@ refreshAllTabs() {
         }
 
         const itemIds = this.items.items.map(i => i.id).filter(Boolean);
-        let created = 0;
+        const createdIds = [];
 
         for (let i = 0; i < count; i++) {
             const itemId = itemIds[Math.floor(Math.random() * itemIds.length)];
@@ -1289,7 +1303,7 @@ refreshAllTabs() {
             const timestamp = dayjs(`${month}-${day}`).toISOString();
             const cellKey = `${itemId}_${month}`;
 
-            await this.entries.saveEntry({
+            const saved = await this.entries.saveEntry({
                 cellKey,
                 amount,
                 currency,
@@ -1299,7 +1313,9 @@ refreshAllTabs() {
                 timestamp,
                 updated_at: new Date().toISOString()
             });
-            created++;
+            if (saved && saved.id) {
+                createdIds.push(saved.id);
+            }
         }
 
         await Promise.all([
@@ -1308,13 +1324,19 @@ refreshAllTabs() {
             this.entries.load()
         ]);
 
-        return created;
+        return {
+            count: createdIds.length,
+            ids: createdIds,
+            type: 'entries',
+            valueOf() { return this.count; },
+            toString() { return String(this.count); }
+        };
     }
 
     async generateTestReminders(count = 10) {
         const titles = ['Rezsi fizetés', 'Bérlés', 'Telefon számla', 'Bankkártya', 'Bevásárlás', 'Előfizetés', 'Adó befizetés'];
         const frequencies = ['once', 'monthly', 'quarterly'];
-        let created = 0;
+        const createdIds = [];
 
         for (let i = 0; i < count; i++) {
             const title = titles[i % titles.length] + ' ' + (i + 1);
@@ -1328,18 +1350,26 @@ refreshAllTabs() {
                 frequency: frequencies[Math.floor(Math.random() * frequencies.length)],
                 updated_at: new Date().toISOString()
             };
-            await this.reminderManager.add(reminder);
-            created++;
+            const saved = await this.reminderManager.add(reminder);
+            if (saved && saved.id) {
+                createdIds.push(saved.id);
+            }
         }
 
-        return created;
+        return {
+            count: createdIds.length,
+            ids: createdIds,
+            type: 'reminders',
+            valueOf() { return this.count; },
+            toString() { return String(this.count); }
+        };
     }
 
     async generateTestWorks(count = 10) {
         const names = ['Karbantartás', 'Takarítás', 'Fejlesztés', 'Design tervezés', 'Adatbázis migráció', 'Szerver beállítás', 'Dokumentáció írás'];
         const locations = ['Iroda', 'Otthon', 'Helyszínen', 'Távmunka'];
         const statuses = ['folyamatban', 'elvégzett', 'meghiúsult'];
-        let created = 0;
+        const createdIds = [];
 
         for (let i = 0; i < count; i++) {
             const name = names[i % names.length] + ' ' + (i + 1);
@@ -1358,11 +1388,19 @@ refreshAllTabs() {
                 status,
                 updated_at: new Date().toISOString()
             };
-            await this.workLogManager.save(work);
-            created++;
+            const saved = await this.workLogManager.save(work);
+            if (saved && saved.id) {
+                createdIds.push(saved.id);
+            }
         }
 
-        return created;
+        return {
+            count: createdIds.length,
+            ids: createdIds,
+            type: 'works',
+            valueOf() { return this.count; },
+            toString() { return String(this.count); }
+        };
     }
 
     async clearAllData() {
@@ -2132,7 +2170,24 @@ CREATE TABLE IF NOT EXISTS app_settings (
 );
 ALTER TABLE app_settings ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Mindenki elérheti" ON app_settings;
-CREATE POLICY "Mindenki elérheti" ON app_settings FOR ALL USING (true) WITH CHECK (true);`;
+CREATE POLICY "Mindenki elérheti" ON app_settings FOR ALL USING (true) WITH CHECK (true);
+
+-- 11. PLUGIN_FUEL_LOGS (Tankolási napló modul)
+CREATE TABLE IF NOT EXISTS plugin_fuel_logs (
+    id TEXT PRIMARY KEY,
+    odo NUMERIC NOT NULL,
+    liters NUMERIC NOT NULL,
+    price NUMERIC NOT NULL,
+    totalCost NUMERIC NOT NULL,
+    station TEXT,
+    note TEXT,
+    date TEXT,
+    timestamp BIGINT,
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE plugin_fuel_logs ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Mindenki elérheti" ON plugin_fuel_logs;
+CREATE POLICY "Mindenki elérheti" ON plugin_fuel_logs FOR ALL USING (true) WITH CHECK (true);`;
 }
 
 // ================================================================

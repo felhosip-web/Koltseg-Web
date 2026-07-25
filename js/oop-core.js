@@ -419,8 +419,11 @@ export class Database {
     }
 
     async delete(storeName, key) {
+        const syncService = window.app?.syncService || window.app?.syncManager;
+        const isMuted = syncService?.isMuted || syncService?.service?.isMuted;
+
         // Track deletion in tombstone table
-        if (storeName !== 'deleted_records') {
+        if (storeName !== 'deleted_records' && !isMuted) {
             try {
                 const deletedRecord = {
                     id: `${storeName}_${key}`,
@@ -432,7 +435,6 @@ export class Database {
                 await this.save('deleted_records', deletedRecord);
                 
                 // Track in Sync Queue
-                const syncService = window.app?.syncService || window.app?.syncManager;
                 if (syncService) {
                     syncService.addToQueue('delete', { id: key }, storeName, 'high');
                 }
