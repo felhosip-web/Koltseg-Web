@@ -958,13 +958,18 @@ _setupSyncQueueBadge() {
 
                 this.app.hmiNotif.showToast(`"${itemName}" sikeresen eltávolítva.`, 'success');
                 this.app.renderer.updateFooterStatus('Sikeres fizikai törlés', false);
-                this.app.renderer.renderTable();
-                this.app.renderer.renderSummary();
             } catch (error) {
                 console.error('[HMI PURGE CRITICAL ERROR]', error);
-                this.app.hmiNotif.showToast('Kritikus hiba, de a felület frissítve!', 'error');
-                this.app.renderer.updateFooterStatus('Törlési kényszerítés aktív', true);
+                if (this.app.syncService?.clearQueue) {
+                    this.app.syncService.clearQueue();
+                }
+                this.app.hmiNotif.showToast('Hiba törlés közben, a várólista ürítve lett.', 'error');
+                this.app.renderer.updateFooterStatus('Törlési hiba, várólista ürítve', true);
+            } finally {
                 this.app.renderer.renderTable();
+                if (typeof this.app.renderer.renderSummary === 'function') {
+                    this.app.renderer.renderSummary();
+                }
             }
         }
     }
@@ -998,15 +1003,18 @@ _setupSyncQueueBadge() {
 
                 this.app.hmiNotif.showToast(`"${month}" hónap sikeresen eltávolítva.`, 'success');
                 this.app.renderer.updateFooterStatus('Sikeres fizikai törlés', false);
+            } catch (error) {
+                console.error('[HMI PURGE MONTH CRITICAL ERROR]', error);
+                if (this.app.syncService?.clearQueue) {
+                    this.app.syncService.clearQueue();
+                }
+                this.app.hmiNotif.showToast('Hiba a hónap törlésekor, a várólista ürítve lett.', 'error');
+                this.app.renderer.updateFooterStatus('Törlési hiba, várólista ürítve', true);
+            } finally {
                 this.app.renderer.renderTable();
                 if (typeof this.app.refreshAllTabs === 'function') {
                     this.app.refreshAllTabs();
                 }
-            } catch (error) {
-                console.error('[HMI PURGE MONTH CRITICAL ERROR]', error);
-                this.app.hmiNotif.showToast('Kritikus hiba a hónap törlésekor!', 'error');
-                this.app.renderer.updateFooterStatus('Törlési hiba', true);
-                this.app.renderer.renderTable();
             }
         }
     }
