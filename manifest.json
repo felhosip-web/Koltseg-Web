@@ -64,14 +64,4 @@
   ],
   "prefer_related_applications": false,
   "related_applications": []
-} "purpose": "maskable"
-    },
-    {
-      "src": "icons/icon.svg",
-      "type": "image/svg+xml",
-      "sizes": "any"
-    }
-  ],
-  "prefer_related_applications": false,
-  "related_applications": []
 }

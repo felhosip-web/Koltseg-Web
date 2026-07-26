@@ -281,9 +281,15 @@ app.use('/icons', express.static(path.join(rootDir, 'icons')));
 
 // Individual static files at root
 app.get('/manifest.json', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
   res.sendFile(path.join(rootDir, 'manifest.json'));
 });
 app.get('/service-worker.js', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
   res.sendFile(path.join(rootDir, 'service-worker.js'));
 });
 app.get('/version.json', (req, res) => {
