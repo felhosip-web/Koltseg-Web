@@ -219,46 +219,164 @@ showSelectModal(options) {
         const { title, options: items, placeholder = 'Válassz...' } = options;
 
         const modal = document.createElement('div');
-        modal.className = 'fixed inset-0 bg-black/50 flex items-center justify-center z-50';
+        modal.className = 'fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4';
         modal.innerHTML = `
-            <div class="bg-white rounded-3xl p-6 max-w-md w-full mx-4 shadow-2xl">
-                <h3 class="text-lg font-bold text-gray-800 mb-4">${title}</h3>
-                <select id="selectModalSelect" class="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    <option value="">${placeholder}</option>
-                    ${items.map(item => `<option value="${this._escapeHtml(item)}">${this._escapeHtml(item)}</option>`).join('')}
-                </select>
-                <div class="flex gap-2 mt-4">
+            <div class="bg-white rounded-[32px] p-6 max-w-md w-full mx-auto shadow-2xl relative">
+                <!-- Header with Close X -->
+                <div class="flex items-center justify-between mb-4 border-b border-gray-100 pb-3">
+                    <h3 class="text-base font-black text-slate-800 uppercase tracking-wider">${title}</h3>
+                    <button id="selectModalCloseX" class="w-8 h-8 flex items-center justify-center bg-gray-100 hover:bg-gray-200 text-gray-500 rounded-full transition font-bold text-lg select-none">&times;</button>
+                </div>
+
+                <!-- Custom Select Dropdown -->
+                <div class="relative w-full">
+                    <button id="customSelectTrigger" type="button" class="w-full px-4 py-3.5 border border-gray-200 rounded-2xl text-sm text-left bg-gray-50 text-gray-700 flex items-center justify-between hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all font-semibold shadow-sm">
+                        <span id="customSelectValue" class="text-gray-400">${placeholder}</span>
+                        <i class="fas fa-chevron-down text-gray-400 text-xs transition-transform duration-200" id="customSelectArrow"></i>
+                    </button>
+
+                    <div id="customSelectDropdown" class="hidden absolute left-0 right-0 mt-1.5 max-h-48 overflow-y-auto bg-white border border-gray-200 rounded-2xl shadow-xl z-[100] py-1">
+                        ${items.map(item => `
+                            <button type="button" class="custom-option w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 transition font-semibold flex items-center justify-between" data-value="${this._escapeHtml(item)}">
+                                <span>${this._escapeHtml(item)}</span>
+                                <i class="fas fa-check text-blue-600 text-xs opacity-0 check-icon"></i>
+                            </button>
+                        `).join('')}
+                    </div>
+
+                    <input type="hidden" id="selectModalSelect" value="">
+                </div>
+
+                <div class="flex gap-2 mt-6">
                     <button id="selectModalCancel" class="flex-1 py-3 bg-gray-100 text-gray-600 rounded-xl font-bold hover:bg-gray-200 transition">Mégse</button>
-                    <button id="selectModalConfirm" class="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition">Kiválaszt</button>
+                    <button id="selectModalConfirm" class="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition shadow">Kiválaszt</button>
                 </div>
             </div>
         `;
 
         document.body.appendChild(modal);
 
-        const select = modal.querySelector('#selectModalSelect');
+        const trigger = modal.querySelector('#customSelectTrigger');
+        const dropdown = modal.querySelector('#customSelectDropdown');
+        const arrow = modal.querySelector('#customSelectArrow');
+        const hiddenInput = modal.querySelector('#selectModalSelect');
+        const displayVal = modal.querySelector('#customSelectValue');
+        const optionsButtons = modal.querySelectorAll('.custom-option');
         const confirmBtn = modal.querySelector('#selectModalConfirm');
         const cancelBtn = modal.querySelector('#selectModalCancel');
+        const closeXBtn = modal.querySelector('#selectModalCloseX');
 
         const close = (result) => {
             modal.remove();
+            document.removeEventListener('keydown', handleGlobalKeydown);
             resolve(result);
         };
 
+        // Open/Close dropdown list
+        const toggleDropdown = () => {
+            const isHidden = dropdown.classList.contains('hidden');
+            if (isHidden) {
+                dropdown.classList.remove('hidden');
+                arrow.style.transform = 'rotate(180deg)';
+                let focusedIndex = Array.from(optionsButtons).findIndex(btn => btn.dataset.value === hiddenInput.value);
+                if (focusedIndex === -1) focusedIndex = 0;
+                optionsButtons[focusedIndex]?.focus();
+            } else {
+                dropdown.classList.add('hidden');
+                arrow.style.transform = 'rotate(0deg)';
+            }
+        };
+
+        trigger.addEventListener('click', (e) => {
+            e.stopPropagation();
+            toggleDropdown();
+        });
+
+        // Handle option click
+        optionsButtons.forEach((btn, idx) => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const val = btn.dataset.value;
+                hiddenInput.value = val;
+                displayVal.textContent = val;
+                displayVal.className = 'text-gray-800 font-semibold';
+
+                // Reset all check icons
+                optionsButtons.forEach(b => {
+                    const ch = b.querySelector('.check-icon');
+                    if (ch) ch.classList.add('opacity-0');
+                });
+                // Highlight the selected one
+                const checkIcon = btn.querySelector('.check-icon');
+                if (checkIcon) checkIcon.classList.remove('opacity-0');
+
+                dropdown.classList.add('hidden');
+                arrow.style.transform = 'rotate(0deg)';
+                trigger.focus();
+            });
+
+            // Option keyboard navigation
+            btn.addEventListener('keydown', (e) => {
+                if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    optionsButtons[(idx + 1) % optionsButtons.length].focus();
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    optionsButtons[(idx - 1 + optionsButtons.length) % optionsButtons.length].focus();
+                } else if (e.key === 'Enter') {
+                    e.preventDefault();
+                    btn.click();
+                } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    dropdown.classList.add('hidden');
+                    arrow.style.transform = 'rotate(0deg)';
+                    trigger.focus();
+                }
+            });
+        });
+
+        // Click outside closes dropdown
+        document.addEventListener('click', (e) => {
+            if (!trigger.contains(e.target) && !dropdown.contains(e.target)) {
+                dropdown.classList.add('hidden');
+                arrow.style.transform = 'rotate(0deg)';
+            }
+        });
+
         confirmBtn.addEventListener('click', () => {
-            const value = select.value;
+            const value = hiddenInput.value;
             close(value || null);
         });
 
         cancelBtn.addEventListener('click', () => close(null));
+        closeXBtn.addEventListener('click', () => close(null));
 
-        select.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') confirmBtn.click();
-            if (e.key === 'Escape') cancelBtn.click();
+        // Click on backdrop closes modal
+        modal.addEventListener('mousedown', (e) => {
+            if (e.target === modal) {
+                close(null);
+            }
         });
 
-        // Fókusz
-        setTimeout(() => select.focus(), 100);
+        // ESC key and standard keydown handling
+        const handleGlobalKeydown = (e) => {
+            if (e.key === 'Escape') {
+                if (!dropdown.classList.contains('hidden')) {
+                    dropdown.classList.add('hidden');
+                    arrow.style.transform = 'rotate(0deg)';
+                    trigger.focus();
+                } else {
+                    close(null);
+                }
+            } else if (e.key === 'Enter' && dropdown.classList.contains('hidden') && document.activeElement !== cancelBtn && document.activeElement !== closeXBtn) {
+                confirmBtn.click();
+            }
+        };
+
+        document.addEventListener('keydown', handleGlobalKeydown);
+
+        // Fókusz a trigger gombra
+        setTimeout(() => trigger.focus(), 100);
     });
 }  
 
@@ -275,33 +393,38 @@ showInputModal(options) {
         } = options;
 
         const modal = document.createElement('div');
-        modal.className = 'fixed inset-0 bg-black/50 flex items-center justify-center z-50';
+        modal.className = 'fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4';
         modal.innerHTML = `
-            <div class="bg-white rounded-3xl p-6 max-w-md w-full mx-4 shadow-2xl">
-                <h3 class="text-lg font-bold text-gray-800 mb-1">${title}</h3>
-                <p class="text-sm text-gray-500 mb-4">${label}</p>
+            <div class="bg-white rounded-[32px] p-6 max-w-md w-full mx-auto shadow-2xl relative">
+                <!-- Header with Close X -->
+                <div class="flex items-center justify-between mb-4 border-b border-gray-100 pb-3">
+                    <h3 class="text-base font-black text-slate-800 uppercase tracking-wider">${title}</h3>
+                    <button id="inputModalCloseX" class="w-8 h-8 flex items-center justify-center bg-gray-100 hover:bg-gray-200 text-gray-500 rounded-full transition font-bold text-lg select-none">&times;</button>
+                </div>
+
+                <p class="text-xs font-bold text-gray-400 uppercase tracking-wide mb-2">${label}</p>
                 <input type="${inputType}" id="inputModalValue" 
-                       class="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                       class="w-full px-4 py-3 border border-gray-200 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-semibold"
                        value="${this._escapeHtml(String(value))}" 
                        placeholder="${this._escapeHtml(placeholder)}" />
                 
                 ${showStorno ? `
-                    <div class="flex items-center gap-2 mt-4">
+                    <div class="flex items-center gap-2 mt-4 bg-red-50/50 p-3 rounded-2xl border border-red-100/30">
                         <input type="checkbox" id="inputModalStorno" class="w-4 h-4 text-red-600 border-gray-300 rounded focus:ring-red-500 cursor-pointer" ${isStorno ? 'checked' : ''} />
-                        <label for="inputModalStorno" class="text-xs font-bold text-red-600 flex items-center gap-1 cursor-pointer select-none">
+                        <label for="inputModalStorno" class="text-xs font-black text-red-600 flex items-center gap-1.5 cursor-pointer select-none">
                             <i class="fas fa-ban"></i> SZTORNÓ (Tétel érvénytelenítése)
                         </label>
                     </div>
                 ` : ''}
 
-                <div class="flex gap-2 mt-4">
+                <div class="flex gap-2 mt-6">
                     ${showDelete ? `
                         <button id="inputModalDelete" class="px-4 py-3 bg-red-100 text-red-600 rounded-xl font-bold hover:bg-red-200 transition flex items-center justify-center gap-1.5 shadow-sm">
                             <i class="fas fa-trash-can text-sm"></i> Törlés
                         </button>
                     ` : ''}
                     <button id="inputModalCancel" class="flex-1 py-3 bg-gray-100 text-gray-600 rounded-xl font-bold hover:bg-gray-200 transition">Mégse</button>
-                    <button id="inputModalConfirm" class="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition">${confirmText}</button>
+                    <button id="inputModalConfirm" class="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition shadow">${confirmText}</button>
                 </div>
             </div>
         `;
@@ -312,9 +435,11 @@ showInputModal(options) {
         const confirmBtn = modal.querySelector('#inputModalConfirm');
         const cancelBtn = modal.querySelector('#inputModalCancel');
         const deleteBtn = modal.querySelector('#inputModalDelete');
+        const closeXBtn = modal.querySelector('#inputModalCloseX');
 
         const close = (result) => {
             modal.remove();
+            document.removeEventListener('keydown', handleGlobalKeydown);
             resolve(result);
         };
 
@@ -329,6 +454,7 @@ showInputModal(options) {
         });
 
         cancelBtn.addEventListener('click', () => close(null));
+        closeXBtn.addEventListener('click', () => close(null));
 
         if (deleteBtn && onDelete) {
             deleteBtn.addEventListener('click', () => {
@@ -337,10 +463,21 @@ showInputModal(options) {
             });
         }
 
-        input.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') confirmBtn.click();
-            if (e.key === 'Escape') cancelBtn.click();
+        // Click on backdrop closes modal
+        modal.addEventListener('mousedown', (e) => {
+            if (e.target === modal) {
+                close(null);
+            }
         });
+
+        // Global ESC key and standard keydown handling
+        const handleGlobalKeydown = (e) => {
+            if (e.key === 'Escape') {
+                close(null);
+            }
+        };
+
+        document.addEventListener('keydown', handleGlobalKeydown);
 
         setTimeout(() => input.focus(), 100);
         if (inputType !== 'date') input.select();

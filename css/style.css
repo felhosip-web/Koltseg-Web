@@ -539,3 +539,157 @@ body.bg-theme-emerald-slate textarea:focus {
   border-color: #10b981 !important;
   box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2) !important;
 }
+
+/* ========================================================
+   MOBIL RESPONSIVENESS AND LAYOUT IMPROVEMENTS (max-width: 768px)
+   ======================================================== */
+@media (max-width: 768px) {
+    html, body {
+        max-width: 100% !important;
+        overflow-x: hidden !important;
+    }
+
+    /* Transform Work Log Table (#workTable) into a responsive card layout */
+    #workTable, #workTable thead, #workTable tbody, #workTable tr, #workTable td {
+        display: block !important;
+        width: 100% !important;
+    }
+    #workTable thead {
+        display: none !important;
+    }
+    #workTable tbody {
+        padding: 0.25rem !important;
+    }
+    #workTable tr {
+        margin-bottom: 1.25rem !important;
+        padding: 1.25rem !important;
+        border-radius: 1.5rem !important;
+        border: 2px solid #e2e8f0 !important;
+        background-color: #ffffff !important;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05) !important;
+        position: relative !important;
+    }
+    body.dark-mode #workTable tr {
+        border-color: #334155 !important;
+        background-color: #1e293b !important;
+    }
+    body.bg-theme-emerald-slate #workTable tr {
+        border-color: #1e2e48 !important;
+        background-color: #111d30 !important;
+    }
+    #workTable td {
+        padding: 0.35rem 0 !important;
+        border: none !important;
+        text-align: left !important;
+    }
+    #workTable td:nth-child(1) {
+        display: inline-block !important;
+        width: auto !important;
+        font-size: 11px !important;
+        color: #64748b !important;
+        background: #f1f5f9 !important;
+        padding: 0.15rem 0.5rem !important;
+        border-radius: 0.5rem !important;
+        margin-right: 0.5rem !important;
+    }
+    body.dark-mode #workTable td:nth-child(1) {
+        background: #334155 !important;
+        color: #cbd5e1 !important;
+    }
+    body.bg-theme-emerald-slate #workTable td:nth-child(1) {
+        background: #1e2e48 !important;
+        color: #34d399 !important;
+    }
+    #workTable td:nth-child(2) {
+        display: block !important;
+        font-size: 1.1rem !important;
+        font-weight: 800 !important;
+        color: #1e293b !important;
+        margin-top: 0.25rem !important;
+        margin-bottom: 0.5rem !important;
+    }
+    #workTable td:nth-child(3) {
+        font-size: 0.85rem !important;
+        color: #475569 !important;
+        margin-bottom: 0.75rem !important;
+        padding-bottom: 0.5rem !important;
+        border-bottom: 1px dashed #e2e8f0 !important;
+    }
+    body.dark-mode #workTable td:nth-child(3), body.bg-theme-emerald-slate #workTable td:nth-child(3) {
+        border-bottom-color: #334155 !important;
+    }
+    #workTable td:nth-child(4)::before {
+        content: "📍 Helyszín: ";
+        font-weight: 700;
+        color: #475569;
+    }
+    body.dark-mode #workTable td:nth-child(4)::before, body.bg-theme-emerald-slate #workTable td:nth-child(4)::before {
+        color: #cbd5e1;
+    }
+    #workTable td:nth-child(5)::before {
+        content: "📅 Dátum: ";
+        font-weight: 700;
+        color: #475569;
+    }
+    body.dark-mode #workTable td:nth-child(5)::before, body.bg-theme-emerald-slate #workTable td:nth-child(5)::before {
+        color: #cbd5e1;
+    }
+    #workTable td:nth-child(5) {
+        display: inline-block !important;
+        width: 50% !important;
+    }
+    #workTable td:nth-child(6)::before {
+        content: "⏱️ Időtartam: ";
+        font-weight: 700;
+        color: #475569;
+    }
+    body.dark-mode #workTable td:nth-child(6)::before, body.bg-theme-emerald-slate #workTable td:nth-child(6)::before {
+        color: #cbd5e1;
+    }
+    #workTable td:nth-child(6) {
+        display: inline-block !important;
+        width: 48% !important;
+    }
+    #workTable td:nth-child(7) {
+        display: block !important;
+        margin-top: 0.75rem !important;
+        margin-bottom: 0.25rem !important;
+    }
+    #workTable td:nth-child(8) {
+        position: absolute !important;
+        top: 0.75rem !important;
+        right: 0.75rem !important;
+        width: auto !important;
+        padding: 0 !important;
+    }
+
+    /* Ensure Main Cost Table (#vtWrapper) and other tables stay constrained and scrollable */
+    #mainTableContainer, #vtWrapper, .overflow-x-auto {
+        max-width: 100% !important;
+        width: 100% !important;
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    /* Prevent flex items or grids from expanding outside screen width */
+    .grid {
+        max-width: 100% !important;
+    }
+    .max-w-7xl {
+        max-width: 100% !important;
+        width: 100% !important;
+    }
+
+    /* Modals overall mobile responsiveness (95% width, beautiful rounded borders) */
+    .modal > div, .hmi-modal-content, [id*="Modal"] > div, #settingsPanel > div {
+        width: 95% !important;
+        max-width: 95% !important;
+        margin-left: auto !important;
+        margin-right: auto !important;
+        border-radius: 2rem !important;
+        padding: 1.25rem !important;
+    }
+    #settingsPanel > div {
+        max-height: 85vh !important;
+    }
+}
