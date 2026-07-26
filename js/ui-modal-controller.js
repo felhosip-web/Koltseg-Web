@@ -147,7 +147,11 @@ export class UIModalController {
             
             // ESC billentyű
             const handleEscape = (e) => {
-                if (e.key === 'Escape' && !this.modal.classList.contains('hidden')) {
+                const isOpen = window.app && window.app.modalManager
+                    ? window.app.modalManager.isOpen('globalConfirmModal')
+                    : this.modal.style.display !== 'none';
+
+                if (e.key === 'Escape' && isOpen) {
                     handleCancel();
                 }
             };
