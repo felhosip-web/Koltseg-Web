@@ -98,7 +98,15 @@ export class DataExportController {
             const eurRate = this.app.config?.eurRate || 400;
             let y = 20;
 
-            doc.setFont('helvetica', 'bold');
+            // Load and set Roboto font to support Hungarian accents properly
+            try {
+                doc.addFont("https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.66/fonts/Roboto/Roboto-Regular.ttf", "Roboto", "normal");
+                doc.setFont("Roboto");
+            } catch (fontErr) {
+                console.warn("Could not load Roboto font for Hungarian accents, falling back to Helvetica", fontErr);
+                doc.setFont('helvetica', 'bold');
+            }
+
             doc.setFontSize(18);
             doc.text('KÖLTSÉG NYILVÁNTARTÁS - RÉSZLETES ÖSSZESÍTŐ', 20, y);
             y += 8;
@@ -114,7 +122,7 @@ export class DataExportController {
                 head: [tableData.headers],
                 body: tableData.rows,
                 theme: 'grid',
-                styles: { fontSize: 8.5, cellPadding: 4 },
+                styles: { font: "Roboto", fontSize: 8.5, cellPadding: 4 },
                 headStyles: { fillColor: [30, 58, 138], textColor: 255, fontStyle: 'bold' },
                 columnStyles: { 0: { cellWidth: 48 } }
             });
@@ -332,6 +340,75 @@ export class DataExportController {
             ['Készpénz', cash.toLocaleString('hu-HU') + ' Ft'],
             ['Utalás', transfer.toLocaleString('hu-HU') + ' Ft']
         ];
+    }
+
+    _buildPdfTableData(items, months, entries, eurRate) {
+        const tableColumn = ['Kategória', ...months.map(m => m + '\n(HUF | EUR | Össz)')];
+        const tableRows = [];
+
+        items.forEach(item => {
+            const row = [item.name];
+
+            months.forEach(month => {
+                const cellBaseKey = `${item.id}_${month}`;
+                const cellEntries = entries.filter(e => e.cellKey && e.cellKey.startsWith(cellBaseKey));
+
+                let totalHUF = 0;
+                let totalEUR = 0;
+
+                cellEntries.forEach(e => {
+                    if (e.currency === 'EUR') {
+                        totalEUR += e.amount;
+                    } else {
+                        totalHUF += e.amount;
+                    }
+                });
+
+                const totalHUF_Ft = totalHUF;
+                const totalEUR_Ft = Math.round(totalEUR * eurRate);
+                const grandCellTotal = totalHUF_Ft + totalEUR_Ft;
+
+                let cellText = '-';
+                if (grandCellTotal > 0) {
+                    cellText = `${totalHUF_Ft.toLocaleString('hu-HU')} | ${totalEUR} EUR | ${grandCellTotal.toLocaleString('hu-HU')} Ft`;
+
+                    // Ha több tétel van, jelezzük
+                    if (cellEntries.length > 1) {
+                        cellText += `\n(${cellEntries.length} tétel)`;
+                    }
+                }
+
+                row.push(cellText);
+            });
+
+            tableRows.push(row);
+        });
+
+        // Összesítő sor
+        const totalRow = ['ÖSSZESEN'];
+        let grandTotalAll = 0;
+
+        months.forEach(month => {
+            let monthHUF = 0, monthEUR = 0;
+            entries.forEach(e => {
+                if (e.cellKey && e.cellKey.includes(`_${month}`)) {
+                    if (e.currency === 'EUR') monthEUR += e.amount;
+                    else monthHUF += e.amount;
+                }
+            });
+            const monthTotal = monthHUF + Math.round(monthEUR * eurRate);
+            totalRow.push(monthTotal > 0 ?
+                `${monthHUF.toLocaleString('hu-HU')} | ${monthEUR} EUR | ${monthTotal.toLocaleString('hu-HU')} Ft` : '-');
+            grandTotalAll += monthTotal;
+        });
+
+        tableRows.push(totalRow);
+
+        return {
+            headers: tableColumn,
+            rows: tableRows,
+            grandTotalAll: grandTotalAll
+        };
     }
 
     // ==================== WORK LOG EXPORT ====================
