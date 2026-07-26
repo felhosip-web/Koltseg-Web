@@ -248,7 +248,7 @@ export class ServiceDevManager {
         menu = document.createElement('div');
         menu.id = 'serviceMenu';
         menu.className = 'hidden fixed top-4 right-4 z-[9999] bg-white rounded-2xl shadow-2xl border border-gray-200 p-4 max-w-sm w-full max-h-[90vh] overflow-y-auto';
-        menu.style.touchAction = 'none';
+
         menu.innerHTML = this._getMenuHTML();
         document.body.appendChild(menu);
         this.menuElement = menu;
@@ -376,7 +376,11 @@ export class ServiceDevManager {
             #logContainer::-webkit-scrollbar { width: 4px; }
             #logContainer::-webkit-scrollbar-track { background: #1f2937; }
             #logContainer::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 2px; }
-            @media (max-width: 640px) { #serviceMenu { max-width: calc(100vw - 32px); right: 16px; top: 16px; max-height: 85vh; } }
+            #serviceMenu::-webkit-scrollbar { width: 6px; }
+            #serviceMenu::-webkit-scrollbar-track { background: transparent; }
+            #serviceMenu::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+            #serviceMenu::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+            @media (max-width: 768px) { #serviceMenu { max-width: calc(100vw - 32px); right: 16px; top: 16px; max-height: 85vh; } }
         `;
         document.head.appendChild(style);
     }
