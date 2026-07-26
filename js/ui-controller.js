@@ -926,8 +926,8 @@ _setupSyncQueueBadge() {
     }
 
     async handleRowDeleteSequence(itemIdStr, itemName) {
-        const itemId = parseInt(itemIdStr);
-        if (isNaN(itemId)) return;
+        const itemId = itemIdStr;
+        if (!itemId) return;
         const allEntries = this.app.entries.entries;
         const associatedEntries = allEntries.filter(e => e.cellKey && e.cellKey.startsWith(`${itemId}_`));
 
