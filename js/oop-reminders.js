@@ -181,7 +181,7 @@ export class RemindersRenderer {
                             
                             // Fő táblázat frissítése
                             if (this.app.renderer) {
-                                this.app.renderer.render();
+                                this.app.renderer.renderTable();
                                 this.app.renderer.renderSummary?.();
                                 this.app.renderer.updateFooterStatus('Határidő teljesítve és kiadásként rögzítve!', false);
                             }

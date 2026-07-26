@@ -231,7 +231,7 @@ export class CellModalController {
         await this.app.entries.load();
 
         this.app.hmiNotif.showToast('Rész-tétel törölve', 'success');
-        this.app.renderer.render();           // Táblázat frissítése
+        this.app.renderer.renderTable();           // Táblázat frissítése
         this.refreshList();                   // Lista frissítése
     }
 
@@ -297,7 +297,7 @@ export class CellModalController {
         this.refreshList();
         
         // Fő táblázat és összegzés frissítése
-        this.app.renderer.render();
+        this.app.renderer.renderTable();
         this.app.renderer.renderSummary?.();   // ha létezik
         
         // Státusz frissítése a láblécben

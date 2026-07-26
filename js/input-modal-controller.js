@@ -135,7 +135,7 @@ export class InputModalController {
             await this.app.items.load();
 
             this.app.hmiNotif.showToast(`✅ "${val}" kategória létrehozva`, 'success');
-            this.app.renderer.render();           // Táblázat frissítése
+            this.app.renderer.renderTable();           // Táblázat frissítése
 
         } else if (this.modalType === 'month') {
             // === ÚJ HÓNAP ===
@@ -161,7 +161,7 @@ export class InputModalController {
             await this.app.months.load();
 
             this.app.hmiNotif.showToast(`✅ ${val} hónap megnyitva`, 'success');
-            this.app.renderer.render();           // Táblázat frissítése
+            this.app.renderer.renderTable();           // Táblázat frissítése
         }
         this.app.refreshAllTabs();
         this.close();
