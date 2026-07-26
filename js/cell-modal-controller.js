@@ -227,12 +227,21 @@ export class CellModalController {
 
         if (!confirmed) return;
 
-        await this.app.entries.deleteEntry(targetEntry.id);
-        await this.app.entries.load();
+        try {
+            await this.app.entries.deleteEntry(targetEntry.id);
+            await this.app.entries.load();
 
-        this.app.hmiNotif.showToast('Rész-tétel törölve', 'success');
-        this.app.renderer.renderTable();           // Táblázat frissítése
-        this.refreshList();                   // Lista frissítése
+            this.app.hmiNotif.showToast('Rész-tétel törölve', 'success');
+        } catch (error) {
+            console.error('[CellModal] Hiba a törlés során:', error);
+            if (this.app.syncService?.clearQueue) {
+                this.app.syncService.clearQueue();
+            }
+            this.app.hmiNotif.showToast('Hiba törlés közben. A várólista ürítve lett.', 'error');
+        } finally {
+            this.app.renderer.renderTable();           // Táblázat frissítése
+            this.refreshList();                   // Lista frissítése
+        }
     }
 
     /**

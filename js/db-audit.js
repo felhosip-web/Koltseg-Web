@@ -97,7 +97,7 @@ export class DatabaseAudit {
                 month = parts[0];
                 itemIdStr = parts[1];
             }
-            const itemId = e.itemId || parseInt(itemIdStr);
+            const itemId = e.itemId || itemIdStr;
             if (!itemIds.has(itemId) || !monthSet.has(month)) {
                 orphans++;
             }
@@ -194,7 +194,7 @@ export class DatabaseAudit {
                     itemIdStr = parts[1];
                 }
 
-                const itemId = entry.itemId || parseInt(itemIdStr);
+                const itemId = entry.itemId || itemIdStr;
                 
                 // Ha a hónap hiányzik, hozzuk létre
                 if (month && !monthSet.has(month) && /^[0-9]{4}-\d{2}$/.test(month)) {
@@ -204,7 +204,7 @@ export class DatabaseAudit {
                 }
 
                 // Ha a kategória hiányzik, hozzuk létre
-                if (itemId && !itemIds.has(itemId) && !isNaN(itemId)) {
+                if (itemId && !itemIds.has(itemId) && (typeof itemId === 'string' && itemId.length > 0)) {
                     const restoredItem = {
                         id: itemId,
                         name: `Helyreállított kategória #${itemId}`,
