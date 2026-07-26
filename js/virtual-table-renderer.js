@@ -519,21 +519,23 @@ export class VirtualTableRenderer {
  * Lábléc státusz frissítése
  */
 updateFooterStatus(message, isError = false) {
-    const statusText = document.getElementById('saveStatusText');
-    const led = document.getElementById('saveLed');
-    const lastSaveEl = document.getElementById('lastSaveTime');
+    const statusTexts = document.querySelectorAll('[id="saveStatusText"]');
+    const leds = document.querySelectorAll('[id="saveLed"]');
+    const lastSaveEls = document.querySelectorAll('[id="lastSaveTime"]');
     
-    if (statusText) {
+    statusTexts.forEach(statusText => {
         statusText.textContent = message;
         statusText.className = `font-mono uppercase tracking-wider text-[10px] ${isError ? 'text-red-500' : 'text-gray-500'}`;
-    }
-    if (led) {
+    });
+    leds.forEach(led => {
         led.className = `w-2.5 h-2.5 rounded-full shadow-sm transition-all duration-300 ${isError ? 'bg-red-500 animate-pulse' : 'bg-emerald-500'}`;
-    }
-    if (lastSaveEl && !isError) {
+    });
+    if (!isError) {
         const now = new Date();
         const formattedTime = now.toLocaleTimeString('hu-HU', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-        lastSaveEl.textContent = formattedTime;
+        lastSaveEls.forEach(lastSaveEl => {
+            lastSaveEl.textContent = formattedTime;
+        });
     }
 }
 
