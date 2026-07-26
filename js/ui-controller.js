@@ -363,7 +363,7 @@ _setupSyncQueueBadge() {
         // ====================== EXPORT GOMBOK ======================
         document.getElementById('btnExportExcel')?.addEventListener('click', () => {
             this.togglePanel('exportMenu');
-            this.exportController.exportWorkExcel();
+            this.exportController.exportExcel();
         });
         document.getElementById('btnExportExcelWork')?.addEventListener('click', () => {
             this.togglePanel('exportMenuWork');
@@ -372,7 +372,7 @@ _setupSyncQueueBadge() {
 
         document.getElementById('btnExportPdf')?.addEventListener('click', () => {
             this.togglePanel('exportMenu');
-            this.exportController.exportWorkPdf();
+            this.exportController.exportPdf();
         });
         document.getElementById('btnExportPdfWork')?.addEventListener('click', () => {
             this.togglePanel('exportMenuWork');
@@ -381,7 +381,7 @@ _setupSyncQueueBadge() {
 
         document.getElementById('btnExportJson')?.addEventListener('click', () => {
             this.togglePanel('exportMenu');
-            this.exportController.exportWorkJson();
+            this.exportController.exportJson();
         });
         document.getElementById('btnExportJsonWork')?.addEventListener('click', () => {
             this.togglePanel('exportMenuWork');
@@ -390,7 +390,7 @@ _setupSyncQueueBadge() {
 
         document.getElementById('btnImportJson')?.addEventListener('click', () => {
             this.togglePanel('exportMenu');
-            this.exportController.importWorkJson();
+            this.exportController.importJson();
         });
         document.getElementById('btnImportJsonWork')?.addEventListener('click', () => {
             this.togglePanel('exportMenuWork');
