@@ -363,7 +363,7 @@ export class AiModalController {
             await this.app.entries.load();
             await this.app.items.load();
             await this.app.months.load();
-            this.app.renderer.render();
+            this.app.renderer.renderTable();
 
             this.app.hmiNotif.showToast('✅ Tranzakció rögzítve az adatbázisban!', 'success');
             this.close();
