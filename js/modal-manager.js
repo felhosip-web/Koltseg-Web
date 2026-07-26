@@ -136,4 +136,8 @@ export class ModalManager {
 
         this.activeModals = this.activeModals.filter(id => id !== modalId);
     }
+
+    isOpen(modalId) {
+        return this.activeModals.includes(modalId);
+    }
 }

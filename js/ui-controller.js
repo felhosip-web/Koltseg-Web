@@ -931,12 +931,19 @@ _setupSyncQueueBadge() {
         const allEntries = this.app.entries.entries;
         const associatedEntries = allEntries.filter(e => e.cellKey && e.cellKey.startsWith(`${itemId}_`));
 
-        const confirmed = await this.app.hmiNotif.showConfirm({
-           title: '⚠️ KRITIKUS: Kategóriasor törlése',
-           message: `Biztosan törölni szeretné a teljes "${itemName.toUpperCase()}" kategóriát az összes havi rész-tételével (${associatedEntries.length} db) együtt?`,
-          type: 'danger',
-           confirmText: 'SOR TÖRLÉSE'
-         });
+        let confirmed = false;
+        try {
+            confirmed = await this.app.hmiNotif.showConfirm({
+               title: '⚠️ KRITIKUS: Kategóriasor törlése',
+               message: `Biztosan törölni szeretné a teljes "${itemName.toUpperCase()}" kategóriát az összes havi rész-tételével (${associatedEntries.length} db) együtt?`,
+              type: 'danger',
+               confirmText: 'SOR TÖRLÉSE'
+             });
+        } catch (err) {
+            console.error('[HMI PURGE ERROR] Modal hiba:', err);
+            this.app.renderer.updateFooterStatus('Hiba a megerősítő ablaknál', true);
+            return;
+        }
 
         if (confirmed) {
             try {

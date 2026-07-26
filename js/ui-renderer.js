@@ -230,6 +230,9 @@ export class UIRenderer {
                         if (action === 'rename') {
                             this.app.uiController.handleRenameItem(parseInt(el.dataset.itemid), el.dataset.itemname);
                         } else if (action === 'delete') {
+                            // Wait for the category actions modal to finish its 150ms close animation
+                            // before triggering the confirmation modal in the delete sequence
+                            await new Promise(r => setTimeout(r, 250));
                             this.app.uiController.handleRowDeleteSequence(el.dataset.itemid, el.dataset.itemname);
                         }
                     } catch (err) {
