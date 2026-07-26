@@ -248,7 +248,7 @@ export class SecurityGuard {
         // Zároljuk a kritikus gombokat és funkciókat vendég esetén
         const dbResetButton = document.getElementById('btnWipeSupabaseDatabase') || document.getElementById('btnResetDatabase');
         const settingsSaveBtn = document.getElementById('btnSaveSettings');
-        const devPanelBtn = document.getElementById('debugToggleBtnContainer');
+        const devPanelBtns = document.querySelectorAll('[id="debugToggleBtnContainer"]');
         const securityTabBtn = document.querySelector('[data-settings-tab="security"]');
 
         if (isGuest) {
@@ -261,8 +261,8 @@ export class SecurityGuard {
                 settingsSaveBtn.classList.add('opacity-50', 'cursor-not-allowed');
                 settingsSaveBtn.setAttribute('disabled', 'true');
             }
-            if (devPanelBtn) {
-                devPanelBtn.classList.add('hidden');
+            if (devPanelBtns.length > 0) {
+                devPanelBtns.forEach(btn => btn.classList.add('hidden'));
             }
             // Biztonság fület NEM rejtjük el teljesen, mert ott lehet feloldani a tulajdonosi jogokat!
             if (securityTabBtn) {
@@ -278,8 +278,8 @@ export class SecurityGuard {
                 settingsSaveBtn.classList.remove('opacity-50', 'cursor-not-allowed');
                 settingsSaveBtn.removeAttribute('disabled');
             }
-            if (devPanelBtn) {
-                devPanelBtn.classList.remove('hidden');
+            if (devPanelBtns.length > 0) {
+                devPanelBtns.forEach(btn => btn.classList.remove('hidden'));
             }
             if (securityTabBtn) {
                 securityTabBtn.classList.remove('hidden');

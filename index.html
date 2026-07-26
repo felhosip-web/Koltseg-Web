@@ -1190,6 +1190,27 @@
                     teljes bejegyzés szerkesztése!</span>
             </div>
         </div>
+
+        <!-- ===== FOOTER ===== -->
+        <footer
+            class="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-4 py-2 text-xs text-gray-600 flex items-center justify-between z-40">
+            <div class="flex items-center gap-2">
+                <span id="saveLed"
+                    class="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-sm transition-all duration-300"></span>
+                <span id="saveStatusText" class="font-mono uppercase tracking-wider text-[10px] text-gray-500">Rendszer
+                    Online</span>
+            </div>
+            <div class="font-mono text-[10px] text-gray-400">
+                Utolsó mentés: <span id="lastSaveTime">Soha</span>
+            </div>
+            <div class="text-gray-400 relative p-1" id="debugToggleBtnContainer">
+                Költségnyilvántartó <span class="app-version-label">v4.5.0</span>
+                <button id="debugToggleBtn"
+                    class="absolute inset-0 w-full h-full bg-transparent border-none cursor-pointer z-50 focus:outline-none"
+                    title="Debug panel megnyitása (5x kattintás)"></button>
+            </div>
+        </footer>
+
     </div>
 
     <!-- WORK EDITOR / CREATOR MODAL -->

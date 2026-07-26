@@ -1462,30 +1462,32 @@ function setupDebugConsole() {
 
 function initDebugPanel() {
     const panel = document.getElementById('debugPanel');
-    const toggleBtn = document.getElementById('debugToggleBtn');
+    const toggleBtns = document.querySelectorAll('[id="debugToggleBtn"]');
     const closeBtn = document.getElementById('closeDebugPanel');
 
-    if (!panel || !toggleBtn) return;
+    if (!panel || toggleBtns.length === 0) return;
 
     let clickCount = 0;
     let clickTimer = null;
     
-    toggleBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        clickCount++;
-        clearTimeout(clickTimer);
-        if (clickCount >= 5) {
-            clickCount = 0;
-            panel.classList.toggle('hidden');
-            if (!panel.classList.contains('hidden')) {
-                updateDebugStatus();
-                updateDebugLogs();
-                updateSupabaseDebugInfo();
-                updateNotificationPermissionStatus();
-            updateGDriveDebugInfo();
+    toggleBtns.forEach(toggleBtn => {
+        toggleBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            clickCount++;
+            clearTimeout(clickTimer);
+            if (clickCount >= 5) {
+                clickCount = 0;
+                panel.classList.toggle('hidden');
+                if (!panel.classList.contains('hidden')) {
+                    updateDebugStatus();
+                    updateDebugLogs();
+                    updateSupabaseDebugInfo();
+                    updateNotificationPermissionStatus();
+                    updateGDriveDebugInfo();
+                }
             }
-        }
-        clickTimer = setTimeout(() => { clickCount = 0; }, 800);
+            clickTimer = setTimeout(() => { clickCount = 0; }, 800);
+        });
     });
 
     closeBtn?.addEventListener('click', () => {
