@@ -445,6 +445,56 @@ export class Database {
         }
         return this._directDelete(storeName, key);
     }
+
+    async deleteItemWithEntries(itemId) {
+        return new Promise((resolve, reject) => {
+            if (this.isMock) {
+                // Mock implementation
+                if (this.mockStore['items']) {
+                    delete this.mockStore['items'][itemId];
+                }
+                if (this.mockStore['entries']) {
+                    const entriesToDelete = Object.values(this.mockStore['entries'])
+                        .filter(e => e.cellKey && (e.cellKey.startsWith(`${itemId}_`) || e.cellKey.endsWith(`_${itemId}`)));
+                    entriesToDelete.forEach(e => {
+                        delete this.mockStore['entries'][e.id];
+                    });
+                }
+                return resolve();
+            }
+            if (!this.db) return reject(new Error('Nincs adatbázis kapcsolat!'));
+
+            try {
+                const tx = this.db.transaction(['items', 'entries'], 'readwrite');
+                const itemStore = tx.objectStore('items');
+                const entryStore = tx.objectStore('entries');
+
+                itemStore.delete(itemId);
+
+                const req = entryStore.getAll();
+                req.onsuccess = (e) => {
+                    const entries = e.target.result || [];
+                    entries.forEach(entry => {
+                        if (entry.cellKey && (entry.cellKey.startsWith(`${itemId}_`) || entry.cellKey.endsWith(`_${itemId}`))) {
+                            entryStore.delete(entry.id);
+                        }
+                    });
+                };
+                req.onerror = (e) => {
+                    reject(e.target.error);
+                };
+
+                tx.oncomplete = () => {
+                    resolve();
+                };
+                tx.onerror = (e) => {
+                    reject(e.target.error);
+                };
+            } catch (e) {
+                reject(e);
+            }
+        });
+    }
 }
 
 export class TemplateManager {
@@ -455,22 +505,42 @@ export class TemplateManager {
     }
     
     async load() { 
-        this.templates = await this.db.getAll('templates'); 
+        try {
+            this.templates = await this.db.getAll('templates');
+        } catch (e) {
+            console.error('[TemplateManager] Betöltési hiba:', e);
+            if (this.syncService && typeof this.syncService.clearQueue === 'function') this.syncService.clearQueue();
+            throw e;
+        }
     }
     
     async add(template) {
-        if (!template.id) template.id = generateUUID();
-        template.updated_at = new Date().toISOString();
-        await this.db.save('templates', template);
-        this.templates.push(template);
-        await this.syncService.push('templates', template);
-        return template;
+        try {
+            if (!template.id) template.id = generateUUID();
+            template.updated_at = new Date().toISOString();
+            await this.db.save('templates', template);
+            this.templates.push(template);
+            await this.syncService.push('templates', template);
+            return template;
+        } catch (e) {
+            console.error('[TemplateManager] Mentési hiba:', e);
+            if (this.syncService && typeof this.syncService.clearQueue === 'function') this.syncService.clearQueue();
+            throw e;
+        }
     }
     
     async delete(id) {
-        await this.db.delete('templates', id);
-        this.templates = this.templates.filter(t => t.id !== id);
-        await this.syncService.push('templates', id, true);
+        try {
+            await this.db.delete('templates', id);
+            this.templates = this.templates.filter(t => t.id !== id);
+            await this.syncService.push('templates', id, true);
+        } catch (e) {
+            console.error('[TemplateManager] Törlési hiba:', e);
+            if (this.syncService && typeof this.syncService.clearQueue === 'function') {
+                this.syncService.clearQueue();
+            }
+            throw e;
+        }
     }
 }
 
@@ -482,8 +552,14 @@ export class ReminderManager {
     }
     
     async load() { 
-        this.reminders = await this.db.getAll('reminders'); 
-        await this.autoGenerateRecurring();
+        try {
+            this.reminders = await this.db.getAll('reminders');
+            await this.autoGenerateRecurring();
+        } catch (e) {
+            console.error('[ReminderManager] Betöltési hiba:', e);
+            if (this.syncService && typeof this.syncService.clearQueue === 'function') this.syncService.clearQueue();
+            throw e;
+        }
     }
   
     async autoGenerateRecurring() {
@@ -514,18 +590,32 @@ export class ReminderManager {
     }
     
     async add(reminder) {
-        if (!reminder.id) reminder.id = generateUUID();
-        reminder.updated_at = new Date().toISOString();
-        await this.db.save('reminders', reminder);
-        this.reminders.push(reminder);
-        await this.syncService.push('reminders', reminder);
-        return reminder;
+        try {
+            if (!reminder.id) reminder.id = generateUUID();
+            reminder.updated_at = new Date().toISOString();
+            await this.db.save('reminders', reminder);
+            this.reminders.push(reminder);
+            await this.syncService.push('reminders', reminder);
+            return reminder;
+        } catch (e) {
+            console.error('[ReminderManager] Mentési hiba:', e);
+            if (this.syncService && typeof this.syncService.clearQueue === 'function') this.syncService.clearQueue();
+            throw e;
+        }
     }
     
     async delete(id) {
-        await this.db.delete('reminders', id);
-        this.reminders = this.reminders.filter(r => r.id !== id);
-        await this.syncService.push('reminders', id, true);
+        try {
+            await this.db.delete('reminders', id);
+            this.reminders = this.reminders.filter(r => r.id !== id);
+            await this.syncService.push('reminders', id, true);
+        } catch (e) {
+            console.error('[ReminderManager] Törlési hiba:', e);
+            if (this.syncService && typeof this.syncService.clearQueue === 'function') {
+                this.syncService.clearQueue();
+            }
+            throw e;
+        }
     }
 
     async markAsCompleted(id) {
@@ -575,34 +665,83 @@ export class ItemManager {
     }
     
     async load() { 
-        const data = await this.db.getAll('items');
-        this.items = data;
+        try {
+            const data = await this.db.getAll('items');
+            this.items = data;
+        } catch (e) {
+            console.error('[ItemManager] Betöltési hiba:', e);
+            if (this.syncService && typeof this.syncService.clearQueue === 'function') this.syncService.clearQueue();
+            throw e;
+        }
     }
     
     async add(name, color = '#dbeafe') {
-        const item = { id: generateUUID(), name, color, updated_at: new Date().toISOString() };
-        await this.db.save('items', item);
-        this.items = [...this.items, item];
-        await this.syncService.push('items', item);
-        return item;
+        try {
+            const item = { id: generateUUID(), name, color, updated_at: new Date().toISOString() };
+            await this.db.save('items', item);
+            this.items = [...this.items, item];
+            await this.syncService.push('items', item);
+            return item;
+        } catch (e) {
+            console.error('[ItemManager] Mentési hiba:', e);
+            if (this.syncService && typeof this.syncService.clearQueue === 'function') this.syncService.clearQueue();
+            throw e;
+        }
     }
     
     async update(id, updatedData) {
-        const idx = this.items.findIndex(i => i.id === id);
-        if (idx === -1) return;
-        const item = { ...this.items[idx], ...updatedData, updated_at: new Date().toISOString() };
-        await this.db.save('items', item);
-        const newItems = [...this.items];
-        newItems[idx] = item;
-        this.items = newItems;
-        await this.syncService.push('items', item);
-        return item;
+        try {
+            const idx = this.items.findIndex(i => i.id === id);
+            if (idx === -1) return;
+            const item = { ...this.items[idx], ...updatedData, updated_at: new Date().toISOString() };
+            await this.db.save('items', item);
+            const newItems = [...this.items];
+            newItems[idx] = item;
+            this.items = newItems;
+            await this.syncService.push('items', item);
+            return item;
+        } catch (e) {
+            console.error('[ItemManager] Mentési hiba:', e);
+            if (this.syncService && typeof this.syncService.clearQueue === 'function') this.syncService.clearQueue();
+            throw e;
+        }
     }
     
     async delete(id) {
-        await this.db.delete('items', id);
-        this.items = this.items.filter(i => i.id !== id);
-        await this.syncService.push('items', id, true);
+        try {
+            await this.db.deleteItemWithEntries(id);
+            this.items = this.items.filter(i => i.id !== id);
+
+            const entriesToDel = window.app?.entries?.entries?.filter(e => e.cellKey && (e.cellKey.startsWith(`${id}_`) || e.cellKey.endsWith(`_${id}`))) || [];
+            if (window.app && window.app.entries) {
+                window.app.entries.entries = window.app.entries.entries.filter(e => !(e.cellKey && (e.cellKey.startsWith(`${id}_`) || e.cellKey.endsWith(`_${id}`))));
+            }
+
+            // Push changes
+            await this.syncService.push('items', id, true);
+            for (const entry of entriesToDel) {
+                await this.syncService.push('entries', entry.id, true);
+
+                // Track in tombstone
+                if (this.db) {
+                     const deletedRecord = {
+                        id: `entries_${entry.id}`,
+                        record_id: String(entry.id),
+                        table_name: 'entries',
+                        deleted_at: new Date().toISOString(),
+                        updated_at: new Date().toISOString()
+                    };
+                    await this.db.save('deleted_records', deletedRecord);
+                }
+            }
+
+        } catch (e) {
+            console.error('[ItemManager] Törlési hiba:', e);
+            if (this.syncService && typeof this.syncService.clearQueue === 'function') {
+                this.syncService.clearQueue();
+            }
+            throw e;
+        }
     }
 }
 
@@ -621,23 +760,43 @@ export class MonthManager {
     }
     
     async load() { 
-        const data = await this.db.getAll('months');
-        this.months = data.map(m => m.month).sort(); 
+        try {
+            const data = await this.db.getAll('months');
+            this.months = data.map(m => m.month).sort();
+        } catch (e) {
+            console.error('[MonthManager] Betöltési hiba:', e);
+            if (this.syncService && typeof this.syncService.clearQueue === 'function') this.syncService.clearQueue();
+            throw e;
+        }
     }
     
     async add(month) {
-        const data = { month, updated_at: new Date().toISOString() };
-        await this.db.save('months', data);
-        const newMonths = [...this.months, month];
-        newMonths.sort();
-        this.months = newMonths;
-        await this.syncService.push('months', data, false, 'month');
+        try {
+            const data = { month, updated_at: new Date().toISOString() };
+            await this.db.save('months', data);
+            const newMonths = [...this.months, month];
+            newMonths.sort();
+            this.months = newMonths;
+            await this.syncService.push('months', data, false, 'month');
+        } catch (e) {
+            console.error('[MonthManager] Mentési hiba:', e);
+            if (this.syncService && typeof this.syncService.clearQueue === 'function') this.syncService.clearQueue();
+            throw e;
+        }
     }
     
     async delete(month) {
-        await this.db.delete('months', month);
-        this.months = this.months.filter(m => m !== month);
-        await this.syncService.push('months', month, true, 'month');
+        try {
+            await this.db.delete('months', month);
+            this.months = this.months.filter(m => m !== month);
+            await this.syncService.push('months', month, true, 'month');
+        } catch (e) {
+            console.error('[MonthManager] Törlési hiba:', e);
+            if (this.syncService && typeof this.syncService.clearQueue === 'function') {
+                this.syncService.clearQueue();
+            }
+            throw e;
+        }
     }
 }
 
@@ -656,7 +815,13 @@ export class EntryManager {
     }
     
     async load() { 
-        this.entries = await this.db.getAll('entries'); 
+        try {
+            this.entries = await this.db.getAll('entries');
+        } catch (e) {
+            console.error('[EntryManager] Betöltési hiba:', e);
+            if (this.syncService && typeof this.syncService.clearQueue === 'function') this.syncService.clearQueue();
+            throw e;
+        }
     }
     
     async getByCellKey(cellKeyPrefix) {
@@ -664,24 +829,38 @@ export class EntryManager {
     }
     
     async saveEntry(entry) {
-        if (!entry.id) entry.id = generateUUID();
-        if (!entry.updated_at) entry.updated_at = new Date().toISOString();
-        await this.db.save('entries', entry);
-        
-        const idx = this.entries.findIndex(e => e.id === entry.id);
-        const newEntries = [...this.entries];
-        if (idx !== -1) newEntries[idx] = entry;
-        else newEntries.push(entry);
-        this.entries = newEntries;
-        
-        await this.syncService.push('entries', entry);
-        return entry;
+        try {
+            if (!entry.id) entry.id = generateUUID();
+            if (!entry.updated_at) entry.updated_at = new Date().toISOString();
+            await this.db.save('entries', entry);
+
+            const idx = this.entries.findIndex(e => e.id === entry.id);
+            const newEntries = [...this.entries];
+            if (idx !== -1) newEntries[idx] = entry;
+            else newEntries.push(entry);
+            this.entries = newEntries;
+
+            await this.syncService.push('entries', entry);
+            return entry;
+        } catch (e) {
+            console.error('[EntryManager] Mentési hiba:', e);
+            if (this.syncService && typeof this.syncService.clearQueue === 'function') this.syncService.clearQueue();
+            throw e;
+        }
     }
     
     async deleteEntry(id) {
-        await this.db.delete('entries', id);
-        this.entries = this.entries.filter(e => e.id !== id);
-        await this.syncService.push('entries', id, true);
+        try {
+            await this.db.delete('entries', id);
+            this.entries = this.entries.filter(e => e.id !== id);
+            await this.syncService.push('entries', id, true);
+        } catch (e) {
+            console.error('[EntryManager] Törlési hiba:', e);
+            if (this.syncService && typeof this.syncService.clearQueue === 'function') {
+                this.syncService.clearQueue();
+            }
+            throw e;
+        }
     }
 }
 
@@ -1175,25 +1354,31 @@ export class IncomingManager {
      * Adatok betöltése
      */
     async load() {
-        this.incomings = await this.db.getAll('incomings') || [];
-        const rawSenders = await this.db.getAll('incoming_senders') || [];
-        
-        // Öngyógyító beolvasás: Kiszűrjük az esetleges duplikátumokat az adatbázisból
-        const seenNames = new Set();
-        this.senders = [];
-        for (const sender of rawSenders) {
-            const nameNorm = String(sender.name || '').trim();
-            if (nameNorm && !seenNames.has(nameNorm)) {
-                seenNames.add(nameNorm);
-                this.senders.push(sender);
-            } else if (sender.id) {
-                // Ha duplikált névvel van bejegyzés, töröljük az adatbázisból is a tisztaság kedvéért
-                await this.db.delete('incoming_senders', sender.id);
+        try {
+            this.incomings = await this.db.getAll('incomings') || [];
+            const rawSenders = await this.db.getAll('incoming_senders') || [];
+
+            // Öngyógyító beolvasás: Kiszűrjük az esetleges duplikátumokat az adatbázisból
+            const seenNames = new Set();
+            this.senders = [];
+            for (const sender of rawSenders) {
+                const nameNorm = String(sender.name || '').trim();
+                if (nameNorm && !seenNames.has(nameNorm)) {
+                    seenNames.add(nameNorm);
+                    this.senders.push(sender);
+                } else if (sender.id) {
+                    // Ha duplikált névvel van bejegyzés, töröljük az adatbázisból is a tisztaság kedvéért
+                    await this.db.delete('incoming_senders', sender.id);
+                }
             }
+
+            // Senders lista frissítése a bejegyzésekből
+            await this._updateSendersFromEntries();
+        } catch (e) {
+            console.error('[IncomingManager] Betöltési hiba:', e);
+            if (this.syncService && typeof this.syncService.clearQueue === 'function') this.syncService.clearQueue();
+            throw e;
         }
-        
-        // Senders lista frissítése a bejegyzésekből
-        await this._updateSendersFromEntries();
     }
 
     /**
@@ -1236,85 +1421,104 @@ export class IncomingManager {
      * @returns {Promise<object>} - A létrehozott tétel
      */
     async add(sender, date, amount) {
-        sender = String(sender || '').trim();
-        if (!sender) {
-            throw new Error('Az utaló neve nem lehet üres.');
-        }
-        const normalizedDate = String(date || '').trim();
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(normalizedDate) || Number.isNaN(new Date(normalizedDate).getTime())) {
-            throw new Error('Érvénytelen dátum formátum.');
-        }
-        if (isNaN(amount) || amount <= 0) {
-            throw new Error('Az összegnek nagyobbnak kell lennie nullánál.');
-        }
-        // Ellenőrizzük, hogy van-e már ilyen tétel
-        const existing = this.incomings.find(
-            entry => entry.sender === sender && entry.date === normalizedDate
-        );
-        if (existing) {
-            // Frissítjük a meglévőt
-            existing.amount = amount;
-            existing.updated_at = new Date().toISOString();
-            await this.db.save('incomings', existing);
-            return existing;
-        }
+        try {
+            sender = String(sender || '').trim();
+            if (!sender) {
+                throw new Error('Az utaló neve nem lehet üres.');
+            }
+            const normalizedDate = String(date || '').trim();
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(normalizedDate) || Number.isNaN(new Date(normalizedDate).getTime())) {
+                throw new Error('Érvénytelen dátum formátum.');
+            }
+            if (isNaN(amount) || amount <= 0) {
+                throw new Error('Az összegnek nagyobbnak kell lennie nullánál.');
+            }
+            // Ellenőrizzük, hogy van-e már ilyen tétel
+            const existing = this.incomings.find(
+                entry => entry.sender === sender && entry.date === normalizedDate
+            );
+            if (existing) {
+                // Frissítjük a meglévőt
+                existing.amount = amount;
+                existing.updated_at = new Date().toISOString();
+                await this.db.save('incomings', existing);
+                return existing;
+            }
 
-        const entry = {
-            id: generateUUID(),
-            sender,
-            date: normalizedDate,
-            amount,
-            updated_at: new Date().toISOString(),
-            created_at: new Date().toISOString()
-        };
-        await this.db.save('incomings', entry);
-        this.incomings.push(entry);
-        await this._updateSendersFromEntries();
-        await this.syncService.push('incomings', entry);
-        return entry;
+            const entry = {
+                id: generateUUID(),
+                sender,
+                date: normalizedDate,
+                amount,
+                updated_at: new Date().toISOString(),
+                created_at: new Date().toISOString()
+            };
+            await this.db.save('incomings', entry);
+            this.incomings.push(entry);
+            await this._updateSendersFromEntries();
+            await this.syncService.push('incomings', entry);
+            return entry;
+        } catch (e) {
+            console.error('[IncomingManager] Mentési hiba:', e);
+            if (this.syncService && typeof this.syncService.clearQueue === 'function') this.syncService.clearQueue();
+            throw e;
+        }
     }
 
     /**
      * Tétel frissítése
      */
     async update(id, data) {
-        const idx = this.incomings.findIndex(e => String(e.id) === String(id));
-        if (idx === -1) return null;
-        if (data.hasOwnProperty('amount')) {
-            if (isNaN(data.amount) || data.amount <= 0) {
-                throw new Error('Az összegnek nagyobbnak kell lennie nullánál.');
+        try {
+            const idx = this.incomings.findIndex(e => String(e.id) === String(id));
+            if (idx === -1) return null;
+            if (data.hasOwnProperty('amount')) {
+                if (isNaN(data.amount) || data.amount <= 0) {
+                    throw new Error('Az összegnek nagyobbnak kell lennie nullánál.');
+                }
             }
-        }
-        if (data.hasOwnProperty('sender')) {
-            const senderName = String(data.sender || '').trim();
-            if (!senderName) {
-                throw new Error('Az utaló neve nem lehet üres.');
+            if (data.hasOwnProperty('sender')) {
+                const senderName = String(data.sender || '').trim();
+                if (!senderName) {
+                    throw new Error('Az utaló neve nem lehet üres.');
+                }
+                data.sender = senderName;
             }
-            data.sender = senderName;
-        }
-        if (data.hasOwnProperty('date')) {
-            const normalizedDate = String(data.date || '').trim();
-            if (!/^\d{4}-\d{2}-\d{2}$/.test(normalizedDate) || Number.isNaN(new Date(normalizedDate).getTime())) {
-                throw new Error('Érvénytelen dátum formátum.');
+            if (data.hasOwnProperty('date')) {
+                const normalizedDate = String(data.date || '').trim();
+                if (!/^\d{4}-\d{2}-\d{2}$/.test(normalizedDate) || Number.isNaN(new Date(normalizedDate).getTime())) {
+                    throw new Error('Érvénytelen dátum formátum.');
+                }
+                data.date = normalizedDate;
             }
-            data.date = normalizedDate;
+
+            const entry = { ...this.incomings[idx], ...data, updated_at: new Date().toISOString() };
+            await this.db.save('incomings', entry);
+            this.incomings[idx] = entry;
+            await this.syncService.push('incomings', entry);
+            return entry;
+        } catch (e) {
+            console.error('[IncomingManager] Mentési hiba:', e);
+            if (this.syncService && typeof this.syncService.clearQueue === 'function') this.syncService.clearQueue();
+            throw e;
         }
-        
-        const entry = { ...this.incomings[idx], ...data, updated_at: new Date().toISOString() };
-        await this.db.save('incomings', entry);
-        this.incomings[idx] = entry;
-        await this.syncService.push('incomings', entry);
-        return entry;
     }
 
     /**
      * Tétel törlése
      */
     async delete(id) {
-        const key = !isNaN(id) && !isNaN(parseInt(id)) ? parseInt(id) : id;
-        await this.db.delete('incomings', key);
-        this.incomings = this.incomings.filter(e => String(e.id) !== String(id));
-        await this.syncService.push('incomings', key, true);
+        try {
+            await this.db.delete('incomings', id);
+            this.incomings = this.incomings.filter(e => String(e.id) !== String(id));
+            await this.syncService.push('incomings', id, true);
+        } catch (e) {
+            console.error('[IncomingManager] Törlési hiba:', e);
+            if (this.syncService && typeof this.syncService.clearQueue === 'function') {
+                this.syncService.clearQueue();
+            }
+            throw e;
+        }
     }
 
     /**

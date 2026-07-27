@@ -49,6 +49,23 @@ export class SyncService {
             const saved = localStorage.getItem('hmi_syncQueue');
             if (saved) {
                 this._syncQueue = JSON.parse(saved);
+
+                // Ha egy korábbi megszakított szinkronizáció miatt beragadt volna 'processing' állapotban
+                let stateChanged = false;
+                this._syncQueue = this._syncQueue.map(item => {
+                    if (item.status === 'processing') {
+                        stateChanged = true;
+                        return { ...item, status: 'pending' };
+                    }
+                    return item;
+                });
+
+                if (stateChanged) {
+                    try {
+                        localStorage.setItem('hmi_syncQueue', JSON.stringify(this._syncQueue));
+                    } catch(e) {}
+                }
+
                 console.log(`[SYNC] 📋 ${this._syncQueue.length} queue elem betöltve`);
             }
         } catch (e) {
