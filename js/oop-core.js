@@ -509,7 +509,7 @@ export class TemplateManager {
             this.templates = await this.db.getAll('templates');
         } catch (e) {
             console.error('[TemplateManager] Betöltési hiba:', e);
-            if (this.syncService && typeof this.syncService.clearQueue === 'function') this.syncService.clearQueue();
+            // queue clear removed
             throw e;
         }
     }
@@ -524,7 +524,7 @@ export class TemplateManager {
             return template;
         } catch (e) {
             console.error('[TemplateManager] Mentési hiba:', e);
-            if (this.syncService && typeof this.syncService.clearQueue === 'function') this.syncService.clearQueue();
+            // queue clear removed
             throw e;
         }
     }
@@ -536,9 +536,7 @@ export class TemplateManager {
             await this.syncService.push('templates', id, true);
         } catch (e) {
             console.error('[TemplateManager] Törlési hiba:', e);
-            if (this.syncService && typeof this.syncService.clearQueue === 'function') {
-                this.syncService.clearQueue();
-            }
+            // queue clear removed
             throw e;
         }
     }
@@ -557,7 +555,7 @@ export class ReminderManager {
             await this.autoGenerateRecurring();
         } catch (e) {
             console.error('[ReminderManager] Betöltési hiba:', e);
-            if (this.syncService && typeof this.syncService.clearQueue === 'function') this.syncService.clearQueue();
+            // queue clear removed
             throw e;
         }
     }
@@ -599,7 +597,7 @@ export class ReminderManager {
             return reminder;
         } catch (e) {
             console.error('[ReminderManager] Mentési hiba:', e);
-            if (this.syncService && typeof this.syncService.clearQueue === 'function') this.syncService.clearQueue();
+            // queue clear removed
             throw e;
         }
     }
@@ -611,9 +609,7 @@ export class ReminderManager {
             await this.syncService.push('reminders', id, true);
         } catch (e) {
             console.error('[ReminderManager] Törlési hiba:', e);
-            if (this.syncService && typeof this.syncService.clearQueue === 'function') {
-                this.syncService.clearQueue();
-            }
+            // queue clear removed
             throw e;
         }
     }
@@ -670,7 +666,7 @@ export class ItemManager {
             this.items = data;
         } catch (e) {
             console.error('[ItemManager] Betöltési hiba:', e);
-            if (this.syncService && typeof this.syncService.clearQueue === 'function') this.syncService.clearQueue();
+            // queue clear removed
             throw e;
         }
     }
@@ -684,7 +680,7 @@ export class ItemManager {
             return item;
         } catch (e) {
             console.error('[ItemManager] Mentési hiba:', e);
-            if (this.syncService && typeof this.syncService.clearQueue === 'function') this.syncService.clearQueue();
+            // queue clear removed
             throw e;
         }
     }
@@ -702,7 +698,7 @@ export class ItemManager {
             return item;
         } catch (e) {
             console.error('[ItemManager] Mentési hiba:', e);
-            if (this.syncService && typeof this.syncService.clearQueue === 'function') this.syncService.clearQueue();
+            // queue clear removed
             throw e;
         }
     }
@@ -737,9 +733,7 @@ export class ItemManager {
 
         } catch (e) {
             console.error('[ItemManager] Törlési hiba:', e);
-            if (this.syncService && typeof this.syncService.clearQueue === 'function') {
-                this.syncService.clearQueue();
-            }
+            // queue clear removed
             throw e;
         }
     }
@@ -765,7 +759,7 @@ export class MonthManager {
             this.months = data.map(m => m.month).sort();
         } catch (e) {
             console.error('[MonthManager] Betöltési hiba:', e);
-            if (this.syncService && typeof this.syncService.clearQueue === 'function') this.syncService.clearQueue();
+            // queue clear removed
             throw e;
         }
     }
@@ -780,7 +774,7 @@ export class MonthManager {
             await this.syncService.push('months', data, false, 'month');
         } catch (e) {
             console.error('[MonthManager] Mentési hiba:', e);
-            if (this.syncService && typeof this.syncService.clearQueue === 'function') this.syncService.clearQueue();
+            // queue clear removed
             throw e;
         }
     }
@@ -792,9 +786,7 @@ export class MonthManager {
             await this.syncService.push('months', month, true, 'month');
         } catch (e) {
             console.error('[MonthManager] Törlési hiba:', e);
-            if (this.syncService && typeof this.syncService.clearQueue === 'function') {
-                this.syncService.clearQueue();
-            }
+            // queue clear removed
             throw e;
         }
     }
@@ -819,7 +811,7 @@ export class EntryManager {
             this.entries = await this.db.getAll('entries');
         } catch (e) {
             console.error('[EntryManager] Betöltési hiba:', e);
-            if (this.syncService && typeof this.syncService.clearQueue === 'function') this.syncService.clearQueue();
+            // queue clear removed
             throw e;
         }
     }
@@ -844,7 +836,7 @@ export class EntryManager {
             return entry;
         } catch (e) {
             console.error('[EntryManager] Mentési hiba:', e);
-            if (this.syncService && typeof this.syncService.clearQueue === 'function') this.syncService.clearQueue();
+            // queue clear removed
             throw e;
         }
     }
@@ -856,9 +848,7 @@ export class EntryManager {
             await this.syncService.push('entries', id, true);
         } catch (e) {
             console.error('[EntryManager] Törlési hiba:', e);
-            if (this.syncService && typeof this.syncService.clearQueue === 'function') {
-                this.syncService.clearQueue();
-            }
+            // queue clear removed
             throw e;
         }
     }
@@ -1376,7 +1366,7 @@ export class IncomingManager {
             await this._updateSendersFromEntries();
         } catch (e) {
             console.error('[IncomingManager] Betöltési hiba:', e);
-            if (this.syncService && typeof this.syncService.clearQueue === 'function') this.syncService.clearQueue();
+            // queue clear removed
             throw e;
         }
     }
@@ -1460,7 +1450,7 @@ export class IncomingManager {
             return entry;
         } catch (e) {
             console.error('[IncomingManager] Mentési hiba:', e);
-            if (this.syncService && typeof this.syncService.clearQueue === 'function') this.syncService.clearQueue();
+            // queue clear removed
             throw e;
         }
     }
@@ -1499,7 +1489,7 @@ export class IncomingManager {
             return entry;
         } catch (e) {
             console.error('[IncomingManager] Mentési hiba:', e);
-            if (this.syncService && typeof this.syncService.clearQueue === 'function') this.syncService.clearQueue();
+            // queue clear removed
             throw e;
         }
     }
@@ -1514,9 +1504,7 @@ export class IncomingManager {
             await this.syncService.push('incomings', id, true);
         } catch (e) {
             console.error('[IncomingManager] Törlési hiba:', e);
-            if (this.syncService && typeof this.syncService.clearQueue === 'function') {
-                this.syncService.clearQueue();
-            }
+            // queue clear removed
             throw e;
         }
     }
