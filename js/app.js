@@ -2050,7 +2050,7 @@ function getSupabaseSQLScript() {
 
 -- 1. ITEMS (Kategóriák)
 CREATE TABLE IF NOT EXISTS items (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     color TEXT,
     updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -2070,7 +2070,7 @@ CREATE POLICY "Mindenki elérheti" ON months FOR ALL USING (true) WITH CHECK (tr
 
 -- 3. ENTRIES (Bejegyzések / Rész-tételek)
 CREATE TABLE IF NOT EXISTS entries (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id TEXT PRIMARY KEY,
     "cellKey" TEXT NOT NULL,
     amount NUMERIC NOT NULL,
     currency TEXT DEFAULT 'HUF',
@@ -2086,7 +2086,7 @@ CREATE POLICY "Mindenki elérheti" ON entries FOR ALL USING (true) WITH CHECK (t
 
 -- 4. TEMPLATES (Sablonok)
 CREATE TABLE IF NOT EXISTS templates (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id TEXT PRIMARY KEY,
     title TEXT NOT NULL,
     amount NUMERIC,
     currency TEXT DEFAULT 'HUF',
@@ -2100,7 +2100,7 @@ CREATE POLICY "Mindenki elérheti" ON templates FOR ALL USING (true) WITH CHECK 
 
 -- 5. REMINDERS (Határidők)
 CREATE TABLE IF NOT EXISTS reminders (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id TEXT PRIMARY KEY,
     title TEXT NOT NULL,
     amount NUMERIC NOT NULL,
     currency TEXT DEFAULT 'HUF',
@@ -2115,7 +2115,7 @@ CREATE POLICY "Mindenki elérheti" ON reminders FOR ALL USING (true) WITH CHECK 
 
 -- 6. INCOMINGS (Bejövő utalások)
 CREATE TABLE IF NOT EXISTS incomings (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id TEXT PRIMARY KEY,
     sender TEXT NOT NULL,
     date TEXT NOT NULL,
     amount NUMERIC NOT NULL,
@@ -2128,7 +2128,7 @@ CREATE POLICY "Mindenki elérheti" ON incomings FOR ALL USING (true) WITH CHECK 
 
 -- 7. INCOMING_SENDERS (Bejövő küldők)
 CREATE TABLE IF NOT EXISTS incoming_senders (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -2138,7 +2138,7 @@ CREATE POLICY "Mindenki elérheti" ON incoming_senders FOR ALL USING (true) WITH
 
 -- 8. DELETED_RECORDS (Törölt rekordok követése - Tombstone)
 CREATE TABLE IF NOT EXISTS deleted_records (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id TEXT PRIMARY KEY,
     record_id TEXT NOT NULL,
     table_name TEXT NOT NULL,
     deleted_at TIMESTAMPTZ DEFAULT NOW(),
@@ -2150,7 +2150,7 @@ CREATE POLICY "Mindenki elérheti" ON deleted_records FOR ALL USING (true) WITH 
 
 -- 9. WORKS (Munka nyilvántartás)
 CREATE TABLE IF NOT EXISTS works (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     description TEXT,
     location TEXT,
@@ -2189,7 +2189,22 @@ CREATE TABLE IF NOT EXISTS plugin_fuel_logs (
 );
 ALTER TABLE plugin_fuel_logs ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Mindenki elérheti" ON plugin_fuel_logs;
-CREATE POLICY "Mindenki elérheti" ON plugin_fuel_logs FOR ALL USING (true) WITH CHECK (true);`;
+CREATE POLICY "Mindenki elérheti" ON plugin_fuel_logs FOR ALL USING (true) WITH CHECK (true);
+
+-- 12. CASCADE DELETE TRIGGER FOR ENTRIES
+CREATE OR REPLACE FUNCTION delete_item_cascade()
+RETURNS TRIGGER AS $$
+BEGIN
+    DELETE FROM entries WHERE "cellKey" LIKE OLD.id || '\\_%' OR "cellKey" LIKE '%\\_' || OLD.id;
+    RETURN OLD;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trigger_delete_item_cascade ON items;
+CREATE TRIGGER trigger_delete_item_cascade
+AFTER DELETE ON items
+FOR EACH ROW
+EXECUTE FUNCTION delete_item_cascade();`;
 }
 
 // ================================================================
