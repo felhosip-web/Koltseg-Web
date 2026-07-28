@@ -903,15 +903,9 @@ export class ConfigManager {
 
     saveSettings(settings) {
         if (!settings || typeof settings !== 'object') return false;
-        let { url, key, useCloud, eurRate, useLiveEur } = settings;
+        const { url, key, useCloud, eurRate, useLiveEur } = settings;
 
         if (url !== undefined) {
-            if (url) {
-                url = url.trim().replace(/\/rest\/v1\/?$/, '').replace(/\/+$/, '');
-                if (!url.startsWith('http://') && !url.startsWith('https://')) {
-                    url = 'https://' + url;
-                }
-            }
             this.supabaseConfig.url = url;
             localStorage.setItem('supabase_url', url);
         }
