@@ -365,7 +365,9 @@ export class SyncService {
         } catch (err) {
             console.warn('[SYNC] Sync error, data preserved locally:', err);
             const operation = isDelete ? 'delete' : 'update';
-            this.addToQueue(operation, data, storeName, 'high', customKey);
+            if (!skipQueueOnError) {
+                this.addToQueue(operation, data, storeName, 'high', customKey);
+            }
             throw err;
         }
     }
