@@ -862,8 +862,15 @@ export class ConfigManager {
         this.useLiveEur = localStorage.getItem('use_live_eur') !== 'false';
         this.useSupabase = localStorage.getItem('supabase_use') === 'true';
         
+        let savedUrl = localStorage.getItem('supabase_url') || '';
+        if (savedUrl) {
+            savedUrl = savedUrl.trim().replace(/\/rest\/v1\/?$/, '').replace(/\/+$/, '');
+            if (!savedUrl.startsWith('http://') && !savedUrl.startsWith('https://')) {
+                savedUrl = 'https://' + savedUrl;
+            }
+        }
         this.supabaseConfig = {
-            url: localStorage.getItem('supabase_url') || '',
+            url: savedUrl,
             key: localStorage.getItem('supabase_key') || ''
         };
         this.aiConfig = {

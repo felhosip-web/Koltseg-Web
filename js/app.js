@@ -1605,11 +1605,19 @@ function initDebugPanel() {
         if (!app) return;
 
         const config = app.config;
-        const url = config?.supabaseConfig?.url;
+        let url = config?.supabaseConfig?.url;
         const key = config?.supabaseConfig?.key;
         const resultDiv = document.getElementById('debugSupabaseConnResult');
 
         if (!resultDiv) return;
+
+        // URL tisztítása és normalizálása ha esetleg rossz formátumban maradt
+        if (url) {
+            url = url.trim().replace(/\/rest\/v1\/?$/, '').replace(/\/+$/, '');
+            if (!url.startsWith('http://') && !url.startsWith('https://')) {
+                url = 'https://' + url;
+            }
+        }
         resultDiv.classList.remove('hidden');
         resultDiv.className = "p-3 rounded-lg text-xs font-mono bg-amber-50 text-amber-800 border border-amber-200";
         resultDiv.textContent = "Kapcsolódás folyamatban...";
