@@ -628,9 +628,17 @@ _setupSyncQueueBadge() {
         this.app.renderer.updateFooterStatus('Beállítások mentése...', false);
         console.log('[SETTINGS] _handleSettingsSave invoked');
         try {
-            const newUrl = document.getElementById('supabaseUrlInput')?.value?.trim() || '';
+            let newUrl = document.getElementById('supabaseUrlInput')?.value?.trim() || '';
             const newKey = document.getElementById('supabaseKeyInput')?.value?.trim() || '';
             const newRate = Number(document.getElementById('eurRateInput')?.value || 400);
+
+            // URL tisztítása és normalizálása
+            if (newUrl) {
+                newUrl = newUrl.replace(/\/rest\/v1\/?$/, '').replace(/\/+$/, '');
+                if (!newUrl.startsWith('http://') && !newUrl.startsWith('https://')) {
+                    newUrl = 'https://' + newUrl;
+                }
+            }
             const useCloud = document.getElementById('supabaseToggle')?.checked || false;
             const useLiveEur = document.getElementById('useLiveEurToggle')?.checked ?? true;
 
@@ -763,11 +771,16 @@ _setupSyncQueueBadge() {
         }
 
         // URL tisztítása és normalizálása
-        if (url.endsWith('/')) {
-            url = url.slice(0, -1);
-        }
+        url = url.replace(/\/rest\/v1\/?$/, '').replace(/\/+$/, '');
+
         if (!url.startsWith('http://') && !url.startsWith('https://')) {
             url = 'https://' + url;
+        }
+
+        // Visszaírjuk a tisztított URL-t a mezőbe
+        const urlInputEl = document.getElementById('supabaseUrlInput');
+        if (urlInputEl) {
+            urlInputEl.value = url;
         }
 
         const originalHTML = btn.innerHTML;
