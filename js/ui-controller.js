@@ -308,63 +308,6 @@ _setupSyncQueueBadge() {
         }
     }
 
-    openSettings() {
-        this.populateSettingsForm();
-        const modal = document.getElementById('settingsPanel');
-        if (modal) {
-            modal.classList.remove('hidden');
-        }
-    }
-
-    switchSettingsTab(targetTab) {
-        const settingsTabButtons = document.querySelectorAll('.settings-tab-btn');
-        const settingsTabContents = document.querySelectorAll('.settings-tab-content');
-
-        // Gombok frissítése
-        settingsTabButtons.forEach(b => {
-            if (b.getAttribute('data-settings-tab') === targetTab) {
-                b.classList.add('bg-indigo-600', 'text-white', 'shadow-sm');
-                b.classList.remove('bg-gray-100', 'text-gray-600', 'hover:bg-gray-200');
-            } else {
-                b.classList.remove('bg-indigo-600', 'text-white', 'shadow-sm');
-                b.classList.add('bg-gray-100', 'text-gray-600', 'hover:bg-gray-200');
-            }
-        });
-
-        // Tartalmak frissítése
-        settingsTabContents.forEach(content => {
-            content.classList.add('hidden');
-            content.classList.remove('block');
-        });
-
-        let contentId = '';
-        if (targetTab === 'general') contentId = 'settingsContentGeneral';
-        else if (targetTab === 'templates') contentId = 'settingsContentTemplates';
-        else if (targetTab === 'appearance') contentId = 'settingsContentAppearance';
-        else if (targetTab === 'logs') {
-            contentId = 'settingsContentLogs';
-            this.renderLogs();
-        } else if (targetTab === 'ai') {
-            contentId = 'settingsContentAi';
-        } else if (targetTab === 'security') {
-            contentId = 'settingsContentSecurity';
-            if (this.app.securityGuard) {
-                this.app.securityGuard.populateForm();
-            }
-        } else if (targetTab === 'modules') {
-            contentId = 'settingsContentModules';
-            if (this.app.moduleManager) {
-                this.app.moduleManager.renderModuleSettingsUI();
-            }
-        }
-
-        const targetContent = document.getElementById(contentId);
-        if (targetContent) {
-            targetContent.classList.remove('hidden');
-            targetContent.classList.add('block');
-        }
-    }
-
     bindStaticEvents() {
         // ====================== FŐ GOMBOK ======================
         document.getElementById('btnNewItem')?.addEventListener('click', () => this.inputModal.open('item'));
@@ -542,7 +485,47 @@ _setupSyncQueueBadge() {
         settingsTabButtons.forEach(btn => {
             btn.addEventListener('click', () => {
                 const targetTab = btn.getAttribute('data-settings-tab');
-                this.switchSettingsTab(targetTab);
+                
+                // Gombok frissítése
+                settingsTabButtons.forEach(b => {
+                    b.classList.remove('bg-indigo-600', 'text-white', 'shadow-sm');
+                    b.classList.add('bg-gray-100', 'text-gray-600', 'hover:bg-gray-200');
+                });
+                btn.classList.add('bg-indigo-600', 'text-white', 'shadow-sm');
+                btn.classList.remove('bg-gray-100', 'text-gray-600', 'hover:bg-gray-200');
+                
+                // Tartalmak frissítése
+                settingsTabContents.forEach(content => {
+                    content.classList.add('hidden');
+                    content.classList.remove('block');
+                });
+                
+                let contentId = '';
+                if (targetTab === 'general') contentId = 'settingsContentGeneral';
+                else if (targetTab === 'templates') contentId = 'settingsContentTemplates';
+                else if (targetTab === 'appearance') contentId = 'settingsContentAppearance';
+                else if (targetTab === 'logs') {
+                    contentId = 'settingsContentLogs';
+                    this.renderLogs();
+                } else if (targetTab === 'ai') {
+                    contentId = 'settingsContentAi';
+                } else if (targetTab === 'security') {
+                    contentId = 'settingsContentSecurity';
+                    if (this.app.securityGuard) {
+                        this.app.securityGuard.populateForm();
+                    }
+                } else if (targetTab === 'modules') {
+                    contentId = 'settingsContentModules';
+                    if (this.app.moduleManager) {
+                        this.app.moduleManager.renderModuleSettingsUI();
+                    }
+                }
+                
+                const targetContent = document.getElementById(contentId);
+                if (targetContent) {
+                    targetContent.classList.remove('hidden');
+                    targetContent.classList.add('block');
+                }
             });
         });
 

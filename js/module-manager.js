@@ -62,7 +62,7 @@ export class ModuleManager {
      */
     bindModuleUIEvents() {
         // Toggle Modulok Chooser Modal gombok (Költségnyilvántartó és Munka Nyilvántartás fejlécekben)
-        document.querySelectorAll('.btn-modules-toggle, #btn-modules-toggle-mobile, #btn-modules-toggle-mobile-work').forEach(btn => {
+        document.querySelectorAll('.btn-modules-toggle').forEach(btn => {
             btn.addEventListener('click', () => {
                 this.openChooserModal();
             });
@@ -79,7 +79,7 @@ export class ModuleManager {
         // Bővítmények kezelése a Beállításokban
         document.getElementById('btnManageModulesFromChooser')?.addEventListener('click', () => {
             document.getElementById('moduleChooserModal')?.classList.add('hidden');
-            if (this.app.uiController && typeof this.app.uiController.openSettings === 'function' && typeof this.app.uiController.switchSettingsTab === 'function') {
+            if (this.app.uiController && typeof this.app.uiController.openSettings === 'function') {
                 this.app.uiController.openSettings();
                 this.app.uiController.switchSettingsTab('modules');
             } else {
