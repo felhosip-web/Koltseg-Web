@@ -3,6 +3,8 @@ import { calculatorModuleScript } from './modules/calculator.js';
 import { mileageModuleScript } from './modules/mileage.js';
 import { fuelLogModuleScript } from './modules/fuel-log.js';
 import { shoppingListModuleScript } from './modules/shopping-list.js';
+import { calendarModuleScript } from './modules/calendar.js';
+import { notepadModuleScript } from './modules/notepad.js';
 
 export class ModuleManager {
     constructor(app) {
@@ -789,7 +791,9 @@ export class ModuleManager {
                 { id: 'plugin_calculator', script: calculatorModuleScript },
                 { id: 'plugin_mileage_calculator', script: mileageModuleScript },
                 { id: 'plugin_fuel_log', script: fuelLogModuleScript },
-                { id: 'plugin_shopping_list', script: shoppingListModuleScript }
+                { id: 'plugin_shopping_list', script: shoppingListModuleScript },
+                { id: 'plugin_calendar', script: calendarModuleScript },
+                { id: 'plugin_notepad', script: notepadModuleScript }
             ];
 
             if (raw && Array.isArray(list)) {
@@ -797,7 +801,7 @@ export class ModuleManager {
                 for (const item of list) {
                     const isBuiltIn = builtIns.some(b => b.id === item.id);
                     if (!isBuiltIn && item.code) {
-                        this.addCustomModuleFromScript(item.code);
+                        try { this.addCustomModuleFromScript(item.code); } catch(e) { console.error(e); }
                     }
                 }
 
@@ -805,9 +809,9 @@ export class ModuleManager {
                 for (const b of builtIns) {
                     const savedItem = list.find(item => item.id === b.id);
                     if (savedItem && savedItem.code) {
-                        this.addCustomModuleFromScript(savedItem.code);
+                        try { this.addCustomModuleFromScript(savedItem.code); } catch(e) { console.error(e); }
                     } else {
-                        this.addCustomModuleFromScript(b.script);
+                        try { this.addCustomModuleFromScript(b.script); } catch(e) { console.error(e); }
                     }
                 }
             } else {
@@ -956,7 +960,7 @@ export class ModuleManager {
 
         document.getElementById('btnUpdateAllModules')?.addEventListener('click', () => {
             for (const update of pendingUpdates) {
-                this.addCustomModuleFromScript(update.script);
+                try { this.addCustomModuleFromScript(update.script); } catch(e) { console.error(e); }
             }
             
             // Ha le volt némítva egy régebbi verzió, töröljük a némítást mert már fent van a legfrissebb
@@ -1084,12 +1088,14 @@ export class ModuleManager {
         };
         `;
 
-        this.addCustomModuleFromScript(notesModuleScript);
-        this.addCustomModuleFromScript(fxModuleScript);
-        this.addCustomModuleFromScript(calculatorModuleScript);
-        this.addCustomModuleFromScript(mileageModuleScript);
-        this.addCustomModuleFromScript(fuelLogModuleScript);
-        this.addCustomModuleFromScript(shoppingListModuleScript);
+        try { this.addCustomModuleFromScript(notesModuleScript); } catch(e) { console.error(e); }
+        try { this.addCustomModuleFromScript(fxModuleScript); } catch(e) { console.error(e); }
+        try { this.addCustomModuleFromScript(calculatorModuleScript); } catch(e) { console.error(e); }
+        try { this.addCustomModuleFromScript(mileageModuleScript); } catch(e) { console.error(e); }
+        try { this.addCustomModuleFromScript(fuelLogModuleScript); } catch(e) { console.error(e); }
+        try { this.addCustomModuleFromScript(shoppingListModuleScript); } catch(e) { console.error(e); }
+        try { this.addCustomModuleFromScript(calendarModuleScript); } catch(e) { console.error(e); }
+        try { this.addCustomModuleFromScript(notepadModuleScript); } catch(e) { console.error(e); }
     }
 
     /**
@@ -1127,7 +1133,8 @@ export class ModuleManager {
         `;
 
         for (const [id, mod] of this.modules.entries()) {
-            const isCore = mod.isCore;
+            try {
+                const isCore = mod.isCore;
             
             // Verzióellenőrzés a távoli regiszter alapján
             const remoteInfo = this.remoteRegistry?.find(item => item.id === mod.id);
@@ -1205,6 +1212,9 @@ export class ModuleManager {
                     </div>
                 </div>
             `;
+            } catch (err) {
+                console.error("[MODULES] Hiba a modul UI renderelésekor:", id, err);
+            }
         }
 
         html += `
@@ -1241,7 +1251,7 @@ export class ModuleManager {
                 if (mod) {
                     const upgradedScript = this._getUpgradedScript(moduleId, mod.code);
                     if (upgradedScript) {
-                        this.addCustomModuleFromScript(upgradedScript);
+                        try { this.addCustomModuleFromScript(upgradedScript); } catch(e) { console.error(e); }
                         
                         // Töröljük a némítást/ignorálást ehhez a modulhoz
                         const ignoredUpdates = JSON.parse(localStorage.getItem('app_ignored_module_updates') || '{}');
