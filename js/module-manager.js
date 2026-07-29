@@ -3,6 +3,7 @@ import { calculatorModuleScript } from './modules/calculator.js';
 import { mileageModuleScript } from './modules/mileage.js';
 import { fuelLogModuleScript } from './modules/fuel-log.js';
 import { shoppingListModuleScript } from './modules/shopping-list.js';
+import { notepadModuleScript } from './modules/notepad.js';
 
 export class ModuleManager {
     constructor(app) {
@@ -737,6 +738,7 @@ export class ModuleManager {
         if (id === 'plugin_quick_notes') return notesModuleScriptV12;
         if (id === 'plugin_fx_calculator') return fxModuleScriptV11;
         if (id === 'plugin_shopping_list') return shoppingListModuleScript;
+        if (id === 'plugin_notepad') return notepadModuleScript;
         
         // Dynamic built-ins upgrade mapping
         if (id === 'plugin_calculator') {
@@ -789,7 +791,8 @@ export class ModuleManager {
                 { id: 'plugin_calculator', script: calculatorModuleScript },
                 { id: 'plugin_mileage_calculator', script: mileageModuleScript },
                 { id: 'plugin_fuel_log', script: fuelLogModuleScript },
-                { id: 'plugin_shopping_list', script: shoppingListModuleScript }
+                { id: 'plugin_shopping_list', script: shoppingListModuleScript },
+                { id: 'plugin_notepad', script: notepadModuleScript }
             ];
 
             if (raw && Array.isArray(list)) {
@@ -1090,6 +1093,7 @@ export class ModuleManager {
         this.addCustomModuleFromScript(mileageModuleScript);
         this.addCustomModuleFromScript(fuelLogModuleScript);
         this.addCustomModuleFromScript(shoppingListModuleScript);
+        this.addCustomModuleFromScript(notepadModuleScript);
     }
 
     /**
