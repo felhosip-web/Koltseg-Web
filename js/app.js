@@ -30,6 +30,7 @@ import { DataSyncController } from './data-sync-controller.js';
 import { DataExportController } from './data-export-controller.js';
 import { DataMaintenanceController } from './data-maintenance-controller.js';
 import { ServiceDevManager } from './service-dev-manager.js';
+import { DashboardV2 } from './views/dashboard-v2.js';
 import { IncomingRenderer } from './incoming-renderer.js';
 import { LogManager } from './log-manager.js';
 import { SecurityGuard } from './security-guard.js';
@@ -130,8 +131,16 @@ class App {
         this._dashboardChart = null;
 
         // === 13. TAB ÁLLAPOTGÉP ===
+        this.dashboardV2 = new DashboardV2(this);
+
         this.tabStateMachine = {
-            dashboard: () => this.renderDashboard(),
+            dashboard: () => {
+                const container = document.getElementById('tab-dashboard');
+                if (container) {
+                    container.innerHTML = this.dashboardV2.render();
+                    this.dashboardV2.attachEvents();
+                }
+            },
             table: () => this.renderer.renderTable(),
             charts: () => this.chartsRenderer.renderAll(this.currentFilter),
             reminders: () => this.remindersRenderer.renderList(),
@@ -312,7 +321,7 @@ class App {
 
             // Dashboard alapértelmezett render
             setTimeout(() => {
-                this.renderDashboard();
+                this.tabStateMachine.dashboard();
             }, 100);
 
             console.log('[APP] ✅ Alkalmazás sikeresen elindult!');
@@ -1200,8 +1209,8 @@ async reload() {
             this.updateReminderStatus();
         }
         
-        if (typeof this.renderDashboard === 'function') {
-            this.renderDashboard();
+        if (this.activeTab === 'dashboard') {
+            this.tabStateMachine.dashboard();
         }
 
         if (this.activeTab === 'charts' && this.chartsRenderer && typeof this.chartsRenderer.renderAll === 'function') {
@@ -1228,8 +1237,8 @@ refreshAllTabs() {
     console.log('[APP] 🔄 UI frissítése minden tabon...');
 
     // 1. Dashboard
-    if (typeof this.renderDashboard === 'function') {
-        this.renderDashboard();
+    if (this.activeTab === 'dashboard') {
+        this.tabStateMachine.dashboard();
     }
 
     // 2. Táblázat (VirtualTableRenderer)

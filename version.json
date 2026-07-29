@@ -1,8 +1,15 @@
 {
-  "version": "5.5.1",
-  "build": "2026-07-29T17:47:44.204Z",
+  "version": "6.0.0",
+  "build": "2026-07-29T20:51:30.506Z",
   "release": "stable",
   "changelog": [
+    {
+      "version": "6.0.0",
+      "date": "2026-07-29",
+      "changes": [
+        "Dashboard v2.0 - Unified Command Center"
+      ]
+    },
     {
       "version": "5.5.1",
       "date": "2026-07-29",
