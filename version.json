@@ -1,8 +1,15 @@
 {
-  "version": "5.5.0",
-  "build": "2026-07-25T16:21:46.274Z",
+  "version": "5.5.1",
+  "build": "2026-07-29T17:47:44.204Z",
   "release": "stable",
   "changelog": [
+    {
+      "version": "5.5.1",
+      "date": "2026-07-29",
+      "changes": [
+        "Fixáltam a modulok listájának megjelenítését a beállításokban a dinamikus betöltő hibájának javításával."
+      ]
+    },
     {
       "version": "5.5.0",
       "date": "2026-07-25",
