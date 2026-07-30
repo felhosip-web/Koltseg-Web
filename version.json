@@ -1,8 +1,15 @@
 {
-  "version": "6.0.0",
-  "build": "2026-07-29T20:51:30.506Z",
+  "version": "6.0.1",
+  "build": "2026-07-30T10:26:26.306Z",
   "release": "stable",
   "changelog": [
+    {
+      "version": "6.0.1",
+      "date": "2026-07-30",
+      "changes": [
+        "Automatikus PWA frissítés (auto-update) bevezetése"
+      ]
+    },
     {
       "version": "6.0.0",
       "date": "2026-07-29",

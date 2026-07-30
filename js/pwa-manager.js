@@ -1,12 +1,64 @@
 // js/pwa-manager.js
 //PWA és Service Worker
 import { PushNotificationManager } from './push-manager.js';
+import { showUpdateBanner } from './components/update-banner.js';
 
 export class PwaManager {
     constructor(app) {
         this.app = app;
         this.deferredInstallPrompt = null;
         this.pushManager = new PushNotificationManager(app);
+
+        this.setupAutoUpdateCheck();
+    }
+
+    setupAutoUpdateCheck() {
+        // Ellenőrzés induláskor (kis késleltetéssel, hogy ne terhelje a boot-ot)
+        setTimeout(() => this.checkAppVersion(), 5000);
+
+        // Ellenőrzés 5 percenként
+        setInterval(() => this.checkAppVersion(), 5 * 60 * 1000);
+
+        // Ellenőrzés, ha az app újra fókuszba kerül
+        window.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') {
+                this.checkAppVersion();
+            }
+        });
+        window.addEventListener('focus', () => this.checkAppVersion());
+    }
+
+    async checkAppVersion() {
+        try {
+            const response = await fetch('/version.json?t=' + Date.now(), {
+                cache: 'no-store',
+                headers: {
+                    'Cache-Control': 'no-cache'
+                }
+            });
+
+            if (!response.ok) return;
+
+            const data = await response.json();
+            const fetchedVersion = data.version;
+
+            let currentVersion = localStorage.getItem('app_version');
+
+            if (!currentVersion) {
+                // Ha még nincs elmentve, mentsük el a mostanit (pl. első betöltésnél ne jelezzen rögtön)
+                // Kivéve ha a window.app-ban már be van töltve (fallback)
+                currentVersion = this.app?.versionManager?.version || fetchedVersion;
+                localStorage.setItem('app_version', currentVersion);
+            }
+
+            if (fetchedVersion && currentVersion && fetchedVersion !== currentVersion) {
+                console.log(`[PWA] Új verzió észlelve: ${currentVersion} -> ${fetchedVersion}`);
+                showUpdateBanner(fetchedVersion);
+            }
+
+        } catch (error) {
+            console.warn('[PWA] Auto-update ellenőrzés hiba:', error);
+        }
     }
 
     registerServiceWorker() {
@@ -41,15 +93,14 @@ export class PwaManager {
                     console.warn('[PWA] Push Manager init hiba:', e);
                 }
 
-                // Update handling: ha új worker települ, jelezzük a felhasználónak
+                // Update handling: ha új worker települ, meghívjuk a fallback notificationt ha kell,
+                // de az aktív verzió ellenőrzés (checkAppVersion) már kezeli a PWA banner-t
                 reg.addEventListener('updatefound', () => {
                     const newWorker = reg.installing;
                     if (!newWorker) return;
                     newWorker.addEventListener('statechange', () => {
                         if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                            if (typeof window.showUpdateNotification === 'function') {
-                                window.showUpdateNotification();
-                            }
+                            this.checkAppVersion(); // Biztosra megyünk
                         }
                     });
                 });
