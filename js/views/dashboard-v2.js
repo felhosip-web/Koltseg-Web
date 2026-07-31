@@ -101,6 +101,11 @@ export class DashboardV2 {
         return urgentItems.slice(0, 5);
     }
 
+    async getTimeWidget() {
+        const stats = await window.app.timeTracker.getWeeklyStats()
+        return `<div class="card"><h3>⏱ Ezen a héten</h3><p>${stats.hours}ó • ${stats.earnings} Ft</p></div>`
+    }
+
     getMonthlyStats() {
         const stats = {
             monthlyExpense: 0,
@@ -375,7 +380,7 @@ export class DashboardV2 {
 
 
                                 <!-- Card 5: Időmérő -->
-                                <div class="bg-gradient-to-br from-purple-50 to-fuchsia-50 p-4 rounded-2xl border border-purple-100 shadow-sm cursor-pointer hover:shadow-md transition dash-nav-item" data-tab="time" id="dashTimeTrackerCard">
+                                <div class="bg-gradient-to-br from-purple-50 to-fuchsia-50 p-4 rounded-2xl border border-purple-100 shadow-sm cursor-pointer hover:shadow-md transition dash-nav-item" data-module="time-tracker" id="dashTimeTrackerCard">
                                     <div class="text-purple-500 mb-2"><i class="fas fa-stopwatch text-xl"></i></div>
                                     <div class="text-xs font-bold text-purple-800 uppercase tracking-wide opacity-80">Eheti Munka</div>
                                     <div class="text-lg font-black text-purple-900 mt-1" id="dashTimeTrackerTime">0h 0m</div>
@@ -466,7 +471,7 @@ export class DashboardV2 {
         const ttCard = document.getElementById('dashTimeTrackerCard');
         if (ttCard) {
             ttCard.addEventListener('click', () => {
-                if(window.app && window.app.switchTab) window.app.switchTab('time');
+                if(window.app && window.app.showView) window.app.showView('time-tracker');
             });
         }
 

@@ -1,8 +1,29 @@
 {
-  "version": "6.1.1",
-  "build": "2026-07-31T05:54:57.468Z",
+  "version": "6.1.2",
+  "build": "2026-07-31T14:26:09.332Z",
   "release": "stable",
   "changelog": [
+    {
+      "version": "6.1.4",
+      "date": "2026-07-31",
+      "changes": [
+        "⏱ Idő module bugfix and dashboard updates"
+      ]
+    },
+    {
+      "version": "6.1.3",
+      "date": "2026-07-31",
+      "changes": [
+        "⏱ Idő module bugfix and dashboard updates"
+      ]
+    },
+    {
+      "version": "6.1.2",
+      "date": "2026-07-31",
+      "changes": [
+        "⏱️ Dashboard v2 - TimeTracker module bugfix, and version bump"
+      ]
+    },
     {
       "version": "6.1.0",
       "date": "2026-07-30",

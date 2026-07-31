@@ -1,5 +1,5 @@
-import { db } from './db.js';
-import { generateUUID } from './uuid-utils.js';
+import { db } from '../../db.js';
+import { generateUUID } from '../../uuid-utils.js';
 
 export class TimeTrackerModule {
     constructor(app) {
