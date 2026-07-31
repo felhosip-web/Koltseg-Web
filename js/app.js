@@ -38,7 +38,7 @@ import { WorkLogManager, WorkLogRenderer } from './work-log.js';
 import { GoogleDriveBackup } from './gdrive-backup.js';
 import { ModalManager } from './modal-manager.js';
 import { ModuleManager } from './module-manager.js';
-import { TimeTrackerModule } from './time-tracker.js';
+import { TimeTrackerModule } from './modules/time-tracker/time-tracker.js';
 
 // ================================================================
 // === APP OSZTÁLY ===
@@ -527,7 +527,10 @@ class App {
     // ================================================================
 
     switchTab(tab) {
-        if (!this.tabStateMachine[tab]) {
+        if (tab === 'time-tracker' && !this.tabStateMachine['time-tracker']) {
+            this.tabStateMachine['time-tracker'] = () => this.timeTracker.renderTab();
+        }
+        if (!this.tabStateMachine[tab] && !this.tabStateMachine[tab.replace('tab-', '')]) {
             console.warn(`[APP] Ismeretlen tab: ${tab}`);
             return;
         }
@@ -536,19 +539,25 @@ class App {
         this.activeTab = tab;
 
         // Pane-ek elrejtése
-        document.querySelectorAll('.tab-pane').forEach(p => p.classList.add('hidden'));
+        document.querySelectorAll('.tab-pane, .view').forEach(p => p.classList.add('hidden'));
 
         // Aktív pane megjelenítése
-        const pane = document.getElementById(`tab-${tab}`);
+        const pane = document.getElementById(`tab-${tab}`) || document.getElementById(`${tab}-view`);
         if (pane) pane.classList.remove('hidden');
 
         // Renderer hívása
-        this.tabStateMachine[tab]();
+        if (this.tabStateMachine[tab]) {
+            this.tabStateMachine[tab]();
+        }
 
         // Modul hook esemény kiváltása
         if (this.moduleManager) {
             this.moduleManager.triggerHook('onTabChange', { newTab: tab, oldTab });
         }
+    }
+
+    showView(view) {
+        this.switchTab(view);
     }
 
     _initTabs() {
