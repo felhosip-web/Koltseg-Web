@@ -527,8 +527,14 @@ class App {
     // ================================================================
 
     switchTab(tab) {
-        if (tab === 'time-tracker' && !this.tabStateMachine['time-tracker']) {
-            this.tabStateMachine['time-tracker'] = () => this.timeTracker.renderTab();
+        switch (tab) {
+            case 'time':
+            case 'time-tracker':
+                if (!this.tabStateMachine['time']) {
+                    this.tabStateMachine['time'] = () => this.timeTracker.renderTab();
+                    this.tabStateMachine['time-tracker'] = () => this.timeTracker.renderTab();
+                }
+                break;
         }
         if (!this.tabStateMachine[tab] && !this.tabStateMachine[tab.replace('tab-', '')]) {
             console.warn(`[APP] Ismeretlen tab: ${tab}`);
