@@ -38,6 +38,7 @@ import { WorkLogManager, WorkLogRenderer } from './work-log.js';
 import { GoogleDriveBackup } from './gdrive-backup.js';
 import { ModalManager } from './modal-manager.js';
 import { ModuleManager } from './module-manager.js';
+import { TimeTrackerModule } from './time-tracker.js';
 
 // ================================================================
 // === APP OSZTÁLY ===
@@ -110,6 +111,9 @@ class App {
         this.workLogManager = new WorkLogManager(this.db, this.syncService);
         this.workLogRenderer = new WorkLogRenderer(this, this.workLogManager);
 
+        // === 9.6. TIME TRACKER ===
+        this.timeTracker = new TimeTrackerModule(this);
+
         // === 10. HÁTTÉR ÉS ÁLLAPOTOK ===
         this.backgroundTasks = null;
         this.isShuttingDown = false;
@@ -143,6 +147,7 @@ class App {
             },
             table: () => this.renderer.renderTable(),
             charts: () => this.chartsRenderer.renderAll(this.currentFilter),
+            time: () => this.timeTracker.renderTab(),
             reminders: () => this.remindersRenderer.renderList(),
             incoming: () => this.incomingRenderer.render(),
             stats: () => this.renderStats()

@@ -72,11 +72,14 @@ export class IncomingRenderer {
             const senderEntries = incomings.filter(e => e.sender === sender);
             const total = senderEntries.filter(e => !e.isStorno).reduce((sum, e) => sum + e.amount, 0);
 
+            // Add time tracker icon if sender is 'Munka'
+            const senderNameHtml = sender === 'Munka' ? `<i class="fas fa-stopwatch text-purple-500 mr-1" title="Időmérő bevétel"></i>${this._escapeHtml(sender)}` : this._escapeHtml(sender);
+
             html += `
                 <tr class="border-b border-gray-100 hover:bg-gray-50 transition group">
                     <td class="p-3 font-medium text-gray-700 sticky left-0 bg-white group-hover:bg-gray-50 z-10">
                         <div class="flex items-center justify-between">
-                            <span>${this._escapeHtml(sender)}</span>
+                            <span>${senderNameHtml}</span>
                             <button class="incoming-delete-row opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition text-xs px-1" 
                                     data-sender="${this._escapeHtml(sender)}" title="Sor törlése">
                                 <i class="fas fa-times"></i>
