@@ -15,19 +15,9 @@ const { CacheFirst, StaleWhileRevalidate, NetworkFirst, NetworkOnly } = workbox.
 const { ExpirationPlugin } = workbox.expiration;
 const { CacheableResponsePlugin } = workbox.cacheableResponse;
 
-const CACHE_VERSION = '6.0.1';
-const BUILD_DATE = '2026-07-30';
-const CACHE_NAME = `koltseg-v${CACHE_VERSION}`;
-
-// version.json hálózati prioritás beállítása, hogy friss verziót kapjunk
-self.addEventListener('fetch', event => {
-    if (event.request.url.includes('version.json')) {
-        event.respondWith(
-            fetch(event.request).catch(() => caches.match(event.request))
-        );
-        return;
-    }
-});
+const CACHE_VERSION = 'v4.5.0';
+const BUILD_DATE = '2026-07-14';
+const CACHE_NAME = `kny-${CACHE_VERSION}-cache`;
 
 // ===== FALLBACK OFFLINE HTML (beépítve) =====
 const FALLBACK_HTML = `<!DOCTYPE html>
@@ -248,7 +238,6 @@ registerRoute(
 
 // ===== INSTALL: offline.html és egyéb fájlok cache-elése =====
 self.addEventListener('install', event => {
-    self.skipWaiting(); // CRITICAL - auto activate new SW immediately
     event.waitUntil(
         caches.open(CACHE_NAME)
             .then(async cache => {
@@ -343,14 +332,14 @@ self.addEventListener('activate', event => {
             })
             .then(() => {
                 console.log('[SW] Aktiválva, régi cache-ek törölve');
-                return self.clients.claim(); // CRITICAL - take control immediately
+                return self.clients.claim();
             })
     );
 });
 
 // Üzenetek kezelése
 self.addEventListener('message', event => {
-    if (event.data === 'skipWaiting' || event.data.action === 'skipWaiting') {
+    if (event.data === 'skipWaiting') {
         self.skipWaiting();
     }
     
