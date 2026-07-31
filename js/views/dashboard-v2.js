@@ -154,6 +154,14 @@ export class DashboardV2 {
             stats.overdueNotes = notes.filter(n => n.reminderTime && !n.completed && new Date(n.reminderTime) < now).length;
         }
 
+
+        // Time Tracker
+        stats.weeklyTimeTracker = { minutes: 0, earnings: 0 };
+        // We fetch this async ideally, but dashboard is sync render initially.
+        // Dexie operations are async. We'll populate this if pre-loaded or 0.
+        // To properly support this, we would need to make getMonthlyStats async or just use local cache.
+        // Since Dexie is async, we can render 0 initially and trigger a re-render or update DOM.
+        // For simplicity in this demo, let's leave it 0 and update DOM later if needed, or if app loaded it.
         return stats;
     }
 
@@ -365,6 +373,14 @@ export class DashboardV2 {
                                     <div class="text-[10px] text-indigo-700 mt-1 opacity-70">Függő tétel</div>
                                 </div>
 
+
+                                <!-- Card 5: Időmérő -->
+                                <div class="bg-gradient-to-br from-purple-50 to-fuchsia-50 p-4 rounded-2xl border border-purple-100 shadow-sm cursor-pointer hover:shadow-md transition dash-nav-item" data-tab="time" id="dashTimeTrackerCard">
+                                    <div class="text-purple-500 mb-2"><i class="fas fa-stopwatch text-xl"></i></div>
+                                    <div class="text-xs font-bold text-purple-800 uppercase tracking-wide opacity-80">Eheti Munka</div>
+                                    <div class="text-lg font-black text-purple-900 mt-1" id="dashTimeTrackerTime">0h 0m</div>
+                                    <div class="text-[10px] text-purple-700 mt-1 opacity-70" id="dashTimeTrackerEarn">0 Ft</div>
+                                </div>
                                 <!-- Card 4: Jegyzetek -->
                                 <div class="bg-gradient-to-br from-amber-50 to-orange-50 p-4 rounded-2xl border border-amber-100 shadow-sm cursor-pointer hover:shadow-md transition dash-nav-item" data-module="notepad">
                                     <div class="text-amber-500 mb-2"><i class="fas fa-sticky-note text-xl"></i></div>
@@ -418,6 +434,42 @@ export class DashboardV2 {
     }
 
     attachEvents() {
+        // Load Time Tracker data async
+        if (window.app && window.app.timeTracker) {
+            import('../db.js').then(({db}) => {
+                const dayjs = window.dayjs; // assuming dayjs is global
+                const startOfWeek = dayjs().startOf('week').format('YYYY-MM-DD');
+                const endOfWeek = dayjs().endOf('week').format('YYYY-MM-DD');
+                db.timeEntries.where('date').between(startOfWeek, endOfWeek, true, true).toArray().then(weekEntries => {
+                    let weekMinutes = 0;
+                    let weekEarnings = 0;
+                    weekEntries.forEach(e => {
+                        weekMinutes += e.durationMin;
+                        weekEarnings += e.earnings;
+                    });
+
+                    const elTime = document.getElementById('dashTimeTrackerTime');
+                    const elEarn = document.getElementById('dashTimeTrackerEarn');
+                    if(elTime) {
+                        const h = Math.floor(weekMinutes / 60);
+                        const m = weekMinutes % 60;
+                        elTime.textContent = h > 0 ? `${h}ó ${m}p` : `${m}p`;
+                    }
+                    if(elEarn) {
+                        elEarn.textContent = `${weekEarnings.toLocaleString('hu-HU')} Ft`;
+                    }
+                });
+            }).catch(e => console.error(e));
+        }
+
+        // Add event listener for Time Tracker Card
+        const ttCard = document.getElementById('dashTimeTrackerCard');
+        if (ttCard) {
+            ttCard.addEventListener('click', () => {
+                if(window.app && window.app.switchTab) window.app.switchTab('time');
+            });
+        }
+
         const container = document.getElementById('tab-dashboard');
         if (!container) return;
 

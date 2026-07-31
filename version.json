@@ -1,8 +1,15 @@
 {
-  "version": "6.0.1",
-  "build": "2026-07-30T10:26:26.306Z",
+  "version": "6.1.1",
+  "build": "2026-07-31T05:54:57.468Z",
   "release": "stable",
   "changelog": [
+    {
+      "version": "6.1.0",
+      "date": "2026-07-30",
+      "changes": [
+        "Time Tracker Module v6.1.0"
+      ]
+    },
     {
       "version": "6.0.1",
       "date": "2026-07-30",

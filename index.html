@@ -16,6 +16,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dexie@4.0.8/dist/dexie.min.js"></script>
 
     <!-- ===== PWA META ===== -->
     <link rel="manifest" href="manifest.json">
@@ -575,6 +576,11 @@
             </button>
             <button
                 class="tab-btn px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all bg-gray-100 text-gray-600 hover:bg-gray-200"
+                data-tab="time">
+                <i class="fas fa-stopwatch mr-1"></i> Idő
+            </button>
+            <button
+                class="tab-btn px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all bg-gray-100 text-gray-600 hover:bg-gray-200"
                 data-tab="charts">
                 <i class="fas fa-chart-line mr-1"></i> Kimutatások
             </button>
@@ -607,6 +613,9 @@
                     class="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-visible p-0 md:p-2"></div>
                 <!-- <div class="grid grid-cols-2 md:grid-cols-4 gap-6" id="summary"></div>-->
             </div>
+
+            <!-- 2.5 IDŐMÉRŐ -->
+            <div id="tab-time" class="tab-pane hidden"></div>
 
             <!-- 2. KIMUTATÁSOK (grafikonok) -->
             <div id="tab-charts" class="tab-pane hidden">
