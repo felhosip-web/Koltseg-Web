@@ -1,0 +1,695 @@
+/* ========================================================
+   Kiegészítő stílusok a Költség Nyilvántartóhoz (v4.0)
+   ======================================================== */
+
+/* ---------- Bejegyzések (kis kártyák a cellákban) ---------- */
+.entry {
+    @apply px-1.5 py-1 rounded-md shadow-sm text-[10px] font-semibold leading-tight;
+    width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.entry:hover {
+    white-space: normal;
+    overflow: visible;
+    position: relative;
+    z-index: 50;
+    @apply shadow-lg;
+}
+
+/* ---------- Modálok animációja ---------- */
+.modal {
+    animation: modalPop 0.25s ease-out;
+}
+
+@keyframes modalPop {
+    from {
+        opacity: 0;
+        transform: scale(0.9) translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}
+
+/* Modern tabok */
+.tab-btn {
+    background-color: #f3f4f6;
+    color: #4b5563;
+    border: none;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+.tab-btn.active {
+    background-color: #3b82f6;
+    color: white;
+    box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.3);
+}
+.tab-btn:active {
+    transform: scale(0.96);
+}
+
+/* Gombok és egyéb elemek kisebb érintési felületen is kényelmesek */
+button {
+    min-height: 36px;
+    min-width: 36px;
+}
+
+/* ---------- Táblázat görgetősáv ---------- */
+#mainTableContainer {
+    scrollbar-width: thin;
+    scrollbar-color: #94a3b8 #f8fafc;
+}
+
+#mainTableContainer::-webkit-scrollbar {
+    height: 10px;
+}
+
+#mainTableContainer::-webkit-scrollbar-track {
+    background: #f8fafc;
+}
+
+#mainTableContainer::-webkit-scrollbar-thumb {
+    background-color: #94a3b8;
+    border-radius: 20px;
+}
+
+/* ---------- Mentés LED állapotjelző ---------- */
+#saveLed {
+    transition: background-color 0.3s ease, box-shadow 0.3s ease;
+    box-shadow: 0 0 4px rgba(0, 0, 0, 0.2);
+}
+
+#saveLed.save-success {
+    background-color: #10b981 !important;
+    box-shadow: 0 0 12px #10b981;
+    animation: ledPulseGreen 2s infinite;
+}
+
+#saveLed.save-error {
+    background-color: #ef4444 !important;
+    box-shadow: 0 0 12px #ef4444;
+    animation: ledPulseRed 1s infinite;
+}
+
+@keyframes ledPulseGreen {
+    0% { box-shadow: 0 0 4px #10b981; }
+    50% { box-shadow: 0 0 14px #10b981; }
+    100% { box-shadow: 0 0 4px #10b981; }
+}
+
+@keyframes ledPulseRed {
+    0% { box-shadow: 0 0 4px #ef4444; }
+    50% { box-shadow: 0 0 16px #ef4444; }
+    100% { box-shadow: 0 0 4px #ef4444; }
+}
+
+/* ---------- Mobil optimalizáció ---------- */
+@media (max-width: 768px) {
+    th {
+        min-width: 90px;
+        font-size: 0.75rem;
+    }
+    .entry {
+        font-size: 9px;
+        padding: 0.125rem 0.25rem;
+    }
+}
+
+/* Mobil nézetben a tabok ne törjenek el */
+@media (max-width: 480px) {
+    .tab-btn {
+        font-size: 10px;
+        padding: 0.5rem 0.75rem;
+    }
+    header .flex-wrap {
+        gap: 0.25rem;
+    }
+}
+
+/* ---------- Segéd animációk ---------- */
+@keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-6px); }
+    75% { transform: translateX(6px); }
+}
+.animate-shake {
+    animation: shake 0.2s ease-in-out 0s 2;
+}
+
+/* Header jobb mobil elrendezés */
+header {
+    flex-wrap: wrap;
+}
+
+@media (max-width: 768px) {
+    header .flex-wrap {
+        justify-content: stretch;
+        gap: 8px;
+    }
+    
+    #btnNewItem, #btnNewMonth {
+        flex: 1;
+        justify-content: center;
+    }
+    
+    .flex.gap-2 > button {
+        padding: 10px 12px;
+    }
+}
+
+/* Reminder státusz jobb elhelyezés */
+#reminderGlobalStatus {
+    margin-left: auto;
+}
+
+/* ===== OFFLINE BANNER ===== */
+.offline-banner {
+    animation: slideDown 0.5s ease forwards;
+    pointer-events: auto;
+    backdrop-filter: blur(10px);
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* ===== SYNC QUEUE BADGE ===== */
+#syncQueueContainer {
+    transition: all 0.2s ease;
+}
+
+#syncQueueContainer:hover {
+    transform: scale(1.05);
+}
+
+#syncQueueContainer .fa-cloud-upload-alt {
+    transition: all 0.3s ease;
+}
+
+#syncQueueContainer:hover .fa-cloud-upload-alt {
+    color: #f59e0b;
+}
+
+#syncQueueBadge {
+    transition: all 0.3s ease;
+    font-size: 9px;
+    line-height: 1.4;
+}
+
+#syncQueueBadge.animate-pulse {
+    animation: pulseBadge 1.5s ease-in-out infinite;
+}
+
+@keyframes pulseBadge {
+    0%, 100% { 
+        transform: scale(1);
+        opacity: 1;
+    }
+    50% { 
+        transform: scale(1.1);
+        opacity: 0.8;
+    }
+}
+
+/* ===== SYNC QUEUE TOOLTIP ===== */
+.sync-queue-tooltip {
+    animation: slideDown 0.2s ease forwards;
+    pointer-events: none;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Mobil optimalizáció */
+@media (max-width: 640px) {
+    #syncQueueContainer {
+        margin-left: 4px;
+    }
+    #syncQueueContainer .fa-cloud-upload-alt {
+        font-size: 16px;
+    }
+    #syncQueueBadge {
+        min-width: 16px;
+        font-size: 8px;
+        padding: 1px 4px;
+        top: -4px;
+        right: -4px;
+    }
+    .sync-queue-tooltip {
+        min-width: 180px;
+        right: -10px;
+    }
+}
+
+/* ===== HÁTTÉRSZÍN ÉS TÉMA RENDSZER ===== */
+:root {
+  --app-bg: #f9fafb; /* Alapértelmezett finom szürke */
+  --card-bg: #ffffff;
+  --text-main: #1f2937;
+  --text-muted: #4b5563;
+  --border-color: #e5e7eb;
+}
+
+body.theme-custom-bg {
+  background-color: var(--app-bg) !important;
+}
+
+/* Háttér variációk */
+body.bg-theme-cream { --app-bg: #faf7f0 !important; background-color: var(--app-bg) !important; }
+body.bg-theme-sage { --app-bg: #f4f6f4 !important; background-color: var(--app-bg) !important; }
+body.bg-theme-ice { --app-bg: #f0f4f8 !important; background-color: var(--app-bg) !important; }
+body.bg-theme-lavender { --app-bg: #f5f3f7 !important; background-color: var(--app-bg) !important; }
+body.bg-theme-slate { --app-bg: #f1f5f9 !important; background-color: var(--app-bg) !important; }
+
+/* Sötét mód (Dark Mode) */
+body.dark-mode {
+  --app-bg: #0f172a !important; /* Slate 900 */
+  --card-bg: #1e293b !important; /* Slate 800 */
+  --text-main: #f8fafc !important; /* Slate 50 */
+  --text-muted: #cbd5e1 !important; /* Slate 300 */
+  --border-color: #334155 !important; /* Slate 700 */
+  
+  background-color: var(--app-bg) !important;
+  color: var(--text-main) !important;
+}
+
+body.dark-mode .bg-white {
+  background-color: var(--card-bg) !important;
+  color: var(--text-main) !important;
+}
+
+body.dark-mode .bg-slate-50,
+body.dark-mode .bg-gray-50,
+body.dark-mode .bg-slate-100,
+body.dark-mode .bg-gray-100 {
+  background-color: #1e293b !important; /* Slate 800 */
+  color: var(--text-main) !important;
+}
+
+body.dark-mode .text-gray-900,
+body.dark-mode .text-gray-800,
+body.dark-mode .text-gray-700,
+body.dark-mode .text-slate-800,
+body.dark-mode .text-slate-700,
+body.dark-mode h1,
+body.dark-mode h2,
+body.dark-mode h3,
+body.dark-mode h4,
+body.dark-mode h5 {
+  color: var(--text-main) !important;
+}
+
+body.dark-mode .text-gray-600,
+body.dark-mode .text-gray-500,
+body.dark-mode .text-slate-500,
+body.dark-mode .text-slate-600 {
+  color: var(--text-muted) !important;
+}
+
+body.dark-mode .border-gray-200,
+body.dark-mode .border-slate-200,
+body.dark-mode .border-gray-100,
+body.dark-mode .border-slate-100,
+body.dark-mode .border-indigo-100 {
+  border-color: var(--border-color) !important;
+}
+
+body.dark-mode input,
+body.dark-mode select,
+body.dark-mode textarea {
+  background-color: #334155 !important; /* Slate 700 */
+  color: #f8fafc !important;
+  border-color: #475569 !important;
+}
+
+body.dark-mode input::placeholder {
+  color: #94a3b8 !important;
+}
+
+body.dark-mode table thead,
+body.dark-mode .bg-slate-50Header {
+  background-color: #1e293b !important;
+}
+
+body.dark-mode table td,
+body.dark-mode table th {
+  color: var(--text-main) !important;
+  border-color: var(--border-color) !important;
+}
+
+body.dark-mode table td.bg-gray-50,
+body.dark-mode table th.bg-gray-50 {
+  background-color: #334155 !important;
+  color: #f8fafc !important;
+}
+
+body.dark-mode .shadow-xl,
+body.dark-mode .shadow-lg,
+body.dark-mode .shadow-md,
+body.dark-mode .shadow-sm {
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5), 0 2px 4px -1px rgba(0, 0, 0, 0.3) !important;
+}
+
+body.dark-mode header {
+  background-color: #1e293b !important;
+  border-bottom: 1px solid var(--border-color) !important;
+}
+
+body.dark-mode .modal .bg-white {
+  background-color: #1e293b !important;
+  border-color: var(--border-color) !important;
+}
+
+body.dark-mode footer {
+  background-color: #1e293b !important;
+  border-color: var(--border-color) !important;
+  color: var(--text-muted) !important;
+}
+
+/* ---------- Custom Animations ---------- */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-6px); }
+  40%, 80% { transform: translateX(6px); }
+}
+.animate-shake {
+  animation: shake 0.4s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in {
+  animation: fadeIn 0.2s ease-out forwards;
+}
+
+/* ========================================================
+   MODERN EMERALD SLATE TÉMA STÍLUSOK (Sötét)
+   ======================================================== */
+body.bg-theme-emerald-slate {
+  --app-bg: #090f1d !important;
+  --card-bg: #111d30 !important;
+  --text-main: #f1f5f9 !important;
+  --text-muted: #94a3b8 !important;
+  --border-color: #1e2e48 !important;
+
+  background-color: var(--app-bg) !important;
+  color: var(--text-main) !important;
+}
+
+/* Modálok, kártyák és panelek háttérszíne */
+body.bg-theme-emerald-slate .bg-white,
+body.bg-theme-emerald-slate #cellEditorModal .bg-white,
+body.bg-theme-emerald-slate #syncModal .bg-white,
+body.bg-theme-emerald-slate #settingsModal .bg-white,
+body.bg-theme-emerald-slate #hmiInputModal .bg-white,
+body.bg-theme-emerald-slate .modal-content {
+  background-color: #111d30 !important;
+  border-color: #1e2e48 !important;
+  color: #f1f5f9 !important;
+}
+
+/* Kiemelt kártyák a dashboardon */
+body.bg-theme-emerald-slate .bg-slate-50,
+body.bg-theme-emerald-slate .bg-gray-50,
+body.bg-theme-emerald-slate .bg-slate-100,
+body.bg-theme-emerald-slate .bg-gray-100 {
+  background-color: #16253b !important;
+  color: #f1f5f9 !important;
+  border-color: #1e2e48 !important;
+}
+
+/* Bevételi / bejövő utalás kártyák stílusai */
+body.bg-theme-emerald-slate .bg-gradient-to-br.from-emerald-50.to-emerald-100,
+body.bg-theme-emerald-slate .from-emerald-50.to-emerald-100 {
+  background: linear-gradient(135deg, #092c23 0%, #111d30 100%) !important;
+  border-color: rgba(16, 185, 129, 0.3) !important;
+  color: #34d399 !important;
+}
+
+body.bg-theme-emerald-slate .from-emerald-50.to-emerald-100 p,
+body.bg-theme-emerald-slate .from-emerald-50.to-emerald-100 span,
+body.bg-theme-emerald-slate .from-emerald-50.to-emerald-100 i {
+  color: #34d399 !important;
+}
+
+body.bg-theme-emerald-slate #dashIncomingTotal,
+body.bg-theme-emerald-slate #dashIncomingMonthly,
+body.bg-theme-emerald-slate #dashTopSender {
+  color: #34d399 !important;
+  text-shadow: 0 0 10px rgba(52, 211, 153, 0.2);
+}
+
+/* Kiadások és átlagok stílusa (Gyönyörű Korall/Rózsaszín) */
+body.bg-theme-emerald-slate #dashTotal,
+body.bg-theme-emerald-slate #dashMonthly {
+  color: #fb7185 !important; /* Coral pink 400 */
+  text-shadow: 0 0 10px rgba(251, 113, 133, 0.2);
+}
+body.bg-theme-emerald-slate #dashDailyAvg {
+  color: #fda4af !important; /* Coral rose 300 */
+}
+body.bg-theme-emerald-slate #dashTopCategory {
+  color: #f87171 !important; /* Soft rose red */
+}
+
+/* Táblázat cella értékek színezése (Korall a kiadás, Smaragd a bevétel) */
+body.bg-theme-emerald-slate .cell-interactive {
+  transition: all 0.2s ease;
+}
+body.bg-theme-emerald-slate .cell-interactive:hover {
+  background-color: #1e2e48 !important;
+}
+
+/* HUF összegek (Kiadás) korall-rózsaszínként jelennek meg */
+body.bg-theme-emerald-slate .cell-interactive div.text-xs > div:first-child {
+  color: #fb7185 !important;
+  font-weight: 700;
+}
+
+/* EUR összegek (Bevételek és megtakarítások) smaragd színben tündökölnek */
+body.bg-theme-emerald-slate .text-emerald-700 {
+  color: #34d399 !important;
+}
+
+/* Bejövő utalás tábla és egyéb grid cellák */
+body.bg-theme-emerald-slate .incoming-cell {
+  background-color: #111d30 !important;
+  color: #f1f5f9 !important;
+  border-color: #1e2e48 !important;
+}
+body.bg-theme-emerald-slate td.text-blue-600,
+body.bg-theme-emerald-slate td.text-blue-700,
+body.bg-theme-emerald-slate #dashBalance {
+  color: #34d399 !important;
+}
+
+/* Navigációs és tab gombok stílusa */
+body.bg-theme-emerald-slate .tab-btn.active {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
+  color: white !important;
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.4) !important;
+}
+body.bg-theme-emerald-slate .tab-btn:not(.active) {
+  background-color: #16253b !important;
+  color: #94a3b8 !important;
+  border: 1px solid #1e2e48 !important;
+}
+
+body.bg-theme-emerald-slate header {
+  background: linear-gradient(135deg, #111d30 0%, #0d1b2e 100%) !important;
+  border-bottom: 1px solid #1e2e48 !important;
+}
+
+body.bg-theme-emerald-slate footer {
+  background-color: #111d30 !important;
+  border-top: 1px solid #1e2e48 !important;
+}
+
+body.bg-theme-emerald-slate input,
+body.bg-theme-emerald-slate select,
+body.bg-theme-emerald-slate textarea {
+  background-color: #16253b !important;
+  color: #f1f5f9 !important;
+  border-color: #1e2e48 !important;
+}
+
+body.bg-theme-emerald-slate input:focus,
+body.bg-theme-emerald-slate select:focus,
+body.bg-theme-emerald-slate textarea:focus {
+  border-color: #10b981 !important;
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2) !important;
+}
+
+/* ========================================================
+   MOBIL RESPONSIVENESS AND LAYOUT IMPROVEMENTS (max-width: 768px)
+   ======================================================== */
+@media (max-width: 768px) {
+    html, body {
+        max-width: 100% !important;
+        overflow-x: hidden !important;
+    }
+
+    /* Transform Work Log Table (#workTable) into a responsive card layout */
+    #workTable, #workTable thead, #workTable tbody, #workTable tr, #workTable td {
+        display: block !important;
+        width: 100% !important;
+    }
+    #workTable thead {
+        display: none !important;
+    }
+    #workTable tbody {
+        padding: 0.25rem !important;
+    }
+    #workTable tr {
+        margin-bottom: 1.25rem !important;
+        padding: 1.25rem !important;
+        border-radius: 1.5rem !important;
+        border: 2px solid #e2e8f0 !important;
+        background-color: #ffffff !important;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05) !important;
+        position: relative !important;
+    }
+    body.dark-mode #workTable tr {
+        border-color: #334155 !important;
+        background-color: #1e293b !important;
+    }
+    body.bg-theme-emerald-slate #workTable tr {
+        border-color: #1e2e48 !important;
+        background-color: #111d30 !important;
+    }
+    #workTable td {
+        padding: 0.35rem 0 !important;
+        border: none !important;
+        text-align: left !important;
+    }
+    #workTable td:nth-child(1) {
+        display: inline-block !important;
+        width: auto !important;
+        font-size: 11px !important;
+        color: #64748b !important;
+        background: #f1f5f9 !important;
+        padding: 0.15rem 0.5rem !important;
+        border-radius: 0.5rem !important;
+        margin-right: 0.5rem !important;
+    }
+    body.dark-mode #workTable td:nth-child(1) {
+        background: #334155 !important;
+        color: #cbd5e1 !important;
+    }
+    body.bg-theme-emerald-slate #workTable td:nth-child(1) {
+        background: #1e2e48 !important;
+        color: #34d399 !important;
+    }
+    #workTable td:nth-child(2) {
+        display: block !important;
+        font-size: 1.1rem !important;
+        font-weight: 800 !important;
+        color: #1e293b !important;
+        margin-top: 0.25rem !important;
+        margin-bottom: 0.5rem !important;
+    }
+    #workTable td:nth-child(3) {
+        font-size: 0.85rem !important;
+        color: #475569 !important;
+        margin-bottom: 0.75rem !important;
+        padding-bottom: 0.5rem !important;
+        border-bottom: 1px dashed #e2e8f0 !important;
+    }
+    body.dark-mode #workTable td:nth-child(3), body.bg-theme-emerald-slate #workTable td:nth-child(3) {
+        border-bottom-color: #334155 !important;
+    }
+    #workTable td:nth-child(4)::before {
+        content: "📍 Helyszín: ";
+        font-weight: 700;
+        color: #475569;
+    }
+    body.dark-mode #workTable td:nth-child(4)::before, body.bg-theme-emerald-slate #workTable td:nth-child(4)::before {
+        color: #cbd5e1;
+    }
+    #workTable td:nth-child(5)::before {
+        content: "📅 Dátum: ";
+        font-weight: 700;
+        color: #475569;
+    }
+    body.dark-mode #workTable td:nth-child(5)::before, body.bg-theme-emerald-slate #workTable td:nth-child(5)::before {
+        color: #cbd5e1;
+    }
+    #workTable td:nth-child(5) {
+        display: inline-block !important;
+        width: 50% !important;
+    }
+    #workTable td:nth-child(6)::before {
+        content: "⏱️ Időtartam: ";
+        font-weight: 700;
+        color: #475569;
+    }
+    body.dark-mode #workTable td:nth-child(6)::before, body.bg-theme-emerald-slate #workTable td:nth-child(6)::before {
+        color: #cbd5e1;
+    }
+    #workTable td:nth-child(6) {
+        display: inline-block !important;
+        width: 48% !important;
+    }
+    #workTable td:nth-child(7) {
+        display: block !important;
+        margin-top: 0.75rem !important;
+        margin-bottom: 0.25rem !important;
+    }
+    #workTable td:nth-child(8) {
+        position: absolute !important;
+        top: 0.75rem !important;
+        right: 0.75rem !important;
+        width: auto !important;
+        padding: 0 !important;
+    }
+
+    /* Ensure Main Cost Table (#vtWrapper) and other tables stay constrained and scrollable */
+    #mainTableContainer, #vtWrapper, .overflow-x-auto {
+        max-width: 100% !important;
+        width: 100% !important;
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    /* Prevent flex items or grids from expanding outside screen width */
+    .grid {
+        max-width: 100% !important;
+    }
+    .max-w-7xl {
+        max-width: 100% !important;
+        width: 100% !important;
+    }
+
+    /* Modals overall mobile responsiveness (95% width, beautiful rounded borders) */
+    .modal > div, .hmi-modal-content, [id*="Modal"] > div, #settingsPanel > div {
+        width: 95% !important;
+        max-width: 95% !important;
+        margin-left: auto !important;
+        margin-right: auto !important;
+        border-radius: 2rem !important;
+        padding: 1.25rem !important;
+    }
+    #settingsPanel > div {
+        max-height: 85vh !important;
+    }
+}

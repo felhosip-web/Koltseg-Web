@@ -1,0 +1,928 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Offline mód - Költség Nyilvántartó</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css">
+    <style>
+        /* ===== RESET & ALAPOK ===== */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+            padding: 20px;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        /* ===== HÁTTÉR ANIMÁCIÓ ===== */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: 
+                radial-gradient(ellipse at 20% 50%, rgba(59, 130, 246, 0.1) 0%, transparent 60%),
+                radial-gradient(ellipse at 80% 50%, rgba(139, 92, 246, 0.1) 0%, transparent 60%),
+                radial-gradient(ellipse at 50% 100%, rgba(6, 182, 212, 0.05) 0%, transparent 50%);
+            animation: pulseBackground 8s ease-in-out infinite alternate;
+            z-index: 0;
+        }
+        
+        @keyframes pulseBackground {
+            0% { opacity: 0.5; transform: scale(1); }
+            100% { opacity: 1; transform: scale(1.1); }
+        }
+        
+        /* ===== FŐ KÁRTYA ===== */
+        .offline-card {
+            position: relative;
+            z-index: 1;
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 48px;
+            padding: 50px 40px;
+            max-width: 520px;
+            width: 100%;
+            text-align: center;
+            box-shadow: 
+                0 40px 80px rgba(0, 0, 0, 0.6),
+                0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+            animation: cardFloat 3s ease-in-out infinite;
+        }
+        
+        @keyframes cardFloat {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-8px); }
+        }
+        
+        /* ===== IKON ===== */
+        .offline-icon {
+            width: 120px;
+            height: 120px;
+            margin: 0 auto 28px;
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(139, 92, 246, 0.2));
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 56px;
+            color: #60a5fa;
+            border: 2px solid rgba(96, 165, 250, 0.3);
+            position: relative;
+            animation: iconPulse 2s ease-in-out infinite;
+        }
+        
+        .offline-icon .fa-wifi {
+            opacity: 0.3;
+            position: relative;
+        }
+        
+        .offline-icon .fa-wifi::after {
+            content: '✕';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 40px;
+            color: #ef4444;
+            opacity: 1;
+        }
+        
+        /* Csak a wifi ikonon a slash */
+        .offline-icon .fa-wifi {
+            position: relative;
+        }
+        
+        .offline-icon .fa-wifi::before {
+            content: '\f1eb';
+            font-family: 'Font Awesome 6 Free';
+            font-weight: 900;
+        }
+        
+        .offline-icon .fa-wifi::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 80px;
+            height: 3px;
+            background: #ef4444;
+            transform: translate(-50%, -50%) rotate(-45deg);
+            border-radius: 4px;
+            box-shadow: 0 0 20px rgba(239, 68, 68, 0.3);
+        }
+        
+        @keyframes iconPulse {
+            0%, 100% { transform: scale(1) rotate(0deg); }
+            50% { transform: scale(1.05) rotate(-3deg); }
+        }
+        
+        /* ===== SZÖVEGEK ===== */
+        .offline-title {
+            color: #ffffff;
+            font-size: 32px;
+            font-weight: 800;
+            margin-bottom: 12px;
+            letter-spacing: -0.5px;
+            background: linear-gradient(135deg, #ffffff 0%, #94a3b8 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .offline-subtitle {
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 16px;
+            font-weight: 400;
+            margin-bottom: 28px;
+            line-height: 1.6;
+            letter-spacing: 0.3px;
+        }
+        
+        .offline-subtitle strong {
+            color: rgba(255, 255, 255, 0.9);
+            font-weight: 600;
+        }
+        
+        /* ===== STÁTUSZ JELZŐ ===== */
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            background: rgba(239, 68, 68, 0.15);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            padding: 10px 20px;
+            border-radius: 50px;
+            margin-bottom: 32px;
+            color: #fca5a5;
+            font-size: 14px;
+            font-weight: 600;
+        }
+        
+        .status-badge .dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #ef4444;
+            animation: dotBlink 1.5s ease-in-out infinite;
+        }
+        
+        @keyframes dotBlink {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.3; transform: scale(0.8); }
+        }
+        
+        /* ===== INFORMÁCIÓS DOBOZ ===== */
+        .info-box {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 24px;
+            padding: 20px 24px;
+            margin-bottom: 32px;
+            text-align: left;
+        }
+        
+        .info-box .info-item {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 8px 0;
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 14px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        
+        .info-box .info-item:last-child {
+            border-bottom: none;
+        }
+        
+        .info-box .info-item i {
+            width: 20px;
+            color: #60a5fa;
+            font-size: 16px;
+        }
+        
+        .info-box .info-item .label {
+            font-weight: 500;
+            color: rgba(255, 255, 255, 0.5);
+            margin-right: auto;
+        }
+        
+        .info-box .info-item .value {
+            color: #e2e8f0;
+            font-weight: 600;
+        }
+        
+        .info-box .info-item .value.online {
+            color: #34d399;
+        }
+        
+        .info-box .info-item .value.offline {
+            color: #f87171;
+        }
+        
+        /* ===== GOMBOK ===== */
+        .button-group {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-top: 8px;
+        }
+        
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            padding: 18px 32px;
+            border-radius: 20px;
+            font-size: 16px;
+            font-weight: 700;
+            border: none;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            text-decoration: none;
+            width: 100%;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+            color: white;
+            box-shadow: 0 4px 20px rgba(59, 130, 246, 0.3);
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px rgba(59, 130, 246, 0.4);
+        }
+        
+        .btn-primary:active {
+            transform: scale(0.98);
+        }
+        
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.08);
+            color: rgba(255, 255, 255, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+        }
+        
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.15);
+            transform: translateY(-2px);
+        }
+        
+        .btn-secondary:active {
+            transform: scale(0.98);
+        }
+        
+        .btn-success {
+            background: linear-gradient(135deg, #10b981, #059669);
+            color: white;
+            box-shadow: 0 4px 20px rgba(16, 185, 129, 0.3);
+        }
+        
+        .btn-success:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px rgba(16, 185, 129, 0.4);
+        }
+        
+        .btn-success:active {
+            transform: scale(0.98);
+        }
+        
+        .btn .spinner {
+            display: none;
+            width: 20px;
+            height: 20px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        
+        .btn.loading .spinner {
+            display: inline-block;
+        }
+        
+        .btn.loading .btn-text {
+            opacity: 0.7;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        /* ===== LÁBLÉC ===== */
+        .footer {
+            margin-top: 32px;
+            padding-top: 24px;
+            border-top: 1px solid rgba(255, 255, 255, 0.06);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.25);
+        }
+        
+        .footer .version {
+            font-family: 'Courier New', monospace;
+            letter-spacing: 0.5px;
+        }
+        
+        .footer .status-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #ef4444;
+            display: inline-block;
+            margin-right: 6px;
+            animation: dotBlink 1.5s ease-in-out infinite;
+        }
+        
+        /* ===== RESPONSZÍV ===== */
+        @media (max-width: 600px) {
+            .offline-card {
+                padding: 30px 24px;
+                border-radius: 32px;
+            }
+            
+            .offline-icon {
+                width: 90px;
+                height: 90px;
+                font-size: 42px;
+            }
+            
+            .offline-title {
+                font-size: 26px;
+            }
+            
+            .offline-subtitle {
+                font-size: 14px;
+            }
+            
+            .btn {
+                padding: 15px 24px;
+                font-size: 14px;
+            }
+            
+            .info-box {
+                padding: 16px 18px;
+            }
+            
+            .info-box .info-item {
+                font-size: 13px;
+            }
+            
+            .footer {
+                flex-direction: column;
+                gap: 6px;
+                font-size: 11px;
+            }
+        }
+        
+        @media (max-width: 400px) {
+            .offline-card {
+                padding: 24px 16px;
+            }
+            
+            .offline-icon {
+                width: 70px;
+                height: 70px;
+                font-size: 32px;
+            }
+            
+            .offline-title {
+                font-size: 22px;
+            }
+            
+            .status-badge {
+                font-size: 12px;
+                padding: 8px 16px;
+            }
+        }
+        
+        /* ===== HIBA ÜZENET ===== */
+        .error-message {
+            display: none;
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            border-radius: 16px;
+            padding: 14px 18px;
+            margin-top: 16px;
+            color: #fca5a5;
+            font-size: 14px;
+            text-align: left;
+        }
+        
+        .error-message.show {
+            display: block;
+            animation: slideDown 0.3s ease forwards;
+        }
+        
+        @keyframes slideDown {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        /* ===== PROGRESS BAR ===== */
+        .progress-container {
+            display: none;
+            margin-top: 16px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            overflow: hidden;
+            height: 6px;
+        }
+        
+        .progress-container.show {
+            display: block;
+            animation: slideDown 0.3s ease forwards;
+        }
+        
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+            width: 0%;
+            border-radius: 12px;
+            transition: width 0.5s ease;
+        }
+        
+        .progress-text {
+            color: rgba(255, 255, 255, 0.4);
+            font-size: 12px;
+            margin-top: 8px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    
+    <div class="offline-card">
+        <!-- IKON -->
+        <div class="offline-icon">
+            <i class="fas fa-wifi"></i>
+        </div>
+        
+        <!-- CÍM -->
+        <h1 class="offline-title">Offline mód</h1>
+        <p class="offline-subtitle">
+            Jelenleg <strong>nincs internetkapcsolat</strong>.<br>
+            Az alkalmazás <strong>csak helyi (lokális)</strong> adatokat tud kezelni.
+        </p>
+        
+        <!-- STÁTUSZ -->
+        <div class="status-badge">
+            <span class="dot"></span>
+            <span>Hálózat: NEM ELÉRHETŐ</span>
+        </div>
+        
+        <!-- INFORMÁCIÓK -->
+        <div class="info-box">
+            <div class="info-item">
+                <i class="fas fa-database"></i>
+                <span class="label">Adattárolás</span>
+                <span class="value offline">Helyi (IndexedDB)</span>
+            </div>
+            <div class="info-item">
+                <i class="fas fa-cloud"></i>
+                <span class="label">Felhő szinkron</span>
+                <span class="value offline">NEM ELÉRHETŐ</span>
+            </div>
+            <div class="info-item">
+                <i class="fas fa-check-circle"></i>
+                <span class="label">Offline funkciók</span>
+                <span class="value online">● Működnek</span>
+            </div>
+            <div class="info-item">
+                <i class="fas fa-clock"></i>
+                <span class="label">Utolsó szinkron</span>
+                <span class="value" id="lastSyncTime">Ismeretlen</span>
+            </div>
+        </div>
+        
+        <!-- HIBA ÜZENET -->
+        <div id="errorMessage" class="error-message">
+            <i class="fas fa-exclamation-circle" style="margin-right: 10px;"></i>
+            <span id="errorText">Nem sikerült kapcsolódni a szerverhez.</span>
+        </div>
+        
+        <!-- PROGRESS -->
+        <div id="progressContainer" class="progress-container">
+            <div id="progressBar" class="progress-bar"></div>
+            <div id="progressText" class="progress-text">Kapcsolódás...</div>
+        </div>
+        
+        <!-- GOMBOK -->
+        <div class="button-group">
+            <button id="btnOfflineStart" class="btn btn-primary">
+                <i class="fas fa-rocket"></i>
+                <span class="btn-text">Indítás offline módban</span>
+                <span class="spinner"></span>
+            </button>
+            
+            <button id="btnRetryConnection" class="btn btn-secondary">
+                <i class="fas fa-sync-alt"></i>
+                <span class="btn-text">Kapcsolat újraellenőrzése</span>
+                <span class="spinner"></span>
+            </button>
+            
+            <button id="btnWaitOnline" class="btn btn-success">
+                <i class="fas fa-clock"></i>
+                <span class="btn-text">Várakozás internetre</span>
+                <span class="spinner"></span>
+            </button>
+        </div>
+        
+        <!-- LÁBLÉC -->
+        <div class="footer">
+            <span>
+                <span class="status-dot"></span>
+                Offline mód
+            </span>
+            <span class="version">Költség Nyilvántartó v4.0</span>
+        </div>
+    </div>
+    
+    <script>
+        // =============================================
+        // OFFLINE OLDAL LOGIKA
+        // =============================================
+        
+        // DOM elemek
+        const elements = {
+            btnOfflineStart: document.getElementById('btnOfflineStart'),
+            btnRetryConnection: document.getElementById('btnRetryConnection'),
+            btnWaitOnline: document.getElementById('btnWaitOnline'),
+            errorMessage: document.getElementById('errorMessage'),
+            errorText: document.getElementById('errorText'),
+            progressContainer: document.getElementById('progressContainer'),
+            progressBar: document.getElementById('progressBar'),
+            progressText: document.getElementById('progressText'),
+            lastSyncTime: document.getElementById('lastSyncTime')
+        };
+        
+        // Állapot
+        let isChecking = false;
+        let retryCount = 0;
+        const MAX_RETRIES = 5;
+        
+        // ===== UTOLSÓ SZINKRON IDŐ BETÖLTÉSE =====
+        function loadLastSyncTime() {
+            try {
+                const lastSync = localStorage.getItem('lastSyncTime');
+                if (lastSync) {
+                    const date = new Date(parseInt(lastSync));
+                    elements.lastSyncTime.textContent = date.toLocaleString('hu-HU', {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                    });
+                } else {
+                    elements.lastSyncTime.textContent = 'Soha';
+                }
+            } catch (e) {
+                elements.lastSyncTime.textContent = 'Ismeretlen';
+            }
+        }
+        
+        loadLastSyncTime();
+        
+        // ===== HÁLÓZAT ELLENŐRZÉS =====
+        function checkNetwork() {
+            return new Promise((resolve) => {
+                // Gyors ellenőrzés: navigator.onLine
+                if (!navigator.onLine) {
+                    resolve(false);
+                    return;
+                }
+                
+                // Valódi ellenőrzés: próbáljunk meg egy egyszerű kérést
+                const controller = new AbortController();
+                const timeout = setTimeout(() => {
+                    controller.abort();
+                    resolve(false);
+                }, 5000);
+                
+                fetch('https://cdn.jsdelivr.net/npm/dayjs@1/dayjs.min.js', {
+                    method: 'HEAD',
+                    mode: 'no-cors',
+                    signal: controller.signal
+                })
+                .then(() => {
+                    clearTimeout(timeout);
+                    resolve(true);
+                })
+                .catch(() => {
+                    clearTimeout(timeout);
+                    resolve(false);
+                });
+            });
+        }
+        
+        // ===== STÁTUSZ FRISSÍTÉS =====
+        function updateStatus(isOnline) {
+            const badge = document.querySelector('.status-badge');
+            const dot = badge.querySelector('.dot');
+            const text = badge.querySelector('span:last-child');
+            
+            if (isOnline) {
+                dot.style.background = '#34d399';
+                text.textContent = 'Hálózat: ELÉRHETŐ ✅';
+                badge.style.borderColor = 'rgba(52, 211, 153, 0.3)';
+                badge.style.background = 'rgba(52, 211, 153, 0.1)';
+                badge.style.color = '#6ee7b7';
+            } else {
+                dot.style.background = '#ef4444';
+                text.textContent = 'Hálózat: NEM ELÉRHETŐ ❌';
+                badge.style.borderColor = 'rgba(239, 68, 68, 0.3)';
+                badge.style.background = 'rgba(239, 68, 68, 0.1)';
+                badge.style.color = '#fca5a5';
+            }
+        }
+        
+        // ===== HIBA ÜZENET MUTATÁS =====
+        function showError(message) {
+            elements.errorText.textContent = message;
+            elements.errorMessage.classList.add('show');
+        }
+        
+        function hideError() {
+            elements.errorMessage.classList.remove('show');
+        }
+        
+        // ===== PROGRESS MUTATÁS =====
+        function showProgress(text, percent = 0) {
+            elements.progressContainer.classList.add('show');
+            elements.progressText.textContent = text;
+            elements.progressBar.style.width = Math.min(percent, 100) + '%';
+        }
+        
+        function hideProgress() {
+            elements.progressContainer.classList.remove('show');
+            elements.progressBar.style.width = '0%';
+        }
+        
+        // ===== GOMBOK KEZELÉSE =====
+        function setButtonLoading(button, loading) {
+            if (loading) {
+                button.classList.add('loading');
+                button.disabled = true;
+            } else {
+                button.classList.remove('loading');
+                button.disabled = false;
+            }
+        }
+        
+        function resetButtons() {
+            [elements.btnOfflineStart, elements.btnRetryConnection, elements.btnWaitOnline].forEach(btn => {
+                setButtonLoading(btn, false);
+            });
+        }
+        
+        // ===== INDÍTÁS OFFLINE MÓDBAN =====
+        function startOfflineMode() {
+            setButtonLoading(elements.btnOfflineStart, true);
+            hideError();
+            
+            // Szimulált betöltés
+            showProgress('Offline mód előkészítése...', 20);
+            
+            setTimeout(() => {
+                showProgress('Helyi adatbázis megnyitása...', 50);
+            }, 300);
+            
+            setTimeout(() => {
+                showProgress('Alkalmazás betöltése...', 80);
+            }, 600);
+            
+            setTimeout(() => {
+                showProgress('Kész!', 100);
+                
+                // Offline mód jelzése localStorage-ban
+                try {
+                    localStorage.setItem('offlineMode', 'true');
+                    localStorage.setItem('offlineStartTime', Date.now().toString());
+                } catch (e) {}
+                
+                // Átirányítás a főoldalra
+                setTimeout(() => {
+                    hideProgress();
+                    resetButtons();
+                    window.location.href = './index.html?offline=true';
+                }, 400);
+            }, 1000);
+        }
+        
+        // ===== KAPCSOLAT ELLENŐRZÉS =====
+        async function checkAndRetry() {
+            if (isChecking) return;
+            isChecking = true;
+            
+            setButtonLoading(elements.btnRetryConnection, true);
+            hideError();
+            showProgress('Kapcsolat ellenőrzése...', 10);
+            
+            try {
+                const isOnline = await checkNetwork();
+                showProgress('Kapcsolat vizsgálata...', 50);
+                
+                await new Promise(resolve => setTimeout(resolve, 500));
+                
+                if (isOnline) {
+                    showProgress('Kapcsolat helyreállt! 🎉', 100);
+                    updateStatus(true);
+                    
+                    setTimeout(() => {
+                        hideProgress();
+                        resetButtons();
+                        // Átirányítás normál módba
+                        try {
+                            localStorage.removeItem('offlineMode');
+                        } catch (e) {}
+                        window.location.href = './index.html?online=true';
+                    }, 600);
+                } else {
+                    showProgress('Nincs kapcsolat', 100);
+                    updateStatus(false);
+                    
+                    setTimeout(() => {
+                        hideProgress();
+                        resetButtons();
+                        showError('A szerver jelenleg nem elérhető. Próbálkozz később.');
+                    }, 500);
+                }
+            } catch (error) {
+                console.error('[Offline] Hiba:', error);
+                hideProgress();
+                resetButtons();
+                showError('Hiba történt a kapcsolat ellenőrzése során.');
+            } finally {
+                isChecking = false;
+            }
+        }
+        
+        // ===== VÁRAKOZÁS INTERNETRE =====
+        function waitForOnline() {
+            setButtonLoading(elements.btnWaitOnline, true);
+            hideError();
+            showProgress('Internetre várakozás...', 10);
+            
+            let progress = 10;
+            const interval = setInterval(() => {
+                progress += Math.random() * 8;
+                if (progress > 90) progress = 90;
+                showProgress('Internetre várakozás...', progress);
+            }, 500);
+            
+            let attempts = 0;
+            const maxAttempts = 60; // ~30 másodperc
+            
+            const checkInterval = setInterval(async () => {
+                attempts++;
+                const isOnline = await checkNetwork();
+                
+                if (isOnline) {
+                    clearInterval(checkInterval);
+                    clearInterval(interval);
+                    showProgress('Kapcsolat helyreállt! 🎉', 100);
+                    updateStatus(true);
+                    
+                    setTimeout(() => {
+                        hideProgress();
+                        resetButtons();
+                        try {
+                            localStorage.removeItem('offlineMode');
+                        } catch (e) {}
+                        window.location.href = './index.html?online=true';
+                    }, 600);
+                } else if (attempts >= maxAttempts) {
+                    clearInterval(checkInterval);
+                    clearInterval(interval);
+                    hideProgress();
+                    resetButtons();
+                    showError('Időtúllépés. Kérlek, próbáld újra később.');
+                }
+            }, 500);
+        }
+        
+        // ===== ESEMÉNYKEZELŐK =====
+        elements.btnOfflineStart.addEventListener('click', startOfflineMode);
+        elements.btnRetryConnection.addEventListener('click', checkAndRetry);
+        elements.btnWaitOnline.addEventListener('click', waitForOnline);
+        
+        // ===== BILLENTYŰZET =====
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                // Enter = Offline indítás
+                if (!elements.btnOfflineStart.disabled) {
+                    startOfflineMode();
+                }
+            }
+            if (e.key === 'r' || e.key === 'R') {
+                // R = Kapcsolat újraellenőrzés
+                if (!elements.btnRetryConnection.disabled) {
+                    checkAndRetry();
+                }
+            }
+        });
+        
+        // ===== HÁLÓZATI ESEMÉNYEK =====
+        window.addEventListener('online', () => {
+            updateStatus(true);
+            hideError();
+            showToast('Internetkapcsolat helyreállt! ✅', 'success');
+            
+            // Automatikus átirányítás 3 másodperc múlva
+            setTimeout(() => {
+                try {
+                    localStorage.removeItem('offlineMode');
+                } catch (e) {}
+                window.location.href = './index.html?online=true';
+            }, 3000);
+        });
+        
+        window.addEventListener('offline', () => {
+            updateStatus(false);
+            showToast('Internetkapcsolat megszakadt! 📡', 'error');
+        });
+        
+        // ===== TOAST ÉRTESÍTÉS =====
+        function showToast(message, type = 'info') {
+            const existing = document.querySelector('.offline-toast');
+            if (existing) existing.remove();
+            
+            const toast = document.createElement('div');
+            toast.className = 'offline-toast';
+            toast.style.cssText = `
+                position: fixed;
+                bottom: 24px;
+                left: 50%;
+                transform: translateX(-50%);
+                padding: 14px 28px;
+                border-radius: 16px;
+                font-size: 14px;
+                font-weight: 600;
+                z-index: 9999;
+                animation: slideDown 0.3s ease forwards;
+                background: ${type === 'success' ? 'rgba(16, 185, 129, 0.9)' : 'rgba(239, 68, 68, 0.9)'};
+                color: white;
+                backdrop-filter: blur(10px);
+                box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+                max-width: 90%;
+                text-align: center;
+                border: 1px solid rgba(255, 255, 255, 0.1);
+            `;
+            toast.textContent = message;
+            document.body.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateX(-50%) translateY(20px)';
+                toast.style.transition = 'all 0.3s ease';
+                setTimeout(() => toast.remove(), 300);
+            }, 4000);
+        }
+        
+        // ===== KEZDETI ELLENŐRZÉS =====
+        (async function init() {
+            // Ellenőrizzük a kapcsolatot
+            const isOnline = await checkNetwork();
+            updateStatus(isOnline);
+            
+            if (isOnline) {
+                // Ha van net, de mégis offline oldalon vagyunk, átirányítunk
+                setTimeout(() => {
+                    try {
+                        localStorage.removeItem('offlineMode');
+                    } catch (e) {}
+                    window.location.href = './index.html';
+                }, 3000);
+            } else {
+                showError('Nincs internetkapcsolat. Az alkalmazás offline módban fog működni.');
+            }
+        })();
+        
+        console.log('[Offline] Oldal betöltve! 🚀');
+        console.log('[Offline] Tipp: Enter = Offline indítás, R = Kapcsolat ellenőrzés');
+    </script>
+</body>
+</html>

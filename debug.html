@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug - Költség Nyilvántartó</title>
+    <style>
+        body { font-family: system-ui; padding: 20px; background: #f3f4f6; }
+        .btn { background: #3b82f6; color: white; border: none; padding: 12px 24px; border-radius: 12px; font-size: 16px; cursor: pointer; margin: 6px; }
+        .btn:hover { background: #2563eb; }
+        .btn-danger { background: #ef4444; }
+        .btn-danger:hover { background: #dc2626; }
+        .btn-success { background: #10b981; }
+        .btn-success:hover { background: #059669; }
+        .card { background: white; padding: 20px; border-radius: 16px; margin: 10px 0; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .log { background: #1e293b; color: #e2e8f0; padding: 12px; border-radius: 8px; font-family: monospace; font-size: 12px; max-height: 300px; overflow-y: auto; white-space: pre-wrap; }
+        .status { font-weight: bold; }
+        .online { color: #10b981; }
+        .offline { color: #ef4444; }
+    </style>
+</head>
+<body>
+    <h1>🔧 Költség Nyilvántartó - Debug</h1>
+    
+    <div class="card">
+        <h3>📊 Adatbázis állapot</h3>
+        <div id="dbStatus">Betöltés...</div>
+    </div>
+
+    <div class="card">
+        <h3>🚀 Műveletek</h3>
+        <button class="btn btn-success" onclick="loadTestData()">📥 Tesztadatok betöltése (30 tétel)</button>
+        <button class="btn btn-success" onclick="loadReminders()">⏰ Határidők (10 db)</button>
+        <button class="btn" onclick="refreshAll()">🔄 Összes tab frissítése</button>
+        <button class="btn btn-danger" onclick="clearAll()">🗑️ Összes adat törlése</button>
+        <button class="btn" onclick="showLogs()">📋 Logok mutatása</button>
+    </div>
+
+    <div class="card">
+        <h3>📋 Konzol logok</h3>
+        <div id="logContainer" class="log">Nincs log</div>
+    </div>
+
+    <script>
+        // ============================================================
+        // === KAPCSOLÓDÁS AZ APP-HEZ ===
+        // ============================================================
+
+        function getApp() {
+            return window.top?.app || window.parent?.app || window.app;
+        }
+
+        // ============================================================
+        // === ADATBÁZIS ÁLLAPOT ===
+        // ============================================================
+
+        async function updateStatus() {
+            const app = getApp();
+            const el = document.getElementById('dbStatus');
+            if (!app) {
+                el.innerHTML = '❌ App nem található!';
+                return;
+            }
+
+            const items = app.items?.items?.length || 0;
+            const months = app.months?.months?.length || 0;
+            const entries = app.entries?.entries?.length || 0;
+            const reminders = app.reminderManager?.reminders?.length || 0;
+            const incomings = app.incomingManager?.incomings?.length || 0;
+            const isOnline = navigator.onLine;
+
+            el.innerHTML = `
+                <div>📦 Kategóriák: <strong>${items}</strong></div>
+                <div>📅 Hónapok: <strong>${months}</strong></div>
+                <div>📝 Bejegyzések: <strong>${entries}</strong></div>
+                <div>⏰ Határidők: <strong>${reminders}</strong></div>
+                <div>📥 Bejövő utalások: <strong>${incomings}</strong></div>
+                <div>📶 Hálózat: <span class="status ${isOnline ? 'online' : 'offline'}">${isOnline ? '🟢 Online' : '🔴 Offline'}</span></div>
+            `;
+        }
+
+        // ============================================================
+        // === TESZTADATOK BETÖLTÉSE ===
+        // ============================================================
+
+        async function loadTestData() {
+            const app = getApp();
+            if (!app) { alert('App nem elérhető!'); return; }
+            
+            try {
+                const count = await app.generateTestData(30);
+                alert(`✅ ${count} teszt bejegyzés generálva!`);
+                await updateStatus();
+                await refreshAll();
+            } catch(e) {
+                alert('❌ Hiba: ' + e.message);
+                console.error(e);
+            }
+        }
+
+        async function loadReminders() {
+            const app = getApp();
+            if (!app) { alert('App nem elérhető!'); return; }
+            
+            try {
+                const count = await app.generateTestReminders(10);
+                alert(`✅ ${count} teszt határidő generálva!`);
+                await updateStatus();
+                await refreshAll();
+            } catch(e) {
+                alert('❌ Hiba: ' + e.message);
+                console.error(e);
+            }
+        }
+
+        // ============================================================
+        // === TABOK FRISSÍTÉSE ===
+        // ============================================================
+
+        async function refreshAll() {
+            const app = getApp();
+            if (!app) { alert('App nem elérhető!'); return; }
+
+            try {
+                // Adatok újratöltése
+                await Promise.all([
+                    app.items.load(),
+                    app.months.load(),
+                    app.entries.load(),
+                    app.reminderManager.load(),
+                    app.incomingManager?.load()
+                ]);
+
+                // Dashboard
+                app.renderDashboard();
+                
+                // Táblázat
+                if (app.renderer.renderTable) app.renderer.renderTable();
+                else if (app.renderer.render) app.renderer.render();
+                
+                // Kimutatások
+                app.chartsRenderer.renderAll('all');
+                
+                // Határidők
+                app.remindersRenderer.renderList();
+                
+                // Bejövő utalások
+                if (app.incomingRenderer) app.incomingRenderer.render();
+                
+                // Statisztika
+                app.renderStats();
+                
+                alert('✅ Minden tab frissítve!');
+                await updateStatus();
+            } catch(e) {
+                alert('❌ Hiba: ' + e.message);
+                console.error(e);
+            }
+        }
+
+        // ============================================================
+        // === ADATOK TÖRLÉSE ===
+        // ============================================================
+
+        async function clearAll() {
+            if (!confirm('Biztosan törölsz mindent?')) return;
+            
+            const app = getApp();
+            if (!app) { alert('App nem elérhető!'); return; }
+
+            try {
+                await app.clearAllData();
+                alert('✅ Összes adat törölve!');
+                await updateStatus();
+                await refreshAll();
+            } catch(e) {
+                alert('❌ Hiba: ' + e.message);
+                console.error(e);
+            }
+        }
+
+        // ============================================================
+        // === LOGOK MUTATÁSA ===
+        // ============================================================
+
+        function showLogs() {
+            const container = document.getElementById('logContainer');
+            try {
+                const logs = localStorage.getItem('debug_logs');
+                if (logs) {
+                    const parsed = JSON.parse(logs);
+                    container.textContent = parsed.join('\n');
+                } else {
+                    container.textContent = 'Nincs mentett log';
+                }
+            } catch(e) {
+                container.textContent = 'Hiba a logok betöltésekor: ' + e.message;
+            }
+        }
+
+        // ============================================================
+        // === KONZOL LOGOK MENTÉSE ===
+        // ============================================================
+
+        // Konzol logok mentése localStorage-ba
+        const originalLog = console.log;
+        console.log = function(...args) {
+            originalLog.apply(console, args);
+            try {
+                const logs = JSON.parse(localStorage.getItem('debug_logs') || '[]');
+                logs.push(args.join(' '));
+                localStorage.setItem('debug_logs', JSON.stringify(logs.slice(-200)));
+            } catch(e) {}
+        };
+
+        // Hiba naplózás
+        const originalError = console.error;
+        console.error = function(...args) {
+            originalError.apply(console, args);
+            try {
+                const logs = JSON.parse(localStorage.getItem('debug_logs') || '[]');
+                logs.push('❌ ERROR: ' + args.join(' '));
+                localStorage.setItem('debug_logs', JSON.stringify(logs.slice(-200)));
+            } catch(e) {}
+        };
+
+        // ============================================================
+        // === INDÍTÁS ===
+        // ============================================================
+
+        // Minden 5 másodpercben frissítsük az állapotot
+        updateStatus();
+        setInterval(updateStatus, 5000);
+
+        // Logok mutatása induláskor
+        setTimeout(showLogs, 1000);
+
+        console.log('🔧 Debug panel betöltve!');
+        console.log('📌 Használható funkciók: loadTestData(), refreshAll(), clearAll()');
+    </script>
+</body>
+</html>
