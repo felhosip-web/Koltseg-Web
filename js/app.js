@@ -2148,6 +2148,8 @@ function getSupabaseSQLScript() {
     return `-- Költségnyilvántartó v4.1 - Teljes Supabase SQL Táblaséma
 -- Futtasd le ezt a szkriptet a Supabase SQL Editor-jában!
 
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
 -- 1. ITEMS (Kategóriák)
 CREATE TABLE IF NOT EXISTS items (
     id TEXT PRIMARY KEY,
