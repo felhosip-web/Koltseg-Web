@@ -46,7 +46,21 @@ export class DatabaseAudit {
             if (storeName === 'entries' && count > 0) {
                 const cellMap = new Map();
                 data.forEach(e => {
-                    const key = (e.itemId && e.month) ? `${e.itemId}_${e.month}` : (e.cellKey ? e.cellKey.split('_').slice(0,2).join('_') : null);
+
+                    let key = null;
+                    if (e.itemId && e.month) {
+                        key = `${e.itemId}_${e.month}`;
+                    } else if (e.cellKey) {
+                        const parts = e.cellKey.split('_');
+                        if (parts.length >= 2) {
+                            if (/^[0-9]{4}-[0-9]{2}$/.test(parts[0])) {
+                                key = `${parts[1]}_${parts[0]}`;
+                            } else {
+                                key = `${parts[0]}_${parts[1]}`;
+                            }
+                        }
+                    }
+
                     if (key) {
                         cellMap.set(key, (cellMap.get(key) || 0) + 1);
                     }
@@ -220,7 +234,11 @@ export class DatabaseAudit {
                              const parts = entry.cellKey.split('_');
                              entry.cellKey = `${egyebItem.id}_${month}_${parts.slice(2).join('_')}`;
                         }
+                        entry.updated_at = new Date().toISOString();
                         await this.app.db.save('entries', entry);
+                        if (this.app.syncService) {
+                             await this.app.syncService.push('entries', entry);
+                        }
                         repairedOrphans++;
                     } else {
                          const restoredItem = {
@@ -230,6 +248,9 @@ export class DatabaseAudit {
                             updated_at: new Date().toISOString()
                         };
                         await this.app.db.save('items', restoredItem);
+                        if (this.app.syncService) {
+                            await this.app.syncService.push('items', restoredItem);
+                        }
                         itemIds.add(itemId);
                         items.push(restoredItem);
                         repairedOrphans++;

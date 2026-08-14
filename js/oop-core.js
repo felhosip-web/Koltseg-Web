@@ -454,7 +454,17 @@ export class Database {
                     delete this.mockStore['items'][itemId];
                 }
                 if (this.mockStore['entries']) {
-                    const entriesToDelete = Object.values(this.mockStore['entries']).filter(e => e.itemId === itemId || (e.cellKey && (e.cellKey.startsWith(`${itemId}_`) || e.cellKey.endsWith(`_${itemId}`))));
+                    const entriesToDelete = Object.values(this.mockStore['entries']).filter(e => {
+                        let tempItemId = e.itemId;
+                        if (!tempItemId && e.cellKey) {
+                             const parts = e.cellKey.split('_');
+                             tempItemId = parts[0];
+                             if (!/^[0-9]+$/.test(tempItemId) && parts.length >= 2 && /^[0-9]{4}-[0-9]{2}$/.test(parts[0])) {
+                                  tempItemId = parts[1];
+                             }
+                        }
+                        return tempItemId === itemId || (e.cellKey && (e.cellKey.startsWith(`${itemId}_`) || e.cellKey.endsWith(`_${itemId}`)));
+                    });
                     entriesToDelete.forEach(e => {
                         delete this.mockStore['entries'][e.id];
                     });
@@ -474,7 +484,15 @@ export class Database {
                 req.onsuccess = (e) => {
                     const entries = e.target.result || [];
                     entries.forEach(entry => {
-                        if (entry.itemId === itemId || (entry.cellKey && (entry.cellKey.startsWith(`${itemId}_`) || entry.cellKey.endsWith(`_${itemId}`)))) {
+                        let tempItemId = entry.itemId;
+                        if (!tempItemId && entry.cellKey) {
+                             const parts = entry.cellKey.split('_');
+                             tempItemId = parts[0];
+                             if (!/^[0-9]+$/.test(tempItemId) && parts.length >= 2 && /^[0-9]{4}-[0-9]{2}$/.test(parts[0])) {
+                                  tempItemId = parts[1];
+                             }
+                        }
+                        if (tempItemId === itemId || (entry.cellKey && (entry.cellKey.startsWith(`${itemId}_`) || entry.cellKey.endsWith(`_${itemId}`)))) {
                             entryStore.delete(entry.id);
                         }
                     });
@@ -707,9 +725,29 @@ export class ItemManager {
             await this.db.deleteItemWithEntries(id);
             this.items = this.items.filter(i => i.id !== id);
 
-            const entriesToDel = window.app?.entries?.entries?.filter(e => e.itemId === id || (e.cellKey && (e.cellKey.startsWith(`${id}_`) || e.cellKey.endsWith(`_${id}`)))) || [];
+            const entriesToDel = window.app?.entries?.entries?.filter(e => {
+                let tempItemId = e.itemId;
+                if (!tempItemId && e.cellKey) {
+                     const parts = e.cellKey.split('_');
+                     tempItemId = parts[0];
+                     if (!/^[0-9]+$/.test(tempItemId) && parts.length >= 2 && /^[0-9]{4}-[0-9]{2}$/.test(parts[0])) {
+                          tempItemId = parts[1];
+                     }
+                }
+                return tempItemId === id || (e.cellKey && (e.cellKey.startsWith(`${id}_`) || e.cellKey.endsWith(`_${id}`)));
+            }) || [];
             if (window.app && window.app.entries) {
-                window.app.entries.entries = window.app.entries.entries.filter(e => !(e.itemId === id || (e.cellKey && (e.cellKey.startsWith(`${id}_`) || e.cellKey.endsWith(`_${id}`)))));
+                window.app.entries.entries = window.app.entries.entries.filter(e => {
+                let tempItemId = e.itemId;
+                if (!tempItemId && e.cellKey) {
+                     const parts = e.cellKey.split('_');
+                     tempItemId = parts[0];
+                     if (!/^[0-9]+$/.test(tempItemId) && parts.length >= 2 && /^[0-9]{4}-[0-9]{2}$/.test(parts[0])) {
+                          tempItemId = parts[1];
+                     }
+                }
+                return !(tempItemId === id || (e.cellKey && (e.cellKey.startsWith(`${id}_`) || e.cellKey.endsWith(`_${id}`))));
+            });
             }
 
             // Push changes
