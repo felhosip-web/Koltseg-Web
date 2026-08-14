@@ -1,3 +1,4 @@
+import { generateUUID } from './uuid-utils.js';
 // js/db-audit.js - IndexedDB Audit & Maintenance Tool (v4.0)
 export class DatabaseAudit {
     constructor(app) {
@@ -45,8 +46,9 @@ export class DatabaseAudit {
             if (storeName === 'entries' && count > 0) {
                 const cellMap = new Map();
                 data.forEach(e => {
-                    if (e.cellKey) {
-                        cellMap.set(e.cellKey, (cellMap.get(e.cellKey) || 0) + 1);
+                    const key = (e.itemId && e.month) ? `${e.itemId}_${e.month}` : (e.cellKey ? e.cellKey.split('_').slice(0,2).join('_') : null);
+                    if (key) {
+                        cellMap.set(key, (cellMap.get(key) || 0) + 1);
                     }
                 });
                 for (const [key, cnt] of cellMap) {
@@ -87,17 +89,19 @@ export class DatabaseAudit {
 
         let orphans = 0;
         entries.forEach(e => {
-            if (!e.cellKey) return;
-            const parts = e.cellKey.split('_');
-            let itemIdStr = parts[0];
-            let month = parts[1];
-            // Support both formats: "itemId_month" and "month_itemId"
-            if (!/^[0-9]+$/.test(itemIdStr) && parts.length >= 2 && /^[0-9]{4}-[0-9]{2}$/.test(parts[0])) {
-                // month_itemId -> swap
-                month = parts[0];
-                itemIdStr = parts[1];
+            let itemId = e.itemId;
+            let month = e.month;
+            if (!itemId || !month) {
+                if (!e.cellKey) return;
+                const parts = e.cellKey.split('_');
+                let itemIdStr = parts[0];
+                month = parts[1];
+                if (!/^[0-9]+$/.test(itemIdStr) && parts.length >= 2 && /^[0-9]{4}-[0-9]{2}$/.test(parts[0])) {
+                    month = parts[0];
+                    itemIdStr = parts[1];
+                }
+                itemId = itemId || itemIdStr;
             }
-            const itemId = e.itemId || itemIdStr;
             if (!itemIds.has(itemId) || !monthSet.has(month)) {
                 orphans++;
             }
@@ -183,18 +187,19 @@ export class DatabaseAudit {
 
             // 1. Árva bejegyzések és hónapok javítása
             for (const entry of entries) {
-                if (!entry.cellKey) continue;
-                
-                const parts = entry.cellKey.split('_');
-                let itemIdStr = parts[0];
-                let month = parts[1];
-                
-                if (!/^[0-9]+$/.test(itemIdStr) && parts.length >= 2 && /^[0-9]{4}-[0-9]{2}$/.test(parts[0])) {
-                    month = parts[0];
-                    itemIdStr = parts[1];
+                let itemId = entry.itemId;
+                let month = entry.month;
+                if (!itemId || !month) {
+                    if (!entry.cellKey) continue;
+                    const parts = entry.cellKey.split('_');
+                    let itemIdStr = parts[0];
+                    month = parts[1];
+                    if (!/^[0-9]+$/.test(itemIdStr) && parts.length >= 2 && /^[0-9]{4}-[0-9]{2}$/.test(parts[0])) {
+                        month = parts[0];
+                        itemIdStr = parts[1];
+                    }
+                    itemId = itemId || itemIdStr;
                 }
-
-                const itemId = entry.itemId || itemIdStr;
                 
                 // Ha a hónap hiányzik, hozzuk létre
                 if (month && !monthSet.has(month) && /^[0-9]{4}-\d{2}$/.test(month)) {
@@ -205,15 +210,30 @@ export class DatabaseAudit {
 
                 // Ha a kategória hiányzik, hozzuk létre
                 if (itemId && !itemIds.has(itemId) && (typeof itemId === 'string' && itemId.length > 0)) {
-                    const restoredItem = {
-                        id: itemId,
-                        name: `Helyreállított kategória #${itemId}`,
-                        color: '#fef08a',
-                        updated_at: new Date().toISOString()
-                    };
-                    await this.app.db.save('items', restoredItem);
-                    itemIds.add(itemId);
-                    repairedOrphans++;
+                    // Keresés más kategóriákban, esetleg valamilyen "Egyéb" kategóriában, ahelyett hogy mindenhol újat hozunk létre
+                    const egyebItem = items.find(i => i.name.toLowerCase().includes('egyéb') || i.name.toLowerCase() === 'egyeb');
+
+                    if (egyebItem) {
+                        // Ha van "Egyéb", mentsük oda az orphanokat
+                        entry.itemId = egyebItem.id;
+                        if (entry.cellKey) {
+                             const parts = entry.cellKey.split('_');
+                             entry.cellKey = `${egyebItem.id}_${month}_${parts.slice(2).join('_')}`;
+                        }
+                        await this.app.db.save('entries', entry);
+                        repairedOrphans++;
+                    } else {
+                         const restoredItem = {
+                            id: itemId,
+                            name: `Helyreállított kategória #${itemId}`,
+                            color: '#fef08a',
+                            updated_at: new Date().toISOString()
+                        };
+                        await this.app.db.save('items', restoredItem);
+                        itemIds.add(itemId);
+                        items.push(restoredItem);
+                        repairedOrphans++;
+                    }
                 }
             }
 
@@ -221,13 +241,12 @@ export class DatabaseAudit {
             const incomings = await this.app.db.getAll('incomings');
             const senders = await this.app.db.getAll('incoming_senders');
             const senderNames = new Set(senders.map(s => s.name));
-            let maxSenderId = senders.reduce((max, s) => s.id > max ? s.id : max, 0);
+
 
             for (const inc of incomings) {
                 if (inc.sender && !senderNames.has(inc.sender)) {
-                    maxSenderId++;
                     const newSender = {
-                        id: maxSenderId,
+                        id: generateUUID(),
                         name: inc.sender,
                         updated_at: new Date().toISOString()
                     };

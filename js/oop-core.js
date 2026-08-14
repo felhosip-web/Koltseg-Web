@@ -15,7 +15,7 @@ export class SecurityManager {
         if (!data || typeof data !== 'object') return false;
         switch (storeName) {
             case 'entries':
-                return typeof data.cellKey === 'string' && !isNaN(data.amount);
+                return (typeof data.cellKey === 'string' || (typeof data.itemId === 'string' && typeof data.month === 'string')) && !isNaN(data.amount);
             case 'items':
                 return typeof data.name === 'string' && data.name.trim() !== '';
             case 'months':
@@ -454,8 +454,7 @@ export class Database {
                     delete this.mockStore['items'][itemId];
                 }
                 if (this.mockStore['entries']) {
-                    const entriesToDelete = Object.values(this.mockStore['entries'])
-                        .filter(e => e.cellKey && (e.cellKey.startsWith(`${itemId}_`) || e.cellKey.endsWith(`_${itemId}`)));
+                    const entriesToDelete = Object.values(this.mockStore['entries']).filter(e => e.itemId === itemId || (e.cellKey && (e.cellKey.startsWith(`${itemId}_`) || e.cellKey.endsWith(`_${itemId}`))));
                     entriesToDelete.forEach(e => {
                         delete this.mockStore['entries'][e.id];
                     });
@@ -475,7 +474,7 @@ export class Database {
                 req.onsuccess = (e) => {
                     const entries = e.target.result || [];
                     entries.forEach(entry => {
-                        if (entry.cellKey && (entry.cellKey.startsWith(`${itemId}_`) || entry.cellKey.endsWith(`_${itemId}`))) {
+                        if (entry.itemId === itemId || (entry.cellKey && (entry.cellKey.startsWith(`${itemId}_`) || entry.cellKey.endsWith(`_${itemId}`)))) {
                             entryStore.delete(entry.id);
                         }
                     });
@@ -708,9 +707,9 @@ export class ItemManager {
             await this.db.deleteItemWithEntries(id);
             this.items = this.items.filter(i => i.id !== id);
 
-            const entriesToDel = window.app?.entries?.entries?.filter(e => e.cellKey && (e.cellKey.startsWith(`${id}_`) || e.cellKey.endsWith(`_${id}`))) || [];
+            const entriesToDel = window.app?.entries?.entries?.filter(e => e.itemId === id || (e.cellKey && (e.cellKey.startsWith(`${id}_`) || e.cellKey.endsWith(`_${id}`)))) || [];
             if (window.app && window.app.entries) {
-                window.app.entries.entries = window.app.entries.entries.filter(e => !(e.cellKey && (e.cellKey.startsWith(`${id}_`) || e.cellKey.endsWith(`_${id}`))));
+                window.app.entries.entries = window.app.entries.entries.filter(e => !(e.itemId === id || (e.cellKey && (e.cellKey.startsWith(`${id}_`) || e.cellKey.endsWith(`_${id}`)))));
             }
 
             // Push changes
@@ -808,7 +807,22 @@ export class EntryManager {
     
     async load() { 
         try {
-            this.entries = await this.db.getAll('entries');
+            const data = await this.db.getAll('entries');
+            // Normalize cellKey to explicit itemId and month fields
+            data.forEach(e => {
+                if (e.cellKey && (!e.itemId || !e.month)) {
+                    const parts = e.cellKey.split('_');
+                    let tempItemId = parts[0];
+                    let tempMonth = parts[1];
+                    if (!/^[0-9]+$/.test(tempItemId) && parts.length >= 2 && /^[0-9]{4}-[0-9]{2}$/.test(parts[0])) {
+                        tempMonth = parts[0];
+                        tempItemId = parts[1];
+                    }
+                    if (!e.itemId) e.itemId = tempItemId;
+                    if (!e.month) e.month = tempMonth;
+                }
+            });
+            this.entries = data;
         } catch (e) {
             console.error('[EntryManager] Betöltési hiba:', e);
             // queue clear removed
@@ -824,6 +838,21 @@ export class EntryManager {
         try {
             if (!entry.id) entry.id = generateUUID();
             if (!entry.updated_at) entry.updated_at = new Date().toISOString();
+
+            // Explicit field generation
+            if (entry.itemId && entry.month && !entry.cellKey) {
+                entry.cellKey = `${entry.itemId}_${entry.month}_${Date.now()}`;
+            } else if (entry.cellKey && (!entry.itemId || !entry.month)) {
+                const parts = entry.cellKey.split('_');
+                let tempItemId = parts[0];
+                let tempMonth = parts[1];
+                if (!/^[0-9]+$/.test(tempItemId) && parts.length >= 2 && /^[0-9]{4}-[0-9]{2}$/.test(parts[0])) {
+                    tempMonth = parts[0];
+                    tempItemId = parts[1];
+                }
+                if (!entry.itemId) entry.itemId = tempItemId;
+                if (!entry.month) entry.month = tempMonth;
+            }
             await this.db.save('entries', entry);
 
             const idx = this.entries.findIndex(e => e.id === entry.id);

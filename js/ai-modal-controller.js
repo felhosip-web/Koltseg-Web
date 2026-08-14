@@ -350,6 +350,8 @@ export class AiModalController {
 
             await this.app.entries.saveEntry({
                 cellKey,
+                itemId: categoryId,
+                month: data.month,
                 amount: data.amount,
                 currency: data.currency,
                 paymentMethod: data.paymentMethod,
