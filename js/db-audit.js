@@ -1,5 +1,7 @@
 import { generateUUID } from './uuid-utils.js';
 // js/db-audit.js - IndexedDB Audit & Maintenance Tool (v4.0)
+import { parseCellKey, buildCellKey } from './utils/cell-key-utils.js';
+
 export class DatabaseAudit {
     constructor(app) {
         this.app = app;
@@ -46,22 +48,9 @@ export class DatabaseAudit {
             if (storeName === 'entries' && count > 0) {
                 const cellMap = new Map();
                 data.forEach(e => {
-
-                    let key = null;
-                    if (e.itemId && e.month) {
-                        key = `${e.itemId}_${e.month}`;
-                    } else if (e.cellKey) {
-                        const parts = e.cellKey.split('_');
-                        if (parts.length >= 2) {
-                            if (/^[0-9]{4}-[0-9]{2}$/.test(parts[0])) {
-                                key = `${parts[1]}_${parts[0]}`;
-                            } else {
-                                key = `${parts[0]}_${parts[1]}`;
-                            }
-                        }
-                    }
-
-                    if (key) {
+                    const parsed = parseCellKey(e);
+                    if (parsed.itemId && parsed.month) {
+                        const key = `${parsed.itemId}_${parsed.month}`;
                         cellMap.set(key, (cellMap.get(key) || 0) + 1);
                     }
                 });
@@ -103,20 +92,8 @@ export class DatabaseAudit {
 
         let orphans = 0;
         entries.forEach(e => {
-            let itemId = e.itemId;
-            let month = e.month;
-            if (!itemId || !month) {
-                if (!e.cellKey) return;
-                const parts = e.cellKey.split('_');
-                let itemIdStr = parts[0];
-                month = parts[1];
-                if (!/^[0-9]+$/.test(itemIdStr) && parts.length >= 2 && /^[0-9]{4}-[0-9]{2}$/.test(parts[0])) {
-                    month = parts[0];
-                    itemIdStr = parts[1];
-                }
-                itemId = itemId || itemIdStr;
-            }
-            if (!itemIds.has(itemId) || !monthSet.has(month)) {
+            const parsed = parseCellKey(e);
+            if (!parsed.itemId || !parsed.month || !itemIds.has(parsed.itemId) || !monthSet.has(parsed.month)) {
                 orphans++;
             }
         });
@@ -206,15 +183,10 @@ export class DatabaseAudit {
                 let needsMigration = false;
 
                 if (!itemId || !month) {
-                    if (!entry.cellKey) continue;
-                    const parts = entry.cellKey.split('_');
-                    let itemIdStr = parts[0];
-                    month = parts[1];
-                    if (!/^[0-9]+$/.test(itemIdStr) && parts.length >= 2 && /^[0-9]{4}-[0-9]{2}$/.test(parts[0])) {
-                        month = parts[0];
-                        itemIdStr = parts[1];
-                    }
-                    itemId = itemId || itemIdStr;
+                    const parsed = parseCellKey(entry);
+                    itemId = parsed.itemId;
+                    month = parsed.month;
+                    if (!itemId || !month) continue; // Unfixable entry
                     needsMigration = true;
                 }
 
@@ -245,8 +217,10 @@ export class DatabaseAudit {
                         // Ha van "Egyéb", mentsük oda az orphanokat
                         entry.itemId = egyebItem.id;
                         if (entry.cellKey) {
+                             // Assuming cellKey ends with timestamp if any
                              const parts = entry.cellKey.split('_');
-                             entry.cellKey = `${egyebItem.id}_${month}_${parts.slice(2).join('_')}`;
+                             const timestamp = parts.length >= 3 ? parts[parts.length - 1] : undefined;
+                             entry.cellKey = buildCellKey(egyebItem.id, month, timestamp);
                         }
                         entry.updated_at = new Date().toISOString();
                         await this.app.db.save('entries', entry);

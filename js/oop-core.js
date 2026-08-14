@@ -1,6 +1,7 @@
 // js/oop-core.js - OOP HMI Core Infrastruktúra v5.0 (UUID-alapú IndexedDB)
 import { generateUUID } from './uuid-utils.js';
 import { useAppStore } from './store.js';
+import { parseCellKey, buildCellKey } from './utils/cell-key-utils.js';
 export class SecurityManager {
     static async generateChecksum(obj) {
         const { checksum, ...cleanObj } = obj;
@@ -880,15 +881,9 @@ export class EntryManager {
             // Normalize cellKey to explicit itemId and month fields
             data.forEach(e => {
                 if (e.cellKey && (!e.itemId || !e.month)) {
-                    const parts = e.cellKey.split('_');
-                    let tempItemId = parts[0];
-                    let tempMonth = parts[1];
-                    if (!/^[0-9]+$/.test(tempItemId) && parts.length >= 2 && /^[0-9]{4}-[0-9]{2}$/.test(parts[0])) {
-                        tempMonth = parts[0];
-                        tempItemId = parts[1];
-                    }
-                    if (!e.itemId) e.itemId = tempItemId;
-                    if (!e.month) e.month = tempMonth;
+                    const parsed = parseCellKey(e);
+                    if (!e.itemId) e.itemId = parsed.itemId;
+                    if (!e.month) e.month = parsed.month;
                 }
             });
             this.entries = data;

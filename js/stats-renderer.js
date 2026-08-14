@@ -1,3 +1,5 @@
+import { parseCellKey } from './utils/cell-key-utils.js';
+
 export class StatsRenderer {
     constructor(app) {
         this.app = app;
@@ -68,15 +70,9 @@ export class StatsRenderer {
         const totalCells = items.length * months.length;
         const entryBaseKeys = new Set();
         entries.forEach(e => {
-            if (!e.cellKey) return;
-            const match = e.cellKey.match(/^(.+?_\d{4}-\d{2})/);
-            if (match) {
-                entryBaseKeys.add(match[1]);
-            } else {
-                const parts = e.cellKey.split('_');
-                if (parts.length >= 2) {
-                    entryBaseKeys.add(`${parts[0]}_${parts[1]}`);
-                }
+            const { itemId, month } = parseCellKey(e);
+            if (itemId && month) {
+                entryBaseKeys.add(`${itemId}_${month}`);
             }
         });
 

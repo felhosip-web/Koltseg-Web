@@ -1,5 +1,6 @@
 import { db } from '../db.js';
 import { NameDays } from '../utils/namedays.js';
+import { parseCellKey } from '../utils/cell-key-utils.js';
 
 export class DashboardV2 {
     constructor(app) {
@@ -202,6 +203,7 @@ export class DashboardV2 {
                         parsedTime = new Date(t.timestamp).getTime();
                     }
                     if (isNaN(parsedTime) && t.cellKey && typeof t.cellKey === 'string') {
+                        // The last part is no longer guaranteed to be a timestamp with explicit fields, but we try anyway.
                         const parts = t.cellKey.split('_');
                         if (parts.length >= 3) {
                             const lastPart = parts[parts.length - 1];
@@ -210,9 +212,9 @@ export class DashboardV2 {
                             }
                         }
                         if (isNaN(parsedTime)) {
-                            const monthPart = parts.find(p => p.match(/^\d{4}-\d{2}$/));
-                            if (monthPart) {
-                                parsedTime = new Date(monthPart).getTime();
+                            const { month } = parseCellKey(t);
+                            if (month) {
+                                parsedTime = new Date(month).getTime();
                             }
                         }
                     }

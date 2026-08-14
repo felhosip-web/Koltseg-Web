@@ -5,6 +5,8 @@ import { DataSyncController } from './data-sync-controller.js';
 import { DataExportController } from './data-export-controller.js';
 import { DataMaintenanceController } from './data-maintenance-controller.js';
 
+import { parseCellKey } from './utils/cell-key-utils.js';
+
 export class UIController {
     constructor(app) {
         this.app = app;
@@ -958,7 +960,7 @@ _setupSyncQueueBadge() {
         const itemId = itemIdStr;
         if (!itemId) return;
         const allEntries = this.app.entries.entries;
-        const associatedEntries = allEntries.filter(e => e.cellKey && e.cellKey.startsWith(`${itemId}_`));
+        const associatedEntries = allEntries.filter(e => parseCellKey(e).itemId === itemId);
 
         let confirmed = false;
         try {
@@ -1007,9 +1009,7 @@ _setupSyncQueueBadge() {
         if (!month) return;
         const allEntries = this.app.entries.entries;
         const associatedEntries = allEntries.filter(e => {
-            if (!e.cellKey) return false;
-            const parts = e.cellKey.split('_');
-            return parts[1] === month;
+            return parseCellKey(e).month === month;
         });
 
         const confirmed = await this.app.hmiNotif.showConfirm({

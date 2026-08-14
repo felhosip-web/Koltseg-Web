@@ -1,3 +1,5 @@
+import { parseCellKey } from './utils/cell-key-utils.js';
+
 export class DashboardRenderer {
     constructor(app) {
         this.app = app;
@@ -23,7 +25,7 @@ export class DashboardRenderer {
             const amount = e.currency === 'EUR' ? e.amount * eurRate : e.amount;
             total += amount;
 
-            const entryMonth = e.cellKey?.substring(0, 7);
+            const entryMonth = parseCellKey(e).month;
             if (entryMonth === currentMonth) {
                 monthlyTotal += amount;
             }
@@ -49,7 +51,7 @@ export class DashboardRenderer {
             const amount = e.amount || 0;
             incomingTotal += amount;
 
-            const entryMonth = e.date?.substring(0, 7);
+            const entryMonth = e.date?.substring(0, 7); // this one uses e.date, keeping it
             if (entryMonth === currentMonth) {
                 incomingMonthly += amount;
             }
@@ -153,7 +155,7 @@ export class DashboardRenderer {
         const monthlyData = {};
 
         entries.forEach(e => {
-            const month = e.cellKey?.substring(0, 7);
+            const month = parseCellKey(e).month;
             if (!month) return;
             const amount = e.currency === 'EUR' ? e.amount * eurRate : e.amount;
             if (!monthlyData[month]) monthlyData[month] = 0;
@@ -312,7 +314,7 @@ export class DashboardRenderer {
         const currentMonth = now.format('YYYY-MM');
         let monthlyTotal = 0;
         entries.forEach(e => {
-            const month = e.cellKey?.substring(0, 7);
+            const month = parseCellKey(e).month;
             if (month === currentMonth) {
                 monthlyTotal += e.currency === 'EUR' ? e.amount * eurRate : e.amount;
             }
