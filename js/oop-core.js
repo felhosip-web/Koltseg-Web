@@ -42,6 +42,19 @@ export class SecurityManager {
 }
 
 export class Database {
+
+    _getTempItemId(entry) {
+        let tempItemId = entry.itemId;
+        if (!tempItemId && entry.cellKey) {
+             const parts = entry.cellKey.split('_');
+             tempItemId = parts[0];
+             if (!/^[0-9]+$/.test(tempItemId) && parts.length >= 2 && /^[0-9]{4}-[0-9]{2}$/.test(parts[0])) {
+                  tempItemId = parts[1];
+             }
+        }
+        return tempItemId;
+    }
+
     constructor(dbName = 'KoltsegNyilvantarto', version = 11) {  // ← verzió 11: UUID migráció
         let finalDbName = dbName;
         try {
@@ -455,14 +468,7 @@ export class Database {
                 }
                 if (this.mockStore['entries']) {
                     const entriesToDelete = Object.values(this.mockStore['entries']).filter(e => {
-                        let tempItemId = e.itemId;
-                        if (!tempItemId && e.cellKey) {
-                             const parts = e.cellKey.split('_');
-                             tempItemId = parts[0];
-                             if (!/^[0-9]+$/.test(tempItemId) && parts.length >= 2 && /^[0-9]{4}-[0-9]{2}$/.test(parts[0])) {
-                                  tempItemId = parts[1];
-                             }
-                        }
+                        let tempItemId = this._getTempItemId(e);
                         return tempItemId === itemId || (e.cellKey && (e.cellKey.startsWith(`${itemId}_`) || e.cellKey.endsWith(`_${itemId}`)));
                     });
                     entriesToDelete.forEach(e => {
@@ -484,14 +490,7 @@ export class Database {
                 req.onsuccess = (e) => {
                     const entries = e.target.result || [];
                     entries.forEach(entry => {
-                        let tempItemId = entry.itemId;
-                        if (!tempItemId && entry.cellKey) {
-                             const parts = entry.cellKey.split('_');
-                             tempItemId = parts[0];
-                             if (!/^[0-9]+$/.test(tempItemId) && parts.length >= 2 && /^[0-9]{4}-[0-9]{2}$/.test(parts[0])) {
-                                  tempItemId = parts[1];
-                             }
-                        }
+                        let tempItemId = this._getTempItemId(entry);
                         if (tempItemId === itemId || (entry.cellKey && (entry.cellKey.startsWith(`${itemId}_`) || entry.cellKey.endsWith(`_${itemId}`)))) {
                             entryStore.delete(entry.id);
                         }
@@ -664,6 +663,19 @@ export class ReminderManager {
 // ==================== ITEM, MONTH, ENTRY MANAGER ====================
 
 export class ItemManager {
+
+    _getTempItemId(entry) {
+        let tempItemId = entry.itemId;
+        if (!tempItemId && entry.cellKey) {
+             const parts = entry.cellKey.split('_');
+             tempItemId = parts[0];
+             if (!/^[0-9]+$/.test(tempItemId) && parts.length >= 2 && /^[0-9]{4}-[0-9]{2}$/.test(parts[0])) {
+                  tempItemId = parts[1];
+             }
+        }
+        return tempItemId;
+    }
+
     constructor(db, syncService) { 
         this.db = db; 
         this.syncService = syncService;
@@ -1469,7 +1481,7 @@ export class IncomingManager {
         senderSet.forEach(name => {
             if (!existingSenders.has(name)) {
                 const sender = { 
-                    id: Date.now() + '_' + Math.random().toString(36).substr(2, 6) + '_' + name, 
+                    id: generateUUID(),
                     name, 
                     createdAt: new Date().toISOString() 
                 };

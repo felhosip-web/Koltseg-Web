@@ -203,6 +203,8 @@ export class DatabaseAudit {
             for (const entry of entries) {
                 let itemId = entry.itemId;
                 let month = entry.month;
+                let needsMigration = false;
+
                 if (!itemId || !month) {
                     if (!entry.cellKey) continue;
                     const parts = entry.cellKey.split('_');
@@ -213,6 +215,18 @@ export class DatabaseAudit {
                         itemIdStr = parts[1];
                     }
                     itemId = itemId || itemIdStr;
+                    needsMigration = true;
+                }
+
+                // Persistent migration for legacy cellKey entries
+                if (needsMigration && itemId && month) {
+                    entry.itemId = itemId;
+                    entry.month = month;
+                    entry.updated_at = new Date().toISOString();
+                    await this.app.db.save('entries', entry);
+                    if (this.app.syncService) {
+                         await this.app.syncService.push('entries', entry);
+                    }
                 }
                 
                 // Ha a hónap hiányzik, hozzuk létre
@@ -225,7 +239,7 @@ export class DatabaseAudit {
                 // Ha a kategória hiányzik, hozzuk létre
                 if (itemId && !itemIds.has(itemId) && (typeof itemId === 'string' && itemId.length > 0)) {
                     // Keresés más kategóriákban, esetleg valamilyen "Egyéb" kategóriában, ahelyett hogy mindenhol újat hozunk létre
-                    const egyebItem = items.find(i => i.name.toLowerCase().includes('egyéb') || i.name.toLowerCase() === 'egyeb');
+                    const egyebItem = items.find(i => i && i.name && (i.name.toLowerCase().includes('egyéb') || i.name.toLowerCase() === 'egyeb'));
 
                     if (egyebItem) {
                         // Ha van "Egyéb", mentsük oda az orphanokat
