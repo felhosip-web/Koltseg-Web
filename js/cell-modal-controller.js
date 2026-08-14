@@ -271,6 +271,8 @@ export class CellModalController {
             entryData = {
                 id: this.editingEntryId,
                 cellKey: oldEntry ? oldEntry.cellKey : `${this.currentCellBaseKey}_${Date.now()}`,
+                itemId: this.currentCellBaseKey.split('_')[0],
+                month: this.currentCellBaseKey.split('_')[1],
                 amount,
                 currency,
                 paymentMethod,
@@ -286,6 +288,8 @@ export class CellModalController {
             // Új tétel
             entryData = {
                 cellKey: `${this.currentCellBaseKey}_${Date.now()}`,
+                itemId: this.currentCellBaseKey.split('_')[0],
+                month: this.currentCellBaseKey.split('_')[1],
                 amount,
                 currency,
                 paymentMethod,

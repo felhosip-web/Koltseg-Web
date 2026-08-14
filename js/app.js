@@ -2174,6 +2174,8 @@ CREATE POLICY "Mindenki elérheti" ON months FOR ALL USING (true) WITH CHECK (tr
 CREATE TABLE IF NOT EXISTS entries (
     id TEXT PRIMARY KEY,
     "cellKey" TEXT NOT NULL,
+    "itemId" TEXT,
+    month TEXT,
     amount NUMERIC NOT NULL,
     currency TEXT DEFAULT 'HUF',
     "paymentMethod" TEXT DEFAULT 'Kártya',

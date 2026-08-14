@@ -408,6 +408,8 @@ return {
 
                             const expenseEntry = {
                                 cellKey: entryCellKey,
+                                itemId: cellBaseKey.split('_')[0],
+                                month: cellBaseKey.split('_')[1],
                                 amount: totalCost,
                                 currency: 'HUF',
                                 paymentMethod: paymentMethod,

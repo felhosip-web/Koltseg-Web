@@ -167,6 +167,8 @@ export class RemindersRenderer {
 
                             const entryData = {
                                 cellKey,
+                                itemId: selectedCat.id,
+                                month: month,
                                 amount: rem.amount,
                                 currency: rem.currency || 'HUF',
                                 paymentMethod: 'Kártya',
