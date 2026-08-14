@@ -218,7 +218,7 @@ export class DatabaseAudit {
                         entry.itemId = egyebItem.id;
                         if (entry.cellKey) {
                              // Assuming cellKey ends with timestamp if any
-                             const parts = entry.cellKey.split('_');
+                             const parts = typeof entry.cellKey === 'string' ? entry.cellKey.split('_') : [];
                              const timestamp = parts.length >= 3 ? parts[parts.length - 1] : undefined;
                              entry.cellKey = buildCellKey(egyebItem.id, month, timestamp);
                         }

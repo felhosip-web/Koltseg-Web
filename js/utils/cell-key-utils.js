@@ -18,17 +18,15 @@
 export function parseCellKey(entryOrCellKey) {
     if (!entryOrCellKey) return { itemId: null, month: null };
 
-    // If it's an object, check for explicit fields first
+    // If it's an object, prioritize explicit fields but allow fallback for missing ones
     if (typeof entryOrCellKey === 'object') {
-        if (entryOrCellKey.itemId && entryOrCellKey.month) {
-            return { itemId: entryOrCellKey.itemId, month: entryOrCellKey.month };
-        }
-
-        // Fallback to parsing its cellKey
-        if (entryOrCellKey.cellKey) {
-            return parseCellKeyString(entryOrCellKey.cellKey);
-        }
-        return { itemId: null, month: null };
+        const parsed = (typeof entryOrCellKey.cellKey === 'string')
+            ? parseCellKeyString(entryOrCellKey.cellKey)
+            : { itemId: null, month: null };
+        return {
+            itemId: entryOrCellKey.itemId || parsed.itemId,
+            month: entryOrCellKey.month || parsed.month
+        };
     }
 
     // If it's a string, parse it
@@ -40,6 +38,8 @@ export function parseCellKey(entryOrCellKey) {
 }
 
 function parseCellKeyString(cellKey) {
+    if (typeof cellKey !== 'string') return { itemId: null, month: null };
+
     const parts = cellKey.split('_');
     if (parts.length < 2) return { itemId: null, month: null };
 
