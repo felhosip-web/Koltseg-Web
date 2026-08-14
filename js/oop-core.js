@@ -433,7 +433,7 @@ export class Database {
     }
 
     async delete(storeName, key) {
-        const syncService = window.app?.syncService || window.app?.syncManager;
+        const syncService = this.syncService || window.app?.syncService || window.app?.syncManager;
         const isMuted = syncService?.isMuted || syncService?.service?.isMuted;
 
         // Track deletion in tombstone table
@@ -480,19 +480,35 @@ export class Database {
             if (!this.db) return reject(new Error('Nincs adatbázis kapcsolat!'));
 
             try {
-                const tx = this.db.transaction(['items', 'entries'], 'readwrite');
+                const tx = this.db.transaction(['items', 'entries', 'deleted_records'], 'readwrite');
                 const itemStore = tx.objectStore('items');
                 const entryStore = tx.objectStore('entries');
+                const deletedStore = tx.objectStore('deleted_records');
 
                 itemStore.delete(itemId);
 
                 const req = entryStore.getAll();
                 req.onsuccess = (e) => {
                     const entries = e.target.result || [];
+                    const syncService = this.syncService || window.app?.syncService || window.app?.syncManager;
+                    const isMuted = syncService?.isMuted || syncService?.service?.isMuted;
+
                     entries.forEach(entry => {
                         let tempItemId = this._getTempItemId(entry);
                         if (tempItemId === itemId || (entry.cellKey && (entry.cellKey.startsWith(`${itemId}_`) || entry.cellKey.endsWith(`_${itemId}`)))) {
                             entryStore.delete(entry.id);
+
+                            // Tombstone rögzítése
+                            if (!isMuted) {
+                                const deletedRecord = {
+                                    id: `entries_${entry.id}`,
+                                    record_id: String(entry.id),
+                                    table_name: 'entries',
+                                    deleted_at: new Date().toISOString(),
+                                    updated_at: new Date().toISOString()
+                                };
+                                deletedStore.put(deletedRecord);
+                            }
                         }
                     });
                 };
@@ -737,7 +753,7 @@ export class ItemManager {
             await this.db.deleteItemWithEntries(id);
             this.items = this.items.filter(i => i.id !== id);
 
-            const entriesToDel = window.app?.entries?.entries?.filter(e => {
+            const entriesToDel = (this.syncService?._app?.entries?.entries || window.app?.entries?.entries)?.filter(e => {
                 let tempItemId = e.itemId;
                 if (!tempItemId && e.cellKey) {
                      const parts = e.cellKey.split('_');
@@ -748,8 +764,9 @@ export class ItemManager {
                 }
                 return tempItemId === id || (e.cellKey && (e.cellKey.startsWith(`${id}_`) || e.cellKey.endsWith(`_${id}`)));
             }) || [];
-            if (window.app && window.app.entries) {
-                window.app.entries.entries = window.app.entries.entries.filter(e => {
+            const appEntries = this.syncService?._app?.entries || window.app?.entries;
+            if (appEntries) {
+                appEntries.entries = appEntries.entries.filter(e => {
                 let tempItemId = e.itemId;
                 if (!tempItemId && e.cellKey) {
                      const parts = e.cellKey.split('_');
@@ -767,17 +784,7 @@ export class ItemManager {
             for (const entry of entriesToDel) {
                 await this.syncService.push('entries', entry.id, true);
 
-                // Track in tombstone
-                if (this.db) {
-                     const deletedRecord = {
-                        id: `entries_${entry.id}`,
-                        record_id: String(entry.id),
-                        table_name: 'entries',
-                        deleted_at: new Date().toISOString(),
-                        updated_at: new Date().toISOString()
-                    };
-                    await this.db.save('deleted_records', deletedRecord);
-                }
+                // Track in tombstone (már a db.deleteItemWithEntries kezeli belül)
             }
 
         } catch (e) {

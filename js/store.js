@@ -38,7 +38,8 @@ export function getBootstrapping() {
 // Segédfüggvény a Zustand állapotváltozások IndexedDB-be való szinkronizálására
 async function syncTableToIndexedDB(table, newArray, oldArray, keyField = 'id') {
     if (isBootstrapping) return;
-    if (!window.app || !window.app.db) {
+    const db = window.__globalDb || window.app?.db;
+    if (!db) {
         console.warn(`[STORE AUTO-SAVE] Nem sikerült menteni a(z) ${table} táblába: nincs adatbázis kapcsolat.`);
         return;
     }
@@ -59,7 +60,7 @@ async function syncTableToIndexedDB(table, newArray, oldArray, keyField = 'id') 
             const key = typeof item === 'object' && item !== null ? item[keyField] : item;
             if (key !== undefined && key !== null && !newMap.has(key)) {
                 console.log(`[STORE AUTO-SAVE] 🗑️ Automatikus törlés IndexedDB-ből: ${table} -> ${key}`);
-                await window.app.db._directDelete(table, key);
+                await db._directDelete(table, key);
             }
         }
 
@@ -74,7 +75,7 @@ async function syncTableToIndexedDB(table, newArray, oldArray, keyField = 'id') 
 
                 if (!oldItem || JSON.stringify(itemNorm) !== JSON.stringify(oldItem)) {
                     console.log(`[STORE AUTO-SAVE] 💾 Automatikus mentés IndexedDB-be: ${table} -> ${key}`);
-                    await window.app.db.save(table, itemNorm);
+                    await db.save(table, itemNorm);
                 }
             }
         }
@@ -123,3 +124,7 @@ useAppStore.subscribe(async (state, prevState) => {
         await syncTableToIndexedDB('works', state.works, prevState.works, 'id');
     }
 });
+
+export function setGlobalDb(db) {
+    window.__globalDb = db;
+}
