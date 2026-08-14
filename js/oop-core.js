@@ -487,6 +487,18 @@ export class Database {
 
                 itemStore.delete(itemId);
 
+                const syncService = this.syncService || window.app?.syncService || window.app?.syncManager;
+                const isMuted = syncService?.isMuted || syncService?.service?.isMuted;
+                if (!isMuted) {
+                    deletedStore.put({
+                        id: `items_${itemId}`,
+                        record_id: String(itemId),
+                        table_name: 'items',
+                        deleted_at: new Date().toISOString(),
+                        updated_at: new Date().toISOString()
+                    });
+                }
+
                 const req = entryStore.getAll();
                 req.onsuccess = (e) => {
                     const entries = e.target.result || [];

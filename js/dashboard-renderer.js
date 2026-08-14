@@ -96,7 +96,7 @@ export class DashboardRenderer {
         // === 9. TREND SZÖVEG ===
         const monthlyAvg = this._calculateMonthlyAvg();
         const trendEl = document.getElementById('dashTotalTrend');
-        if (trendEl && monthlyAvg > 0) {
+        if (trendEl && monthlyAvg > 0 && months.length > 0) {
             const diff = ((total - monthlyAvg * months.length) / (monthlyAvg * months.length) * 100);
             if (Math.abs(diff) > 1) {
                 trendEl.textContent = `${diff > 0 ? '↗︎' : '↘︎'} ${Math.abs(diff).toFixed(1)}% az átlaghoz képest`;
@@ -129,6 +129,17 @@ export class DashboardRenderer {
         this._setElementText('dashEntryCount', entries.length.toString());
         this._setElementText('dashMonthCount', months.length.toString());
         this._setElementText('dashItemCount', items.length.toString());
+    }
+
+
+    _escapeHtml(str) {
+        if (!str) return '';
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
     }
 
     _setElementText(id, text) {
@@ -254,7 +265,7 @@ export class DashboardRenderer {
             <div class="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
                 <div class="flex items-center gap-3 min-w-0">
                     <span class="text-lg flex-shrink-0">${icons[index] || '📌'}</span>
-                    <span class="text-sm font-medium text-gray-700 truncate">${name}</span>
+                    <span class="text-sm font-medium text-gray-700 truncate">${this._escapeHtml(name)}</span>
                 </div>
                 <div class="flex items-center gap-3 flex-shrink-0">
                     <span class="text-sm font-bold text-gray-800">${amount.toLocaleString('hu-HU')} Ft</span>
@@ -338,8 +349,8 @@ export class DashboardRenderer {
         } else {
             container.innerHTML = notifications.map(n => `
                 <div class="flex items-center gap-3 text-sm p-2 rounded-xl ${n.type === 'danger' ? 'bg-red-50 text-red-700' : n.type === 'warning' ? 'bg-amber-50 text-amber-700' : 'bg-blue-50 text-blue-700'}">
-                    <span>${n.icon}</span>
-                    <span>${n.text}</span>
+                    <span>${this._escapeHtml(n.icon)}</span>
+                    <span>${this._escapeHtml(n.text)}</span>
                 </div>
             `).join('');
         }

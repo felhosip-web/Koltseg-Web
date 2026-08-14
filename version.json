@@ -1,8 +1,15 @@
 {
-  "version": "6.1.6",
-  "build": "2026-08-14T14:05:29.490Z",
+  "version": "6.1.7",
+  "build": "2026-08-14T16:44:04.131Z",
   "release": "stable",
   "changelog": [
+    {
+      "version": "6.1.7",
+      "date": "2026-08-14",
+      "changes": [
+        "Kódminőség javítása és CodeRabbit észrevételek orvoslása"
+      ]
+    },
     {
       "version": "6.1.6",
       "date": "2026-08-14",

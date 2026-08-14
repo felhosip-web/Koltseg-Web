@@ -5,14 +5,27 @@
 // Biztonságos console monkey-patch normál függvényként definálva
 export function setupDebugConsole() {
     if (window.__debugConsolePatched) return;
+
+    // Csak ha a debug mód kifejezetten engedélyezett
+    if (localStorage.getItem('debug_mode') !== 'true') return;
+
     window.__debugConsolePatched = true;
+
+    const serializeArgs = (args) => {
+        return args.map(arg => {
+            if (typeof arg === 'object' && arg !== null) {
+                return '[Object]';
+            }
+            return String(arg);
+        }).join(' ');
+    };
 
     const originalLog = console.log;
     console.log = function(...args) {
         originalLog.apply(console, args);
         try {
             const logs = JSON.parse(localStorage.getItem('debug_logs') || '[]');
-            logs.push(new Date().toLocaleTimeString('hu-HU') + ' ' + args.join(' '));
+            logs.push(new Date().toLocaleTimeString('hu-HU') + ' ' + serializeArgs(args));
             localStorage.setItem('debug_logs', JSON.stringify(logs.slice(-100)));
         } catch(e) {}
     };
@@ -22,7 +35,7 @@ export function setupDebugConsole() {
         originalError.apply(console, args);
         try {
             const logs = JSON.parse(localStorage.getItem('debug_logs') || '[]');
-            logs.push('❌ ' + new Date().toLocaleTimeString('hu-HU') + ' ' + args.join(' '));
+            logs.push('❌ ' + new Date().toLocaleTimeString('hu-HU') + ' ' + serializeArgs(args));
             localStorage.setItem('debug_logs', JSON.stringify(logs.slice(-100)));
         } catch(e) {}
     };

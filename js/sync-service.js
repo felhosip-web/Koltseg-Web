@@ -274,7 +274,7 @@ export class SyncService {
         let { data } = item;
         
         // CloudSync használata a tényleges művelethez
-        if (!this.cloud.client) {
+        if (!this.cloud?.client) {
             return { success: false, error: 'Nincs felhő kapcsolat' };
         }
 
@@ -291,9 +291,9 @@ export class SyncService {
 
         try {
             if (operation === 'delete') {
-                await this.cloud.delete(table, data, customKey);
+                await this.cloud?.delete(table, data, customKey);
             } else {
-                await this.cloud.upsert(table, data, customKey);
+                await this.cloud?.upsert(table, data, customKey);
             }
             return { success: true };
         } catch (e) {
@@ -348,7 +348,7 @@ export class SyncService {
             return;
         }
 
-        if (!this.cloud.client || !this.config.useSupabase) {
+        if (!this.cloud?.client || !this.config.useSupabase) {
             // Ha nincs felhő, queue-ba tesszük
             const operation = isDelete ? 'delete' : 'update';
             if (!skipQueueOnError) this.addToQueue(operation, data, storeName, 'normal', customKey);
@@ -357,9 +357,9 @@ export class SyncService {
 
         try {
             if (isDelete) {
-                await this.cloud.delete(storeName, data, customKey);
+                await this.cloud?.delete(storeName, data, customKey);
             } else {
-                await this.cloud.upsert(storeName, data, customKey);
+                await this.cloud?.upsert(storeName, data, customKey);
             }
             console.log(`[SYNC] ${storeName} push successful`);
         } catch (err) {
@@ -376,7 +376,7 @@ export class SyncService {
      * Pull művelet (letöltés felhőből) - párhuzamosítva és timeout-tal védve
      */
     async pull(storeName) {
-        if (!this.cloud.client || !this.config.useSupabase) return [];
+        if (!this.cloud?.client || !this.config.useSupabase) return [];
         
         const withTimeout = (promise, ms = 4000) => {
             let timeoutId;
@@ -399,7 +399,7 @@ export class SyncService {
                 await Promise.all(
                     tables.map(async (table) => {
                         try {
-                            const data = await withTimeout(this.cloud.pull(table), 4000);
+                            const data = await withTimeout(this.cloud?.pull(table), 4000);
                             results[table] = data || [];
                         } catch (err) {
                             console.warn(`[SYNC] Pull hiba/időtúllépés a(z) ${table} táblánál:`, err);
@@ -409,7 +409,7 @@ export class SyncService {
                 );
                 return results;
             }
-            return await withTimeout(this.cloud.pull(storeName), 4000);
+            return await withTimeout(this.cloud?.pull(storeName), 4000);
         } catch (err) {
             console.warn(`[SYNC] Pull hiba a(z) ${storeName} táblánál:`, err);
             return [];
@@ -427,7 +427,7 @@ export class SyncService {
             return { status: 'already_running', message: 'Szinkronizáció már folyamatban van' };
         }
 
-        if (!this.config.useSupabase || !this.cloud.client) {
+        if (!this.config.useSupabase || !this.cloud?.client) {
             console.warn('[SYNC] Felhő nincs konfigurálva.');
             return { status: 'error', message: 'Felhő nincs konfigurálva' };
         }
@@ -578,7 +578,7 @@ export class SyncService {
                     settings_updated_at: localStorage.getItem('settings_updated_at') || '1970-01-01T00:00:00.000Z'
                 };
                 
-                const cloudSettingsData = await this.cloud.pull('app_settings');
+                const cloudSettingsData = await this.cloud?.pull('app_settings');
                 const cloudSettingsRow = cloudSettingsData && cloudSettingsData.find(s => s.id === 'user_settings');
                 
                 let shouldPush = false;
@@ -622,7 +622,7 @@ export class SyncService {
                 }
                 
                 if (shouldPush) {
-                    await this.cloud.upsert('app_settings', {
+                    await this.cloud?.upsert('app_settings', {
                         id: 'user_settings',
                         settings_json: localSettings,
                         updated_at: localSettings.settings_updated_at === '1970-01-01T00:00:00.000Z' ? new Date().toISOString() : localSettings.settings_updated_at
@@ -968,7 +968,7 @@ export class SyncService {
         return {
             isSyncing: this.isSyncing,
             lastSyncTime: this.lastSyncTime,
-            hasCloud: !!this.cloud.client,
+            hasCloud: !!this.cloud?.client,
             useCloud: this.config.useSupabase,
             pendingChanges: this.offline?.getPendingCount?.() || 0,
             hasApp: !!app,
@@ -987,17 +987,17 @@ export class SyncService {
      * CloudSync újrainicializálása
      */
     reinit() {
-        this.cloud.init();
+        this.cloud?.init();
     }
 
     /**
      * Pusztán pull művelet (csak letöltés, merge nélkül)
      */
     async pullOnly(table) {
-        if (!this.cloud.client || !this.config.useSupabase) return [];
+        if (!this.cloud?.client || !this.config.useSupabase) return [];
         
         try {
-            const data = await this.cloud.select(table);
+            const data = await this.cloud?.select(table);
             return data;
         } catch (err) {
             console.warn(`[SYNC] Pull-only error from ${table}:`, err);
@@ -1015,10 +1015,10 @@ export class SyncService {
             return;
         }
 
-        if (!this.cloud.client || !this.config.useSupabase) return;
+        if (!this.cloud?.client || !this.config.useSupabase) return;
 
         try {
-            await this.cloud.upsert(table, data);
+            await this.cloud?.upsert(table, data);
             console.log(`[SYNC] Push-only ${table} successful`);
         } catch (err) {
             console.warn('[SYNC] Push-only error:', err);
