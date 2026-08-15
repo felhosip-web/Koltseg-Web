@@ -91,16 +91,25 @@ export class DatabaseAudit {
         const monthSet = new Set((await this.app.db.getAll('months')).map(m => m.month));
 
         let orphans = 0;
+        let badCellKeys = 0;
+        let missingExplicitFields = 0;
+
         entries.forEach(e => {
+            if (!e.itemId || !e.month) missingExplicitFields++;
             const parsed = parseCellKey(e);
-            if (!parsed.itemId || !parsed.month || !itemIds.has(parsed.itemId) || !monthSet.has(parsed.month)) {
+            if (!parsed.itemId || !parsed.month) {
+                badCellKeys++;
+                orphans++;
+            } else if (!itemIds.has(parsed.itemId) || !monthSet.has(parsed.month)) {
                 orphans++;
             }
         });
 
         this.diagnostics.consistency = {
             orphans,
-            status: orphans > 0 ? 'warning' : 'ok'
+            badCellKeys,
+            missingExplicitFields,
+            status: orphans > 0 || badCellKeys > 0 ? 'warning' : 'ok'
         };
 
         const incomings = await this.app.db.getAll('incomings');
@@ -253,15 +262,19 @@ export class DatabaseAudit {
 
 
             for (const inc of incomings) {
-                if (inc.sender && !senderNames.has(inc.sender)) {
-                    const newSender = {
-                        id: generateUUID(),
-                        name: inc.sender,
-                        updated_at: new Date().toISOString()
-                    };
-                    await this.app.db.save('incoming_senders', newSender);
-                    senderNames.add(inc.sender);
-                    repairedSenders++;
+                try {
+                    if (inc.sender && !senderNames.has(inc.sender)) {
+                        const newSender = {
+                            id: generateUUID(),
+                            name: inc.sender,
+                            updated_at: new Date().toISOString()
+                        };
+                        await this.app.db.save('incoming_senders', newSender);
+                        senderNames.add(inc.sender);
+                        repairedSenders++;
+                    }
+                } catch (err) {
+                    console.error('[DB-AUDIT] Error repairing sender for incoming:', inc, err);
                 }
             }
 
