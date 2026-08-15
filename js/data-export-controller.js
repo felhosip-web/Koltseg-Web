@@ -1,6 +1,8 @@
 // js/data-export-controller.js - Teljes Export funkciók (Excel, PDF, JSON)
 import { setBootstrapping } from './store.js';
 
+import { parseCellKey } from './utils/cell-key-utils.js';
+
 export class DataExportController {
     constructor(app) {
         this.app = app;
@@ -275,8 +277,10 @@ export class DataExportController {
         items.forEach(item => {
             const row = [item.name];
             months.forEach(month => {
-                const prefix = `${item.id}_${month}`;
-                const cellEntries = entries.filter(e => e.cellKey && e.cellKey.startsWith(prefix));
+                const cellEntries = entries.filter(e => {
+                    const parsed = parseCellKey(e);
+                    return parsed.itemId === item.id && parsed.month === month;
+                });
 
                 let huf = 0, eur = 0;
                 cellEntries.forEach(e => {
@@ -302,7 +306,8 @@ export class DataExportController {
             months.forEach(month => {
                 let sum = 0;
                 entries.forEach(e => {
-                    if (e.cellKey && e.cellKey.includes(`_${month}`) && e.paymentMethod === method) {
+                    const parsed = parseCellKey(e);
+                    if (parsed.month === month && e.paymentMethod === method) {
                         sum += e.currency === 'EUR' ? Math.round(e.amount * eurRate) : e.amount;
                     }
                 });
@@ -350,8 +355,10 @@ export class DataExportController {
             const row = [item.name];
 
             months.forEach(month => {
-                const cellBaseKey = `${item.id}_${month}`;
-                const cellEntries = entries.filter(e => e.cellKey && e.cellKey.startsWith(cellBaseKey));
+                const cellEntries = entries.filter(e => {
+                    const parsed = parseCellKey(e);
+                    return parsed.itemId === item.id && parsed.month === month;
+                });
 
                 let totalHUF = 0;
                 let totalEUR = 0;
@@ -391,7 +398,7 @@ export class DataExportController {
         months.forEach(month => {
             let monthHUF = 0, monthEUR = 0;
             entries.forEach(e => {
-                if (e.cellKey && e.cellKey.includes(`_${month}`)) {
+                if (parseCellKey(e).month === month) {
                     if (e.currency === 'EUR') monthEUR += e.amount;
                     else monthHUF += e.amount;
                 }
