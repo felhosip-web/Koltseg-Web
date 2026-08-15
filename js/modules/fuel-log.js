@@ -152,7 +152,7 @@ return {
             const avgConsEl = document.getElementById('fuelStatAvgCons');
             const logsListEl = document.getElementById('fuelLogsList');
 
-            let fuelLogs = JSON.parse(localStorage.getItem('plugin_fuel_logs') || '[]');
+            let fuelLogs = app.pluginStorage ? app.pluginStorage.getItems('plugin_fuel_logs') : JSON.parse(localStorage.getItem('plugin_fuel_logs') || '[]');
 
             const updatePlaceholders = () => {
                 if (fuelLogs.length > 0) {
@@ -274,8 +274,12 @@ return {
                         }
 
                         if (confirmed) {
-                            fuelLogs.splice(idx, 1);
-                            localStorage.setItem('plugin_fuel_logs', JSON.stringify(fuelLogs));
+                            const deletedItem = fuelLogs.splice(idx, 1)[0];
+                            if (app.pluginStorage && deletedItem) {
+                                app.pluginStorage.deleteItem('plugin_fuel_logs', deletedItem.id);
+                            } else {
+                                localStorage.setItem('plugin_fuel_logs', JSON.stringify(fuelLogs));
+                            }
                             renderStatsAndLogs();
                             notifier?.showToast('Tankolási rekord törölve!', 'info');
                         }
@@ -308,7 +312,7 @@ return {
 
                 const totalCost = Math.round(liters * price);
                 const newLog = {
-                    id: 'fuel_' + Date.now(),
+                    id: window.generateUUID ? window.generateUUID() : 'fuel_' + Date.now(),
                     odo,
                     liters,
                     price,
@@ -321,16 +325,10 @@ return {
                 };
 
                 fuelLogs.unshift(newLog);
-                localStorage.setItem('plugin_fuel_logs', JSON.stringify(fuelLogs));
-
-                // Supabase közvetlen upsert ha aktív
-                if (app.config?.useSupabase && app.cloud?.client) {
-                    try {
-                        await app.cloud.upsert('plugin_fuel_logs', newLog);
-                        console.log('[FUEL_LOG] Rekord feltöltve Supabase-be');
-                    } catch (e) {
-                        console.warn('[FUEL_LOG] Supabase mentési hiba (helyi mentés rendben):', e);
-                    }
+                if (app.pluginStorage) {
+                    app.pluginStorage.saveItem('plugin_fuel_logs', newLog);
+                } else {
+                    localStorage.setItem('plugin_fuel_logs', JSON.stringify(fuelLogs));
                 }
 
                 // Form ürítése
@@ -511,7 +509,11 @@ return {
 
                 if (confirmed) {
                     fuelLogs = [];
-                    localStorage.removeItem('plugin_fuel_logs');
+                    if (app.pluginStorage) {
+                        app.pluginStorage.clearAll('plugin_fuel_logs');
+                    } else {
+                        localStorage.removeItem('plugin_fuel_logs');
+                    }
                     renderStatsAndLogs();
                     notifier?.showToast('Összes tankolás törölve!', 'info');
                 }

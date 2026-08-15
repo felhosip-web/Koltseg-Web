@@ -48,6 +48,7 @@ export class BootManager {
                 this.app.entries.load(),
                 this.app.templates.load(),
                 this.app.incomingManager?.load?.(),
+                this.app.pluginStorage?.init?.(),
                 this.app.workLogManager?.load?.()
             ]);
             this.app.hmiNotif?.showToast('Adatok betöltve', 'success');

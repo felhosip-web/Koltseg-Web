@@ -814,7 +814,70 @@ ALTER TABLE plugin_fuel_logs ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Mindenki elérheti" ON plugin_fuel_logs;
 CREATE POLICY "Mindenki elérheti" ON plugin_fuel_logs FOR ALL USING (true) WITH CHECK (true);
 
--- 12. CASCADE DELETE TRIGGER FOR ENTRIES
+
+-- 12. PLUGIN_SHOPPING_LIST (Bevásárlólista modul)
+CREATE TABLE IF NOT EXISTS plugin_shopping_list (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    cat TEXT,
+    price NUMERIC,
+    unit TEXT,
+    checked BOOLEAN DEFAULT FALSE,
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE plugin_shopping_list ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Mindenki elérheti" ON plugin_shopping_list;
+CREATE POLICY "Mindenki elérheti" ON plugin_shopping_list FOR ALL USING (true) WITH CHECK (true);
+
+-- 13. PLUGIN_QUICK_NOTES (Gyors Jegyzet modul)
+CREATE TABLE IF NOT EXISTS plugin_quick_notes (
+    id TEXT PRIMARY KEY,
+    title TEXT,
+    content TEXT,
+    "reminderTime" TEXT,
+    repeat TEXT,
+    priority TEXT,
+    "expenseCategoryId" TEXT,
+    pinned BOOLEAN DEFAULT FALSE,
+    completed BOOLEAN DEFAULT FALSE,
+    snoozed BOOLEAN DEFAULT FALSE,
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE plugin_quick_notes ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Mindenki elérheti" ON plugin_quick_notes;
+CREATE POLICY "Mindenki elérheti" ON plugin_quick_notes FOR ALL USING (true) WITH CHECK (true);
+
+-- 14. PLUGIN_MILEAGE_SAVED_TRIPS (Útiköltség modul)
+CREATE TABLE IF NOT EXISTS plugin_mileage_saved_trips (
+    id TEXT PRIMARY KEY,
+    dist NUMERIC,
+    cons NUMERIC,
+    price NUMERIC,
+    "fuelCost" NUMERIC,
+    "otherCost" NUMERIC,
+    amort NUMERIC,
+    "totalCost" NUMERIC,
+    "perPersonCost" NUMERIC,
+    persons NUMERIC,
+    date TEXT,
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE plugin_mileage_saved_trips ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Mindenki elérheti" ON plugin_mileage_saved_trips;
+CREATE POLICY "Mindenki elérheti" ON plugin_mileage_saved_trips FOR ALL USING (true) WITH CHECK (true);
+
+-- 15. PLUGIN_CALC_HISTORY (Számológép modul)
+CREATE TABLE IF NOT EXISTS plugin_calc_history (
+    id TEXT PRIMARY KEY,
+    expr TEXT,
+    res NUMERIC,
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE plugin_calc_history ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Mindenki elérheti" ON plugin_calc_history;
+CREATE POLICY "Mindenki elérheti" ON plugin_calc_history FOR ALL USING (true) WITH CHECK (true);
+
+-- 16. CASCADE DELETE TRIGGER FOR ENTRIES
 CREATE OR REPLACE FUNCTION delete_item_cascade()
 RETURNS TRIGGER AS $$
 BEGIN

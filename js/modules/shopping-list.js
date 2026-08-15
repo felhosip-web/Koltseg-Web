@@ -25,7 +25,7 @@ return {
             if (!view) return;
 
             // Load saved data or initialize defaults
-            let items = JSON.parse(localStorage.getItem('plugin_shopping_list_items') || '[]');
+            let items = app.pluginStorage ? app.pluginStorage.getItems('plugin_shopping_list') : JSON.parse(localStorage.getItem('plugin_shopping_list') || '[]');
             let budget = parseInt(localStorage.getItem('plugin_shopping_list_budget') || '15000');
 
             const presets = [
@@ -272,7 +272,7 @@ return {
                         const index = items.findIndex(i => i.id === itemId);
                         if (index !== -1) {
                             items[index].checked = !items[index].checked;
-                            localStorage.setItem('plugin_shopping_list_items', JSON.stringify(items));
+                            if (app.pluginStorage) { app.pluginStorage.saveItem('plugin_shopping_list', items[index]); } else { localStorage.setItem('plugin_shopping_list', JSON.stringify(items)); }
                             renderUI();
                         }
                     });
@@ -283,7 +283,7 @@ return {
                     btn.addEventListener('click', () => {
                         const itemId = btn.getAttribute('data-id');
                         items = items.filter(i => i.id !== itemId);
-                        localStorage.setItem('plugin_shopping_list_items', JSON.stringify(items));
+                        if (app.pluginStorage) { app.pluginStorage.deleteItem('plugin_shopping_list', itemId); } else { localStorage.setItem('plugin_shopping_list', JSON.stringify(items)); }
                         renderUI();
                     });
                 });
@@ -299,8 +299,13 @@ return {
                 // Clear Checked items (Kosár ürítése)
                 document.getElementById('btnClearCheckedShopping')?.addEventListener('click', () => {
                     const beforeCount = items.length;
+                    const toDelete = items.filter(i => i.checked);
                     items = items.filter(i => !i.checked);
-                    localStorage.setItem('plugin_shopping_list_items', JSON.stringify(items));
+                    if (app.pluginStorage) {
+                        toDelete.forEach(i => app.pluginStorage.deleteItem('plugin_shopping_list', i.id));
+                    } else {
+                        localStorage.setItem('plugin_shopping_list', JSON.stringify(items));
+                    }
                     renderUI();
                     if (app.hmiNotif) {
                         const deleted = beforeCount - items.length;
@@ -314,7 +319,11 @@ return {
                     if (items.length === 0) return;
                     if (confirm('Biztosan törölni szeretnéd a bevásárlólista összes elemét?')) {
                         items = [];
-                        localStorage.setItem('plugin_shopping_list_items', JSON.stringify(items));
+                        if (app.pluginStorage) {
+                            app.pluginStorage.clearAll('plugin_shopping_list');
+                        } else {
+                            localStorage.setItem('plugin_shopping_list', JSON.stringify(items));
+                        }
                         renderUI();
                         if (app.hmiNotif) app.hmiNotif.showToast('🗑️ Bevásárlólista kiürítve!', 'success');
                     }
@@ -359,7 +368,11 @@ return {
                         };
 
                         items.push(newItem);
-                        localStorage.setItem('plugin_shopping_list_items', JSON.stringify(items));
+                        if (app.pluginStorage) {
+                            app.pluginStorage.saveItem('plugin_shopping_list', newItem);
+                        } else {
+                            localStorage.setItem('plugin_shopping_list', JSON.stringify(items));
+                        }
                         renderUI();
 
                         if (app.hmiNotif) app.hmiNotif.showToast(\`➕ \${name} hozzáadva a bevásárlólistához!\`, 'success');
@@ -386,7 +399,11 @@ return {
                     };
 
                     items.push(newItem);
-                    localStorage.setItem('plugin_shopping_list_items', JSON.stringify(items));
+                    if (app.pluginStorage) {
+                        app.pluginStorage.saveItem('plugin_shopping_list', newItem);
+                    } else {
+                        localStorage.setItem('plugin_shopping_list', JSON.stringify(items));
+                    }
                     
                     // Reset input fields
                     document.getElementById('itemName').value = '';
