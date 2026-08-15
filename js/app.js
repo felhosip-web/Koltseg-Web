@@ -994,6 +994,66 @@ async function initApp() {
     const app = new App();
     window.app = app;
     window.getVersion = () => app.getVersionInfo();
+
+    window.runDbHealthCheck = async () => {
+        if (!window.app || !window.app.db) {
+            console.error('Nincs db!');
+            return;
+        }
+        console.log('🔄 DB Egészségügyi Ellenőrzés futtatása...');
+        const stores = ['items', 'months', 'entries', 'templates', 'reminders', 'incomings', 'incoming_senders', 'works', 'deleted_records'];
+        const summary = { storeCounts: {} };
+
+        for (const s of stores) {
+            const data = await window.app.db.getAll(s);
+            summary.storeCounts[s] = data.length;
+        }
+
+        const entries = await window.app.db.getAll('entries');
+        const itemIds = new Set((await window.app.db.getAll('items')).map(i => i.id));
+        const monthSet = new Set((await window.app.db.getAll('months')).map(m => m.month));
+
+        let orphans = 0;
+        let badCellKeys = 0;
+        let missingExplicitFields = 0;
+
+        const { parseCellKey } = await import('./utils/cell-key-utils.js');
+
+        entries.forEach(e => {
+            if (!e.itemId || !e.month) missingExplicitFields++;
+
+            const parsed = parseCellKey(e);
+            let itemId = e.itemId || parsed.itemId;
+            let month = e.month || parsed.month;
+
+            if (!itemId || !month) {
+                badCellKeys++;
+                orphans++;
+            } else if (!itemIds.has(itemId) || !monthSet.has(month)) {
+                orphans++;
+            }
+        });
+
+        summary.consistency = { orphans, badCellKeys, missingExplicitFields };
+
+        if (window.app.syncService) {
+            summary.queueStatus = window.app.syncService.getQueueStatus();
+        }
+
+        console.table(summary.storeCounts);
+        console.table([summary.consistency]);
+        if (summary.queueStatus) {
+            console.table([{ pending: summary.queueStatus.pending, processing: summary.queueStatus.processing, failed: summary.queueStatus.failed, total: summary.queueStatus.total }]);
+        }
+
+        if (summary.consistency.orphans > 0 || summary.consistency.badCellKeys > 0) {
+            console.warn('⚠️ Találtunk árva vagy hibás bejegyzéseket! Futtasd a UI-ról a "Adatbázis Gyógyítása" funkciót, vagy hívd meg a app.dbAudit.autoRepairDatabase() metódust!');
+        } else {
+            console.log('✅ Adatbázis konzisztens.');
+        }
+
+        return summary;
+    };
     
     await app.start();
 }
@@ -1012,3 +1072,4 @@ console.log('  window.app.getVersionInfo() - Verzió információ');
 console.log('  window.app.checkVersion()   - Frissítés ellenőrzés');
 console.log('  window.app.reload()         - Adatok újratöltése');
 console.log('  window.app.renderDashboard() - Dashboard frissítése');
+console.log('  window.runDbHealthCheck()   - Adatbázis állapot ellenőrzése');

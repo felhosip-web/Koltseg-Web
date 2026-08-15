@@ -234,10 +234,8 @@ export class CellModalController {
             this.app.hmiNotif.showToast('Rész-tétel törölve', 'success');
         } catch (error) {
             console.error('[CellModal] Hiba a törlés során:', error);
-            if (this.app.syncService?.clearQueue) {
-                this.app.syncService.clearQueue();
-            }
-            this.app.hmiNotif.showToast('Hiba törlés közben. A várólista ürítve lett.', 'error');
+
+            this.app.hmiNotif.showToast('Hiba törlés közben.', 'error');
         } finally {
             this.app.renderer.renderTable();           // Táblázat frissítése
             this.refreshList();                   // Lista frissítése
