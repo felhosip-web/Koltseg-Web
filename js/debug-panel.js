@@ -821,6 +821,7 @@ CREATE TABLE IF NOT EXISTS plugin_shopping_list (
     name TEXT NOT NULL,
     cat TEXT,
     price NUMERIC,
+    qty NUMERIC,
     unit TEXT,
     checked BOOLEAN DEFAULT FALSE,
     updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -890,5 +891,9 @@ DROP TRIGGER IF EXISTS trigger_delete_item_cascade ON items;
 CREATE TRIGGER trigger_delete_item_cascade
 AFTER DELETE ON items
 FOR EACH ROW
-EXECUTE FUNCTION delete_item_cascade();`;
+EXECUTE FUNCTION delete_item_cascade();
+
+-- [MIGRÁCIÓ] Ha a tábla már létezik, futtasd le ezt is (Bevásárlólista bővítése)
+ALTER TABLE plugin_shopping_list ADD COLUMN IF NOT EXISTS qty NUMERIC;
+`;
 }

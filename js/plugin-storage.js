@@ -44,6 +44,7 @@ export class PluginStorage {
                                     if (!item.id) item.id = generateUUID();
                                     this.cache[table].push(item);
                                     await this.app.db.save(table, item);
+                                    if (this.app.syncService) this.app.syncService.addToQueue('upsert', item, table, 'normal', 'id');
                                 }
                                 localStorage.removeItem(lsKey);
                             }

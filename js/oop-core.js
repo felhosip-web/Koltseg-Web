@@ -36,6 +36,16 @@ export class SecurityManager {
                 return typeof data.name === 'string' &&
                     data.name.trim() !== '' &&
                     typeof data.date === 'string';
+            case 'plugin_fuel_logs':
+                return typeof data.id === 'string' && typeof data.odo === 'number';
+            case 'plugin_shopping_list':
+                return typeof data.id === 'string' && typeof data.name === 'string';
+            case 'plugin_quick_notes':
+                return typeof data.id === 'string' && typeof data.title === 'string';
+            case 'plugin_mileage_saved_trips':
+                return typeof data.id === 'string' && typeof data.dist === 'number';
+            case 'plugin_calc_history':
+                return typeof data.id === 'string' && typeof data.expr === 'string';
             default:
                 return true;
         }
