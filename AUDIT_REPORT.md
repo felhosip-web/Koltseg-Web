@@ -5,7 +5,7 @@
 - **Entry delete**: Pushes to `deleted_records` and `syncQueue`.
 - **Item delete**: Cascade deletes entries via `deleteItemWithEntries`. This is implemented in `oop-core.js`.
 - **Tombstone**: Centralized in `Database.delete` and `Database.deleteItemWithEntries`.
-- **Queue**: Items are pushed to `localStorage`. `SyncService` processes them, retries 3 times, then marks as `failed`. Queue is NOT cleared on failure.
+- **Queue**: Items are pushed to `localStorage`. `SyncService` deduplikálja a bejegyzéseket és feldolgozza őket. Sikertelen próbálkozás esetén 3-szor újrapróbálkozik, majd terminális `failed` állapotba helyezi az adott műveletet. A teljes Queue viszont nem kerül törlésre hiba esetén.
 
 ## 2. Fragile Points
 - Legacy `cellKey` usages instead of `parseCellKey` in some fallback logic.

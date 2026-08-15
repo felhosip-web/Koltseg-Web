@@ -1017,21 +1017,14 @@ async function initApp() {
         let badCellKeys = 0;
         let missingExplicitFields = 0;
 
+        const { parseCellKey } = await import('./utils/cell-key-utils.js');
+
         entries.forEach(e => {
             if (!e.itemId || !e.month) missingExplicitFields++;
-            let itemId = e.itemId;
-            let month = e.month;
-            if (!itemId || !month) {
-                if (e.cellKey && typeof e.cellKey === 'string') {
-                    const parts = e.cellKey.split('_');
-                    itemId = parts[0];
-                    month = parts[1];
-                    if (!/^[0-9]+$/.test(itemId) && /^[0-9]{4}-[0-9]{2}$/.test(parts[0])) {
-                        month = parts[0];
-                        itemId = parts[1];
-                    }
-                }
-            }
+
+            const parsed = parseCellKey(e);
+            let itemId = e.itemId || parsed.itemId;
+            let month = e.month || parsed.month;
 
             if (!itemId || !month) {
                 badCellKeys++;

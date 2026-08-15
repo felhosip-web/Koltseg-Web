@@ -185,73 +185,79 @@ export class DatabaseAudit {
             const months = await this.app.db.getAll('months');
             const monthSet = new Set(months.map(m => m.month));
 
+            let skippedEntries = 0;
             // 1. Árva bejegyzések és hónapok javítása
             for (const entry of entries) {
-                let itemId = entry.itemId;
-                let month = entry.month;
-                let needsMigration = false;
+                try {
+                    let itemId = entry.itemId;
+                    let month = entry.month;
+                    let needsMigration = false;
 
-                if (!itemId || !month) {
-                    const parsed = parseCellKey(entry);
-                    itemId = parsed.itemId;
-                    month = parsed.month;
-                    if (!itemId || !month) continue; // Unfixable entry
-                    needsMigration = true;
-                }
-
-                // Persistent migration for legacy cellKey entries
-                if (needsMigration && itemId && month) {
-                    entry.itemId = itemId;
-                    entry.month = month;
-                    entry.updated_at = new Date().toISOString();
-                    await this.app.db.save('entries', entry);
-                    if (this.app.syncService) {
-                         await this.app.syncService.push('entries', entry);
+                    if (!itemId || !month) {
+                        const parsed = parseCellKey(entry);
+                        itemId = parsed.itemId;
+                        month = parsed.month;
+                        if (!itemId || !month) continue; // Unfixable entry
+                        needsMigration = true;
                     }
-                }
-                
-                // Ha a hónap hiányzik, hozzuk létre
-                if (month && !monthSet.has(month) && /^[0-9]{4}-\d{2}$/.test(month)) {
-                    await this.app.db.save('months', { month, updated_at: new Date().toISOString() });
-                    monthSet.add(month);
-                    repairedMonths++;
-                }
 
-                // Ha a kategória hiányzik, hozzuk létre
-                if (itemId && !itemIds.has(itemId) && (typeof itemId === 'string' && itemId.length > 0)) {
-                    // Keresés más kategóriákban, esetleg valamilyen "Egyéb" kategóriában, ahelyett hogy mindenhol újat hozunk létre
-                    const egyebItem = items.find(i => i && i.name && (i.name.toLowerCase().includes('egyéb') || i.name.toLowerCase() === 'egyeb'));
-
-                    if (egyebItem) {
-                        // Ha van "Egyéb", mentsük oda az orphanokat
-                        entry.itemId = egyebItem.id;
-                        if (entry.cellKey) {
-                             // Assuming cellKey ends with timestamp if any
-                             const parts = typeof entry.cellKey === 'string' ? entry.cellKey.split('_') : [];
-                             const timestamp = parts.length >= 3 ? parts[parts.length - 1] : undefined;
-                             entry.cellKey = buildCellKey(egyebItem.id, month, timestamp);
-                        }
+                    // Persistent migration for legacy cellKey entries
+                    if (needsMigration && itemId && month) {
+                        entry.itemId = itemId;
+                        entry.month = month;
                         entry.updated_at = new Date().toISOString();
                         await this.app.db.save('entries', entry);
                         if (this.app.syncService) {
                              await this.app.syncService.push('entries', entry);
                         }
-                        repairedOrphans++;
-                    } else {
-                         const restoredItem = {
-                            id: itemId,
-                            name: `Helyreállított kategória #${itemId}`,
-                            color: '#fef08a',
-                            updated_at: new Date().toISOString()
-                        };
-                        await this.app.db.save('items', restoredItem);
-                        if (this.app.syncService) {
-                            await this.app.syncService.push('items', restoredItem);
-                        }
-                        itemIds.add(itemId);
-                        items.push(restoredItem);
-                        repairedOrphans++;
                     }
+
+                    // Ha a hónap hiányzik, hozzuk létre
+                    if (month && !monthSet.has(month) && /^[0-9]{4}-\d{2}$/.test(month)) {
+                        await this.app.db.save('months', { month, updated_at: new Date().toISOString() });
+                        monthSet.add(month);
+                        repairedMonths++;
+                    }
+
+                    // Ha a kategória hiányzik, hozzuk létre
+                    if (itemId && !itemIds.has(itemId) && (typeof itemId === 'string' && itemId.length > 0)) {
+                        // Keresés más kategóriákban, esetleg valamilyen "Egyéb" kategóriában, ahelyett hogy mindenhol újat hozunk létre
+                        const egyebItem = items.find(i => i && i.name && (i.name.toLowerCase().includes('egyéb') || i.name.toLowerCase() === 'egyeb'));
+
+                        if (egyebItem) {
+                            // Ha van "Egyéb", mentsük oda az orphanokat
+                            entry.itemId = egyebItem.id;
+                            if (entry.cellKey) {
+                                 // Assuming cellKey ends with timestamp if any
+                                 const parts = typeof entry.cellKey === 'string' ? entry.cellKey.split('_') : [];
+                                 const timestamp = parts.length >= 3 ? parts[parts.length - 1] : undefined;
+                                 entry.cellKey = buildCellKey(egyebItem.id, month, timestamp);
+                            }
+                            entry.updated_at = new Date().toISOString();
+                            await this.app.db.save('entries', entry);
+                            if (this.app.syncService) {
+                                 await this.app.syncService.push('entries', entry);
+                            }
+                            repairedOrphans++;
+                        } else {
+                             const restoredItem = {
+                                id: itemId,
+                                name: `Helyreállított kategória #${itemId}`,
+                                color: '#fef08a',
+                                updated_at: new Date().toISOString()
+                            };
+                            await this.app.db.save('items', restoredItem);
+                            if (this.app.syncService) {
+                                await this.app.syncService.push('items', restoredItem);
+                            }
+                            itemIds.add(itemId);
+                            items.push(restoredItem);
+                            repairedOrphans++;
+                        }
+                    }
+                } catch (err) {
+                    console.error('[DB-AUDIT] Kihagyott hibás bejegyzés (entry repair failed):', entry, err);
+                    skippedEntries++;
                 }
             }
 
@@ -260,7 +266,7 @@ export class DatabaseAudit {
             const senders = await this.app.db.getAll('incoming_senders');
             const senderNames = new Set(senders.map(s => s.name));
 
-
+            let skippedSenders = 0;
             for (const inc of incomings) {
                 try {
                     if (inc.sender && !senderNames.has(inc.sender)) {
@@ -274,7 +280,8 @@ export class DatabaseAudit {
                         repairedSenders++;
                     }
                 } catch (err) {
-                    console.error('[DB-AUDIT] Error repairing sender for incoming:', inc, err);
+                    console.error('[DB-AUDIT] Kihagyott hibás bejövő utalás (sender repair failed):', inc, err);
+                    skippedSenders++;
                 }
             }
 
@@ -286,14 +293,18 @@ export class DatabaseAudit {
                 this.app.incomingManager?.load?.()
             ]);
 
-            const msg = `Sikeres adatbázis javítás! Helyreállított kategória: ${repairedOrphans}, Létrehozott hiányzó hónap: ${repairedMonths}, Generált utaló partner: ${repairedSenders}.`;
+            const hasFailures = skippedEntries > 0 || skippedSenders > 0;
+            const statusStr = hasFailures ? 'partial' : 'ok';
+            const msg = hasFailures ?
+                `Részben sikeres adatbázis javítás! Helyreállított: ${repairedOrphans} kat, ${repairedMonths} hónap, ${repairedSenders} utaló partner. (${skippedEntries + skippedSenders} elem kihagyva hiba miatt).` :
+                `Sikeres adatbázis javítás! Helyreállított kategória: ${repairedOrphans}, Létrehozott hiányzó hónap: ${repairedMonths}, Generált utaló partner: ${repairedSenders}.`;
             
             if (this.app.logger) {
-                this.app.logger.log('db', 'success', `Automatikus adatbázis helyreállítás lefutott: ${msg}`);
+                this.app.logger.log('db', hasFailures ? 'warning' : 'success', `Automatikus adatbázis helyreállítás lefutott: ${msg}`);
             }
 
             return {
-                status: 'ok',
+                status: statusStr,
                 repairedOrphans,
                 repairedMonths,
                 repairedSenders,

@@ -24,16 +24,16 @@
    - Run `window.runDbHealthCheck()`. Both entries should be removed from the `entries` store, and `deleted_records` should reflect their deletions.
 
 6. **Introduce malformed entry data**
-   - In console: `const e = { id: crypto.randomUUID(), amount: 500 }; app.db.save('entries', e);`
+   - In console: `const e = { id: crypto.randomUUID(), amount: 500 }; await app.db.save('entries', e);`
    - Run `window.runDbHealthCheck()`. `badCellKeys` and `orphans` should increase by 1.
 
 7. **Introduce orphaned entry**
-   - In console: `const id = crypto.randomUUID(); const e = { id, itemId: crypto.randomUUID(), month: '2025-10', amount: 500 }; app.db.save('entries', e);`
+   - In console: `const id = crypto.randomUUID(); const e = { id, itemId: crypto.randomUUID(), month: '2025-10', amount: 500 }; await app.db.save('entries', e);`
    - Run `window.runDbHealthCheck()`. `orphans` should increase by 1. `missingExplicitFields` shouldn't change for this entry.
 
 8. **Test auto repair behavior**
-   - Run `app.dbAudit.autoRepairDatabase()`.
-   - Run `window.runDbHealthCheck()`. Both the malformed and orphaned records should have been relocated (orphaned moved to "Egyéb" or "Helyreállított kategória"). `orphans` should be 0. `badCellKeys` should be skipped or fixed.
+   - Run `await app.dbAudit.autoRepairDatabase()`.
+   - Run `window.runDbHealthCheck()`. A helyreállítható orphan (pl. amihez csak kategória hiányzik, de az id megvan) javításra kerül. A teljesen malformed (itemId + month nélküli) rekord badCellKey/orphan marad, mert helyreállíthatatlan, hacsak nem távolítjuk el külön.
 
 9. **Verify failing API sync does not clear queue**
    - Block network requests or introduce a temporary backend error.
