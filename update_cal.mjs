@@ -1,5 +1,7 @@
-// js/modules/calendar.js - v1.1.0 - Naptár Modul
-export const calendarModuleScript = `
+import fs from 'fs';
+
+const content = `// js/modules/calendar.js - v1.1.0 - Naptár Modul
+export const calendarModuleScript = \`
 return {
     id: 'plugin_calendar',
     name: 'Naptár Modul',
@@ -22,7 +24,7 @@ return {
             const view = document.getElementById('moduleView_tab_plugin_calendar');
             if (!view) return;
 
-            view.innerHTML = \`
+            view.innerHTML = \\\`
                 <div class="max-w-4xl mx-auto bg-white rounded-2xl shadow-sm border border-slate-100 p-4 md:p-6">
                     <div class="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
                         <div>
@@ -85,7 +87,7 @@ return {
                         </div>
                     </div>
                 </div>
-            \`;
+            \\\`;
 
             // Belső állapot
             let currentDate = new Date();
@@ -115,7 +117,7 @@ return {
                 const year = currentDate.getFullYear();
                 const month = currentDate.getMonth();
 
-                document.getElementById('calCurrentMonthLabel').textContent = \`\${year}. \${monthNames[month]}\`;
+                document.getElementById('calCurrentMonthLabel').textContent = \\\`\\\${year}. \\\${monthNames[month]}\\\`;
 
                 const firstDay = new Date(year, month, 1);
                 const lastDay = new Date(year, month + 1, 0);
@@ -140,7 +142,7 @@ return {
 
                 // Napok cellái
                 for (let i = 1; i <= daysInMonth; i++) {
-                    const dStr = \`\${year}-\${String(month + 1).padStart(2, '0')}-\${String(i).padStart(2, '0')}\`;
+                    const dStr = \\\`\\\${year}-\\\${String(month + 1).padStart(2, '0')}-\\\${String(i).padStart(2, '0')}\\\`;
                     const dayEvents = getEventsForDate(dStr);
                     const isToday = isCurrentMonth && i === todayDate;
                     const isSelected = selectedDateStr === dStr;
@@ -168,16 +170,16 @@ return {
                         eventDotsHtml += '</div>';
                     }
 
-                    gridEl.innerHTML += \`
-                        <div class="cal-day-cell \${bgClass} p-1 sm:p-2 cursor-pointer hover:bg-blue-50 transition-colors flex flex-col" data-date="\${dStr}">
+                    gridEl.innerHTML += \\\`
+                        <div class="cal-day-cell \\\${bgClass} p-1 sm:p-2 cursor-pointer hover:bg-blue-50 transition-colors flex flex-col" data-date="\\\${dStr}">
                             <div class="text-center text-xs sm:text-sm font-medium mb-1">
-                                <span class="\${dayNumClass} inline-block">\${i}</span>
+                                <span class="\\\${dayNumClass} inline-block">\\\${i}</span>
                             </div>
                             <div class="flex-1 flex flex-col justify-end">
-                                \${eventDotsHtml}
+                                \\\${eventDotsHtml}
                             </div>
                         </div>
-                    \`;
+                    \\\`;
                 }
 
                 // Üres cellák a hónap végén (opcionális, hogy kitöltse a rácsot, 42 cella max)
@@ -204,7 +206,7 @@ return {
 
                 // Dátum formázása
                 const [y, m, d] = dateStr.split('-');
-                titleEl.textContent = \`\${y}. \${monthNames[parseInt(m)-1]} \${parseInt(d)}.\`;
+                titleEl.textContent = \\\`\\\${y}. \\\${monthNames[parseInt(m)-1]} \\\${parseInt(d)}.\\\`;
 
                 detailsEl.classList.remove('hidden');
                 renderEventsList(dateStr);
@@ -219,17 +221,17 @@ return {
                     return;
                 }
 
-                listEl.innerHTML = dayEvents.map(ev => \`
+                listEl.innerHTML = dayEvents.map(ev => \\\`
                     <div class="flex items-center justify-between p-2 sm:p-3 bg-slate-50 border border-slate-100 rounded-lg group hover:border-blue-200 transition-colors">
                         <div class="flex items-center gap-3 overflow-hidden">
                             <div class="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0"></div>
-                            <span class="text-sm text-slate-700 truncate">\${ev.title}</span>
+                            <span class="text-sm text-slate-700 truncate">\\\${ev.title}</span>
                         </div>
-                        <button class="cal-del-event text-slate-300 hover:text-red-500 p-1 opacity-0 group-hover:opacity-100 transition-all flex-shrink-0" data-id="\${ev.id}">
+                        <button class="cal-del-event text-slate-300 hover:text-red-500 p-1 opacity-0 group-hover:opacity-100 transition-all flex-shrink-0" data-id="\\\${ev.id}">
                             <i class="fas fa-trash-alt text-xs"></i>
                         </button>
                     </div>
-                \`).join('');
+                \\\`).join('');
 
                 // Törlés eseménykezelők
                 listEl.querySelectorAll('.cal-del-event').forEach(btn => {
@@ -304,4 +306,7 @@ return {
         }
     }
 };
+\`;
 `;
+
+fs.writeFileSync('js/modules/calendar.js', content);
