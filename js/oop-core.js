@@ -36,6 +36,16 @@ export class SecurityManager {
                 return typeof data.name === 'string' &&
                     data.name.trim() !== '' &&
                     typeof data.date === 'string';
+            case 'plugin_fuel_logs':
+                return typeof data.id === 'string' && typeof data.odo === 'number';
+            case 'plugin_shopping_list':
+                return typeof data.id === 'string' && typeof data.name === 'string';
+            case 'plugin_quick_notes':
+                return typeof data.id === 'string' && typeof data.title === 'string';
+            case 'plugin_mileage_saved_trips':
+                return typeof data.id === 'string' && typeof data.dist === 'number';
+            case 'plugin_calc_history':
+                return typeof data.id === 'string' && typeof data.expr === 'string';
             default:
                 return true;
         }
@@ -56,7 +66,7 @@ export class Database {
         return tempItemId;
     }
 
-    constructor(dbName = 'KoltsegNyilvantarto', version = 11) {  // ← verzió 11: UUID migráció
+    constructor(dbName = 'KoltsegNyilvantarto', version = 12) {  // ← verzió 12: Plugin tables
         let finalDbName = dbName;
         try {
             const path = window.location.pathname;
@@ -320,6 +330,21 @@ export class Database {
         } else if (oldVersion < 11) {
             _migrateStoreToUUID('works');
         }
+
+
+        // === Plugin Tables (v12) ===
+        const pluginTables = [
+            'plugin_fuel_logs',
+            'plugin_shopping_list',
+            'plugin_quick_notes',
+            'plugin_mileage_saved_trips',
+            'plugin_calc_history'
+        ];
+        pluginTables.forEach(table => {
+            if (!db.objectStoreNames.contains(table)) {
+                db.createObjectStore(table, { keyPath: 'id' });
+            }
+        });
 
         if (oldVersion < 11) {
             console.log('[DB] ✅ v11 UUID migráció indítva – az összes autoIncrement tábla konvertálva');

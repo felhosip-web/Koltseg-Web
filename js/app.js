@@ -21,6 +21,7 @@ import { BootManager } from './boot-manager.js';
 import { BackupManager } from './backup-manager.js';
 import { PwaManager } from './pwa-manager.js';
 import { RemoteConfigManager } from './remote-config-manager.js';
+import { PluginStorage } from './plugin-storage.js';
 import { OfflineHandler } from './offline-handler.js';
 import { getVersionManager } from './version-manager.js';
 import { MESSAGES, formatMessage } from './messages.js';
@@ -107,6 +108,7 @@ class App {
         this.serviceDev = new ServiceDevManager(this);
         this.securityGuard = new SecurityGuard(this);
         this.moduleManager = new ModuleManager(this);
+        this.pluginStorage = new PluginStorage(this);
 
         // === 9. BEJÖVŐ UTALÁSOK ===
         this.incomingManager = new IncomingManager(this.db, this.syncService);
