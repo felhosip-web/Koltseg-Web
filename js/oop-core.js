@@ -46,6 +46,8 @@ export class SecurityManager {
                 return typeof data.id === 'string' && typeof data.dist === 'number';
             case 'plugin_calc_history':
                 return typeof data.id === 'string' && typeof data.expr === 'string';
+            case 'plugin_calendar_events':
+                return typeof data.id === 'string' && typeof data.date === 'string' && typeof data.title === 'string';
             default:
                 return true;
         }
@@ -66,7 +68,7 @@ export class Database {
         return tempItemId;
     }
 
-    constructor(dbName = 'KoltsegNyilvantarto', version = 12) {  // ← verzió 12: Plugin tables
+    constructor(dbName = 'KoltsegNyilvantarto', version = 14) {  // ← verzió 14: Calendar plugin table
         let finalDbName = dbName;
         try {
             const path = window.location.pathname;
@@ -332,13 +334,14 @@ export class Database {
         }
 
 
-        // === Plugin Tables (v12) ===
+        // === Plugin Tables (v14) ===
         const pluginTables = [
             'plugin_fuel_logs',
             'plugin_shopping_list',
             'plugin_quick_notes',
             'plugin_mileage_saved_trips',
-            'plugin_calc_history'
+            'plugin_calc_history',
+            'plugin_calendar_events'
         ];
         pluginTables.forEach(table => {
             if (!db.objectStoreNames.contains(table)) {

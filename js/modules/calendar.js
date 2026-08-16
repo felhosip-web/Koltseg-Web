@@ -32,13 +32,13 @@ return {
                             <p class="text-xs text-gray-500 mt-1">Események és határidők áttekintése - <span class="text-blue-600 font-bold">v1.1.0</span></p>
                         </div>
                         <div class="flex items-center gap-2 bg-slate-50 p-1 rounded-xl border border-slate-100 self-start md:self-auto">
-                            <button id="calPrevMonth" class="p-2 rounded-lg text-slate-600 hover:bg-white hover:shadow-sm transition-all">
+                            <button id="calPrevMonth" aria-label="Előző hónap" class="p-2 rounded-lg text-slate-600 hover:bg-white hover:shadow-sm transition-all">
                                 <i class="fas fa-chevron-left"></i>
                             </button>
                             <div id="calCurrentMonthLabel" class="px-4 font-bold text-sm text-slate-800 min-w-[120px] text-center capitalize">
                                 -
                             </div>
-                            <button id="calNextMonth" class="p-2 rounded-lg text-slate-600 hover:bg-white hover:shadow-sm transition-all">
+                            <button id="calNextMonth" aria-label="Következő hónap" class="p-2 rounded-lg text-slate-600 hover:bg-white hover:shadow-sm transition-all">
                                 <i class="fas fa-chevron-right"></i>
                             </button>
                         </div>
@@ -68,7 +68,7 @@ return {
                             <h4 id="calDayDetailsTitle" class="text-sm font-bold text-slate-800 flex items-center gap-2">
                                 <i class="fas fa-calendar-day text-blue-500"></i> <span id="calSelectedDateText">Kijelölt nap</span>
                             </h4>
-                            <button id="calCloseDetails" class="text-slate-400 hover:text-red-500 transition-colors p-1">
+                            <button id="calCloseDetails" aria-label="Részletek bezárása" class="text-slate-400 hover:text-red-500 transition-colors p-1">
                                 <i class="fas fa-times"></i>
                             </button>
                         </div>
@@ -94,11 +94,16 @@ return {
             // Adatok betöltése
             let events = app.pluginStorage ? app.pluginStorage.getItems('plugin_calendar_events') : JSON.parse(localStorage.getItem('plugin_calendar_events') || '[]');
 
-            const saveEvents = () => {
+            const saveEvent = (newEvent) => {
                 if (app.pluginStorage) {
-                    // Ha a pluginStorage használatban van, az clearAll/saveItem ciklussal a legbiztosabb
-                    app.pluginStorage.clearAll('plugin_calendar_events');
-                    events.forEach(e => app.pluginStorage.saveItem('plugin_calendar_events', e));
+                    app.pluginStorage.saveItem('plugin_calendar_events', newEvent);
+                } else {
+                    localStorage.setItem('plugin_calendar_events', JSON.stringify(events));
+                }
+            };
+            const deleteEvent = (id) => {
+                if (app.pluginStorage) {
+                    app.pluginStorage.deleteItem('plugin_calendar_events', id);
                 } else {
                     localStorage.setItem('plugin_calendar_events', JSON.stringify(events));
                 }
@@ -169,14 +174,14 @@ return {
                     }
 
                     gridEl.innerHTML += \`
-                        <div class="cal-day-cell \${bgClass} p-1 sm:p-2 cursor-pointer hover:bg-blue-50 transition-colors flex flex-col" data-date="\${dStr}">
+                        <button class="cal-day-cell \${bgClass} p-1 sm:p-2 cursor-pointer hover:bg-blue-50 transition-colors flex flex-col w-full h-full text-left appearance-none focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500" data-date="\${dStr}" aria-label="\${dStr}">
                             <div class="text-center text-xs sm:text-sm font-medium mb-1">
                                 <span class="\${dayNumClass} inline-block">\${i}</span>
                             </div>
                             <div class="flex-1 flex flex-col justify-end">
                                 \${eventDotsHtml}
                             </div>
-                        </div>
+                        </button>
                     \`;
                 }
 
@@ -222,10 +227,10 @@ return {
                 listEl.innerHTML = dayEvents.map(ev => \`
                     <div class="flex items-center justify-between p-2 sm:p-3 bg-slate-50 border border-slate-100 rounded-lg group hover:border-blue-200 transition-colors">
                         <div class="flex items-center gap-3 overflow-hidden">
-                            <div class="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0"></div>
+                            <div class="w-2 h-2 rounded-full bg-blue-500 shrink-0"></div>
                             <span class="text-sm text-slate-700 truncate">\${ev.title}</span>
                         </div>
-                        <button class="cal-del-event text-slate-300 hover:text-red-500 p-1 opacity-0 group-hover:opacity-100 transition-all flex-shrink-0" data-id="\${ev.id}">
+                        <button class="cal-del-event text-slate-300 hover:text-red-500 p-1 opacity-0 group-hover:opacity-100 transition-all shrink-0" data-id="\${ev.id}">
                             <i class="fas fa-trash-alt text-xs"></i>
                         </button>
                     </div>
@@ -237,7 +242,7 @@ return {
                         e.stopPropagation();
                         const id = btn.getAttribute('data-id');
                         events = events.filter(ev => ev.id !== id);
-                        saveEvents();
+                        deleteEvent(id);
                         renderEventsList(dateStr);
                         renderGrid(); // Frissíteni kell a rácsot is az indikátorok miatt
                         if(app.hmiNotif) app.hmiNotif.showToast('Esemény törölve', 'info');
@@ -250,6 +255,7 @@ return {
 
             // Navigáció eseménykezelők
             document.getElementById('calPrevMonth')?.addEventListener('click', () => {
+                currentDate.setDate(1);
                 currentDate.setMonth(currentDate.getMonth() - 1);
                 selectedDateStr = null;
                 document.getElementById('calDayDetails').classList.add('hidden');
@@ -257,6 +263,7 @@ return {
             });
 
             document.getElementById('calNextMonth')?.addEventListener('click', () => {
+                currentDate.setDate(1);
                 currentDate.setMonth(currentDate.getMonth() + 1);
                 selectedDateStr = null;
                 document.getElementById('calDayDetails').classList.add('hidden');
@@ -285,7 +292,7 @@ return {
                 };
 
                 events.push(newEvent);
-                saveEvents();
+                saveEvent(newEvent);
 
                 inputEl.value = '';
                 renderEventsList(selectedDateStr);

@@ -14,7 +14,8 @@ export class PluginStorage {
             'plugin_shopping_list',
             'plugin_quick_notes',
             'plugin_mileage_saved_trips',
-            'plugin_calc_history'
+            'plugin_calc_history',
+            'plugin_calendar_events'
         ];
     }
 
