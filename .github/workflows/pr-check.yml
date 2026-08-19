@@ -1,0 +1,91 @@
+name: PR Build és Lighthouse Audit
+
+on:
+  pull_request:
+    branches: ["main"]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  build-and-audit:
+    name: Build, Lint és Lighthouse Audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Forráskód letöltése
+        uses: actions/checkout@v4
+
+      - name: Node.js beállítása
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Függőségek telepítése
+        run: npm ci || npm install
+
+      - name: TypeScript típusellenőrzés (Lint)
+        run: npm run lint
+
+      - name: Projektek buildelése
+        run: npm run build
+
+      - name: Helyi preview szerver indítása
+        run: |
+          python3 -m http.server 3000 --directory dist > /dev/null 2>&1 &
+          echo $! > server.pid
+          sleep 2
+
+      - name: Lighthouse audit és összehasonlítás futtatása
+        run: |
+          node scripts/lighthouse-pr-compare.js "https://felhosip-web.github.io/Koltseg-Web/" "http://localhost:3000/"
+
+      - name: Helyi preview szerver leállítása
+        if: always()
+        run: |
+          if [ -f server.pid ]; then
+            kill $(cat server.pid) 2>/dev/null || true
+          fi
+
+      - name: Lighthouse eredmények kommentelése a PR alá
+        uses: actions/github-script@v7
+        if: github.event_name == 'pull_request'
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const commentPath = './lighthouse-comment.md';
+            if (!fs.existsSync(commentPath)) {
+              console.log('Nem található a lighthouse-comment.md fájl.');
+              return;
+            }
+            const body = fs.readFileSync(commentPath, 'utf8');
+            const identifier = '<!-- lighthouse-pr-comment -->';
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+            });
+
+            const existingComment = comments.find(c => c.body && c.body.includes(identifier));
+
+            if (existingComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existingComment.id,
+                body: body,
+              });
+              console.log('PR komment frissítve!');
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.payload.pull_request.number,
+                body: body,
+              });
+              console.log('Új PR komment létrehozva!');
+            }
