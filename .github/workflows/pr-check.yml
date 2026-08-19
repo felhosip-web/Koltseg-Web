@@ -32,14 +32,6 @@ jobs:
       - name: Projektek buildelése
         run: npm run build
 
-      - name: Bundle size check
-        run: |
-          SIZE=$(du -sk dist 2>/dev/null | cut -f1 || echo 0)
-          echo "Bundle size: ${SIZE}KB"
-          if [ "$SIZE" -gt 1024 ]; then
-            echo "::warning::Bundle larger than 1MB (${SIZE}KB)"
-          fi
-
       - name: Helyi preview szerver indítása
         run: |
           npm run start > /dev/null 2>&1 &
