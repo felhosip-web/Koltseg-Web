@@ -24,7 +24,7 @@ jobs:
           cache: 'npm'
 
       - name: Függőségek telepítése
-        run: npm ci || npm install
+        run: npm ci
 
       - name: TypeScript típusellenőrzés (Lint)
         run: npm run lint
