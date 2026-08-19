@@ -1,46 +1,55 @@
-# Simple workflow for deploying static content to GitHub Pages
+# A workflow neve, ez fog megjelenni a GitHub Actions fülön
 name: Deploy static content to Pages
 
 on:
-  # Runs on pushes targeting the default branch
+  # Mikor fusson le ez a workflow?
   push:
-    branches: ["main", "master"]
+    # Ha push történik ezekre a branchekre
+    branches: ["main"]
 
-  # Allows you to run this workflow manually from the Actions tab
+  # Ez engedi, hogy a GitHub felületen kézzel is elindíthasd egy gombbal
   workflow_dispatch:
 
-# Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
+# Jogosultságok beállítása - enélkül nem tud deployolni Pages-re
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: read      # Engedi olvasni a repó tartalmát
+  pages: write        # Engedi írni a GitHub Pages-t
+  id-token: write     # Kell a Pages deploy hitelesítéséhez
 
-# Allow only one concurrent deployment, skipping runs queued between the run in-progress and latest queue.
-# However, do NOT cancel in-progress runs as we want to allow these production deployments to complete.
+# Ha gyorsan pusholsz kétszer, ne induljon 2 deploy egyszerre
 concurrency:
-  group: "pages"
-  cancel-in-progress: false
+  group: "pages"              # Minden Pages deploy egy csoportba tartozik
+  cancel-in-progress: false   # A futó deployt ne szakítsa meg, csak a várakozókat dobja
 
 jobs:
-  # Single deploy job, since we're just deploying
+  # Egyetlen job-unk van, a neve "deploy"
   deploy:
+    # GitHub Pages környezet - itt fog megjelenni az élő URL
     environment:
       name: github-pages
+      # A deploy lépés kimenetéből veszi ki az URL-t (pl. https://f-peter.github.io/...)
       url: ${{ steps.deployment.outputs.page_url }}
+    # Milyen gépen fusson? Ubuntu a leggyorsabb/legolcsóbb
     runs-on: ubuntu-latest
     steps:
+      # 1. LÉPÉS: Letölti a repód kódját a futó gépre
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4 # Ez egy kész GitHub akció
 
+      # 2. LÉPÉS: Feltelepíti a Node.js-t (mert npm builded van)
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
-          cache: 'npm'
+          node-version: 20    # Node 20-as verzió
+          cache: 'npm'        # Gyorsítja a telepítést cache-eléssel
 
+      # 3. LÉPÉS: Függőségek telepítése
       - name: Install dependencies
+        # Megpróbálja a gyors, tiszta telepítést (npm ci), ha nincs lockfile, akkor sima install
         run: npm ci || npm install
 
+      # 4. LÉPÉS: Létrehozza a settings.json-t a titkos kulcsokból
+      # EZ A LÉNYEG: a SUPABASE_URL és KEY nem lehet a GitHubon, ezért Secretből generáljuk
       - name: Create settings.json from secrets
         run: |
           cat > settings.json <<'EOF'
@@ -49,19 +58,24 @@ jobs:
             "SUPABASE_ANON_KEY": "${{ secrets.SUPABASE_ANON_KEY }}"
           }
           EOF
+          # A ${{ secrets... }} részeket a GitHub cseréli ki futáskor a te beállított Secretjeidre
 
+      # 5. LÉPÉS: Buildeli a projektet (pl. Vite / React / Vue)
       - name: Build
-        run: npm run build
+        run: npm run build # Ez csinálja a /dist mappát
 
+      # 6. LÉPÉS: Előkészíti a GitHub Pages-t
       - name: Setup Pages
         uses: actions/configure-pages@v5
 
+      # 7. LÉPÉS: Feltölti a build eredményét artifactként
       - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v4
         with:
-          # Upload built dist folder
+          # Csak a lebuildelt dist mappát töltjük fel, nem az egész repót
           path: './dist'
 
+      # 8. LÉPÉS: Tényleges deploy GitHub Pages-re
       - name: Deploy to GitHub Pages
-        id: deployment
+        id: deployment # Kell, hogy fentebb ki tudjuk olvasni a page_url-t
         uses: actions/deploy-pages@v4
