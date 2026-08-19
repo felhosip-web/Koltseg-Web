@@ -2,15 +2,37 @@ name: Supabase Keep-Alive
 
 on:
   schedule:
-    - cron: '0 0 * * *' # Futtatás minden nap éjfélkor
-  workflow_dispatch: # Manuális indítási lehetőség
+    - cron: '0 0 * * *' # minden nap éjfélkor
+  workflow_dispatch:
 
 jobs:
   ping-supabase:
     runs-on: ubuntu-latest
     steps:
       - name: Ping Supabase API
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: |
-          curl -s -o /dev/null -w "%{http_code}" -X GET "${{ secrets.SUPABASE_URL }}/rest/v1/items?select=id&limit=1" \
-          -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
-          -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}"
+          # Levágjuk a végéről a / jelet ha van, ne legyen dupla //
+          URL="${SUPABASE_URL%/}"
+          
+          if [ -z "$URL" ]; then
+            echo "HIBA: SUPABASE_URL secret üres!"
+            exit 1
+          fi
+
+          echo "Ping: $URL/rest/v1/"
+
+          # Ez a végpont mindig létezik, nem kell hozzá tábla
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+            -X GET "$URL/rest/v1/" \
+            -H "apikey: $SUPABASE_ANON_KEY" \
+            -H "Authorization: Bearer $SUPABASE_ANON_KEY")
+
+          echo "Válasz kód: $HTTP_CODE"
+
+          # Ha van egy biztos táblád, azt is pingelheted, írd át a 'profiles' részt:
+          # curl -s "$URL/rest/v1/profiles?select=id&limit=1" \
+          #  -H "apikey: $SUPABASE_ANON_KEY" \
+          #  -H "Authorization: Bearer $SUPABASE_ANON_KEY" -o /dev/null
