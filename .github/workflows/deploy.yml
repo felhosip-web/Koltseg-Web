@@ -27,7 +27,7 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: 'npm'
 
       - name: Install dependencies
@@ -41,6 +41,23 @@ jobs:
           printf '{\n  "SUPABASE_URL": "%s",\n  "SUPABASE_ANON_KEY": "%s"\n}\n' "$SUPABASE_URL" "$SUPABASE_ANON_KEY" > settings.json
           # ellenőrzésnek, ne maradjon bent élesben:
           cat settings.json | sed 's/\(ANON_KEY": "\).*/\1***"/'
+
+      - name: Generate version.json for build
+        run: |
+          mkdir -p public dist
+          VERSION=$(node -p "require('./package.json').version")
+          DATE=$(date -u +%Y-%m-%d)
+          SHA=$(git rev-parse --short HEAD)
+          ISO=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          cat <<EOF > public/version.json
+          {
+            "version": "$VERSION",
+            "buildDate": "$DATE",
+            "buildTime": "$ISO",
+            "commit": "$SHA"
+          }
+          EOF
+          cp public/version.json dist/version.json
 
       - name: Build
         run: npm run build
