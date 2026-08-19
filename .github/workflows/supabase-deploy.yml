@@ -1,10 +1,10 @@
 name: Supabase Migráció Deploy
-
 on:
   push:
-    branches:
-      - main # Vagy a saját alapértelmezett branched neve (pl. master)
-  workflow_dispatch: # Lehetővé teszi a manuális indítást is a GitHub felületén
+    branches: [ main ]
+    paths:
+      - 'supabase/migrations/**'
+  workflow_dispatch:
 
 jobs:
   deploy:
