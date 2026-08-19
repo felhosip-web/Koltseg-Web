@@ -34,9 +34,15 @@ jobs:
 
       - name: Helyi preview szerver indítása
         run: |
-          python3 -m http.server 3000 --directory dist > /dev/null 2>&1 &
+          npm run start > /dev/null 2>&1 &
           echo $! > server.pid
-          sleep 2
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:3000/ -o /dev/null; then
+              echo "Preview szerver elérhető."
+              break
+            fi
+            sleep 1
+          done
 
       - name: Lighthouse audit és összehasonlítás futtatása
         run: |
