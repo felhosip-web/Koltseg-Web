@@ -34,6 +34,7 @@
     "esbuild": "^0.25.12",
     "fake-indexeddb": "^6.2.5",
     "jsdom": "^29.1.1",
+    "lighthouse": "^12.2.1",
     "tailwindcss": "^4.1.14",
     "tsx": "^4.23.12",
     "typescript": "~5.8.2",

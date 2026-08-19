@@ -14,7 +14,7 @@ const commentOutputPath = './lighthouse-comment.md';
 function runLighthouse(targetUrl, outputPath) {
   try {
     console.log(`Lighthouse audit indítása a következő URL-re: ${targetUrl}`);
-    const cmd = `npx lighthouse "${targetUrl}" --output=json --output-path="${outputPath}" --chrome-flags="--headless --no-sandbox --disable-gpu --disable-dev-shm-usage" --quiet`;
+    const cmd = `npx --no-install lighthouse "${targetUrl}" --output=json --output-path="${outputPath}" --chrome-flags="--headless --no-sandbox --disable-gpu --disable-dev-shm-usage" --quiet`;
     execSync(cmd, { stdio: 'inherit' });
     if (fs.existsSync(outputPath)) {
       return JSON.parse(fs.readFileSync(outputPath, 'utf8'));
@@ -61,6 +61,11 @@ if (!prScores) {
 // 2. Audit Pages URL (élő verzió)
 const pagesReport = runLighthouse(pagesUrl, pagesReportPath);
 const pagesScores = extractScores(pagesReport);
+
+if (!pagesScores) {
+  console.error('Kritikus hiba: A GitHub Pages Lighthouse elemzése sikertelen volt!');
+  process.exit(1);
+}
 
 const categoryNames = [
   { key: 'performance', label: 'Teljesítmény (Performance)' },
