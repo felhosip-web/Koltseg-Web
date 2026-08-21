@@ -57,19 +57,33 @@ export class BootManager {
             if (this.app.updateReminderStatus && typeof this.app.updateReminderStatus === 'function') {
                 this.app.updateReminderStatus();
             }
+            if (this.app.workLogRenderer && typeof this.app.workLogRenderer.render === 'function') {
+                this.app.workLogRenderer.render();
+            }
             if (this.app.tabStateMachine && this.app.activeTab && this.app.tabStateMachine[this.app.activeTab]) {
                 this.app.tabStateMachine[this.app.activeTab]();
             }
 
             if (this.app.renderer && typeof this.app.renderer.updateFooterStatus === 'function') {
-                this.app.renderer.updateFooterStatus('Minden rendszer üzemkész', false);
+                this.app.renderer.updateFooterStatus('Adatok betöltve', false);
             }
 
             // További háttérfolyamatok: felhő, szinkronizáció, backup
             console.log('[BOOT-BACKGROUND] Felhő és szinkronizáció indítása...');
-            await this._initCloud();
-            await this._syncData();
-            await this._initBackup();
+            try {
+                await this._initCloud();
+                await this._syncData();
+                await this._initBackup();
+
+                if (this.app.renderer && typeof this.app.renderer.updateFooterStatus === 'function') {
+                    this.app.renderer.updateFooterStatus('Minden rendszer üzemkész', false);
+                }
+            } catch (serviceError) {
+                console.error('[BOOT-BACKGROUND] Hiba a háttérszolgáltatások (felhő/szinkron/backup) indításakor:', serviceError);
+                if (this.app.renderer && typeof this.app.renderer.updateFooterStatus === 'function') {
+                    this.app.renderer.updateFooterStatus('Háttérszolgáltatási hiba', false);
+                }
+            }
 
         } catch (error) {
             console.error('[BOOT-BACKGROUND] Hiba a háttérbetöltés során:', error);
@@ -177,6 +191,9 @@ export class BootManager {
     }
 
     async _initCloud() {
+        if (this.app._syncManagerPromise) {
+            await this.app._syncManagerPromise;
+        }
         this.app.cloud.init();
         if (!this.app.syncManager) {
             console.warn('[BOOT] SyncManager nem elérhető, kihagyva a felhő inicializálást');
