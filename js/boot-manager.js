@@ -10,15 +10,11 @@ export class BootManager {
     }
 
     async boot() {
-        console.log('[BOOT] Rendszer indítása...');
+        console.log('[BOOT] Rendszer indítása (gyors UI váz renderelés)...');
         
         const steps = [
             { name: 'Adatbázis kapcsolat', fn: () => this.app.db.connect() },
-            { name: 'Adatok betöltése', fn: () => this._loadAllData() },
             { name: 'UI inicializálás', fn: () => this._initUI() },
-            { name: 'Felhő kapcsolat', fn: () => this._initCloud() },
-            { name: 'Szinkronizáció', fn: () => this._syncData() },
-            { name: 'Automatikus backup', fn: () => this._initBackup() },
             { name: 'PWA regisztráció', fn: () => this._initPWA() },
             { name: 'Kész', fn: () => this._finalize() }
         ];
@@ -35,7 +31,67 @@ export class BootManager {
             }
         }
 
-        console.log('[BOOT] ✅ Rendszer sikeresen elindult!');
+        // Indítsuk el a háttérfolyamatokat anélkül, hogy megvárnánk (non-blocking)
+        this._runBackgroundBootTasks();
+
+        console.log('[BOOT] ✅ Alaprendszer sikeresen elindult, adatok töltődnek a háttérben!');
+    }
+
+    async _runBackgroundBootTasks() {
+        console.log('[BOOT-BACKGROUND] Háttér adatbetöltés indítása...');
+        try {
+            if (this.app.renderer && typeof this.app.renderer.updateFooterStatus === 'function') {
+                this.app.renderer.updateFooterStatus('Adatok töltődnek...', true);
+            }
+
+            await this._loadAllData();
+
+            console.log('[BOOT-BACKGROUND] Adatok betöltve, UI frissítése...');
+            // UI frissítése az adatok betöltése után
+            if (this.app.renderer && typeof this.app.renderer.renderTable === 'function') {
+                this.app.renderer.renderTable();
+            }
+            if (this.app.renderStats && typeof this.app.renderStats === 'function') {
+                this.app.renderStats();
+            }
+            if (this.app.updateReminderStatus && typeof this.app.updateReminderStatus === 'function') {
+                this.app.updateReminderStatus();
+            }
+            if (this.app.workLogRenderer && typeof this.app.workLogRenderer.render === 'function') {
+                this.app.workLogRenderer.render();
+            }
+            if (this.app.tabStateMachine && this.app.activeTab && this.app.tabStateMachine[this.app.activeTab]) {
+                this.app.tabStateMachine[this.app.activeTab]();
+            }
+
+            if (this.app.renderer && typeof this.app.renderer.updateFooterStatus === 'function') {
+                this.app.renderer.updateFooterStatus('Adatok betöltve', false);
+            }
+
+            // További háttérfolyamatok: felhő, szinkronizáció, backup
+            console.log('[BOOT-BACKGROUND] Felhő és szinkronizáció indítása...');
+            try {
+                await this._initCloud();
+                await this._syncData();
+                await this._initBackup();
+
+                if (this.app.renderer && typeof this.app.renderer.updateFooterStatus === 'function') {
+                    this.app.renderer.updateFooterStatus('Minden rendszer üzemkész', false);
+                }
+            } catch (serviceError) {
+                console.error('[BOOT-BACKGROUND] Hiba a háttérszolgáltatások (felhő/szinkron/backup) indításakor:', serviceError);
+                if (this.app.renderer && typeof this.app.renderer.updateFooterStatus === 'function') {
+                    this.app.renderer.updateFooterStatus('Háttérszolgáltatási hiba', false);
+                }
+            }
+
+        } catch (error) {
+            console.error('[BOOT-BACKGROUND] Hiba a háttérbetöltés során:', error);
+            this.app.hmiNotif?.showToast('Az adatok betöltése nem sikerült!', 'error');
+            if (this.app.renderer && typeof this.app.renderer.updateFooterStatus === 'function') {
+                this.app.renderer.updateFooterStatus('Adatbetöltési hiba', false);
+            }
+        }
     }
 
     async _loadAllData() {
@@ -51,7 +107,8 @@ export class BootManager {
                 this.app.pluginStorage?.init?.(),
                 this.app.workLogManager?.load?.()
             ]);
-            this.app.hmiNotif?.showToast('Adatok betöltve', 'success');
+            // A sikeres toast-ot kivettük, hogy ne zavarja a felhasználót induláskor,
+            // de az állapotot (Minden rendszer üzemkész) a footer jelzi.
         } finally {
             setBootstrapping(false);
         }
@@ -134,6 +191,9 @@ export class BootManager {
     }
 
     async _initCloud() {
+        if (this.app._syncManagerPromise) {
+            await this.app._syncManagerPromise;
+        }
         this.app.cloud.init();
         if (!this.app.syncManager) {
             console.warn('[BOOT] SyncManager nem elérhető, kihagyva a felhő inicializálást');
@@ -202,11 +262,6 @@ export class BootManager {
             this.app.destroy();
         });
         
-        console.log('[BOOT] ✅ Minden rendszer üzemkész.');
-        try {
-            this.app.renderer.updateFooterStatus('Minden rendszer üzemkész', false);
-        } catch (e) {
-            console.warn('[BOOT] Hiba a lábléc frissítésekor:', e);
-        }
+        console.log('[BOOT] Inicializálás kész.');
     }
 }
