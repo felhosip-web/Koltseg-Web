@@ -25,7 +25,7 @@
     "react-dom": "^19.0.1",
     "vite": "^6.2.3",
     "web-push": "^3.6.7",
-    "zustand": "^5.0.14"
+    "zustand": "^5.0.15"
   },
   "devDependencies": {
     "@types/express": "^4.17.21",
