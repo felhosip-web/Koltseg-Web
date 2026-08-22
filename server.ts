@@ -278,6 +278,7 @@ app.get('/api/push/status', (req, res) => {
 app.use('/css', express.static(path.join(rootDir, 'css')));
 app.use('/js', express.static(path.join(rootDir, 'js')));
 app.use('/icons', express.static(path.join(rootDir, 'icons')));
+app.use('/src', express.static(path.join(rootDir, 'src')));
 
 // Individual static files at root
 app.get('/manifest.json', (req, res) => {
