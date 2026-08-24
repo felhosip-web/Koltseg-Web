@@ -1,10 +1,43 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import LandingApp from './LandingApp.jsx'
+import CostAppHeader from './CostAppHeader.jsx'
+import CostAppTabs from './CostAppTabs.jsx'
+import CostAppFooter from './CostAppFooter.jsx'
 import './index.css'
 
-ReactDOM.createRoot(document.getElementById('appLandingScreenRoot')).render(
-  <React.StrictMode>
-    <LandingApp />
-  </React.StrictMode>,
-)
+const landingRoot = document.getElementById('appLandingScreenRoot');
+if (landingRoot) {
+    ReactDOM.createRoot(landingRoot).render(
+      <React.StrictMode>
+        <LandingApp />
+      </React.StrictMode>,
+    )
+}
+
+const headerRoot = document.getElementById('costAppHeaderRoot');
+if (headerRoot) {
+    ReactDOM.createRoot(headerRoot).render(
+      <React.StrictMode>
+        <CostAppHeader />
+      </React.StrictMode>,
+    )
+}
+
+const tabsRoot = document.getElementById('costAppTabsRoot');
+if (tabsRoot) {
+    ReactDOM.createRoot(tabsRoot).render(
+      <React.StrictMode>
+        <CostAppTabs />
+      </React.StrictMode>,
+    )
+}
+
+const footerRoot = document.getElementById('costAppFooterRoot');
+if (footerRoot) {
+    ReactDOM.createRoot(footerRoot).render(
+      <React.StrictMode>
+        <CostAppFooter />
+      </React.StrictMode>,
+    )
+}
