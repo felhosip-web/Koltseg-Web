@@ -7,6 +7,7 @@ const filesToCopy = [
   'manifest.json',
   'service-worker.js',
   'version.json',
+  'settings.json',
   'offline.html'
 ];
 

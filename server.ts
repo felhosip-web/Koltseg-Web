@@ -275,42 +275,42 @@ app.get('/api/push/status', (req, res) => {
 });
 
 // Individual static folders
-app.use('/css', express.static(path.join(rootDir, 'dist/css')));
-app.use('/js', express.static(path.join(rootDir, 'dist/js')));
-app.use('/icons', express.static(path.join(rootDir, 'dist/icons')));
-app.use('/Koltseg-Web/assets', express.static(path.join(rootDir, 'dist/assets')));
+app.use('/css', express.static(path.join(rootDir, 'css')));
+app.use('/js', express.static(path.join(rootDir, 'js')));
+app.use('/icons', express.static(path.join(rootDir, 'icons')));
+app.use('/Koltseg-Web/assets', express.static(path.join(rootDir, 'assets')));
 
 // Individual static files at root
 app.get('/manifest.json', (req, res) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('Expires', '0');
-  res.sendFile(path.join(rootDir, 'dist/manifest.json'));
+  res.sendFile(path.join(rootDir, 'manifest.json'));
 });
 app.get('/service-worker.js', (req, res) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('Expires', '0');
-  res.sendFile(path.join(rootDir, 'dist/service-worker.js'));
+  res.sendFile(path.join(rootDir, 'service-worker.js'));
 });
 app.get('/version.json', (req, res) => {
-  res.sendFile(path.join(rootDir, 'dist/version.json'));
+  res.sendFile(path.join(rootDir, 'version.json'));
 });
 app.get('/settings.json', (req, res) => {
-  res.sendFile(path.join(rootDir, 'dist/settings.json'));
+  res.sendFile(path.join(rootDir, 'settings.json'));
 });
 app.get('/offline.html', (req, res) => {
-  res.sendFile(path.join(rootDir, 'dist/offline.html'));
+  res.sendFile(path.join(rootDir, 'offline.html'));
 });
 
 // Primary index.html
 app.get('/', (req, res) => {
-  res.sendFile(path.join(rootDir, 'dist/index.html'));
+  res.sendFile(path.join(rootDir, 'index.html'));
 });
 
 // Fallback for everything else
 app.get('*', (req, res) => {
-  res.sendFile(path.join(rootDir, 'dist/index.html'));
+  res.sendFile(path.join(rootDir, 'index.html'));
 });
 
 app.listen(PORT, '0.0.0.0', () => {
