@@ -5,8 +5,8 @@ A PR automatikus Lighthouse mérése elkészült. Az alábbi táblázat összeha
 
 | Kategória | Élő Pages URL (`https://felhosip-web.github.io/Koltseg-Web/`) | PR Build | Változás |
 | :--- | :---: | :---: | :---: |
-| **Teljesítmény (Performance)** | 29 | 28 | -1 📉 |
-| **Akadálymentesítés (Accessibility)** | 88 | 88 | 0 ➖ |
+| **Teljesítmény (Performance)** | 29 | 26 | -3 📉 |
+| **Akadálymentesítés (Accessibility)** | 91 | 88 | -3 📉 |
 | **Legjobb gyakorlatok (Best Practices)** | 96 | 96 | 0 ➖ |
 | **SEO** | 90 | 82 | -8 📉 |
 

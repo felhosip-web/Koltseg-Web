@@ -3,10 +3,11 @@ import fs from 'fs';
 import path from 'path';
 
 const filesToCopy = [
-  'index.html',
+
   'manifest.json',
   'service-worker.js',
   'version.json',
+  'settings.json',
   'offline.html'
 ];
 
