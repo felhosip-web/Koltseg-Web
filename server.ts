@@ -275,6 +275,10 @@ app.get('/api/push/status', (req, res) => {
 });
 
 // Individual static folders
+// Production static assets are in dist directory when running via built server.cjs
+const isProd = process.env.NODE_ENV === 'production' || __dirname.endsWith('dist');
+const staticDir = isProd ? path.join(rootDir, 'dist') : rootDir;
+
 app.use('/css', express.static(path.join(rootDir, 'css')));
 app.use('/js', express.static(path.join(rootDir, 'js')));
 app.use('/icons', express.static(path.join(rootDir, 'icons')));
@@ -309,7 +313,10 @@ app.get('/', (req, res) => {
 });
 
 // Fallback for everything else
-app.get('*', (req, res) => {
+app.get('*', (req, res, next) => {
+  if (req.path.startsWith('/css/') || req.path.startsWith('/js/') || req.path.startsWith('/icons/') || req.path.startsWith('/Koltseg-Web/assets/')) {
+    return res.status(404).send('Not found');
+  }
   res.sendFile(path.join(rootDir, 'index.html'));
 });
 
