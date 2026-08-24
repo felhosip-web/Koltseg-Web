@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Költség Nyilvántartó v6.1.5</title>
+    <title>Költség Nyilvántartó v7.0.1</title>
 
     <!-- ===== KÜLSŐ CDN-ek (cache-elve a Service Worker által) ===== -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -322,164 +322,7 @@
     <div id="costAppView" class="max-w-7xl mx-auto p-4 md:p-6 hidden">
 
         <!-- ===== HEADER ===== -->
-        <header
-            class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 border-b border-gray-100 pb-5">
-            <div class="flex items-center gap-3">
-                <h1 class="text-2xl font-bold text-gray-800 flex items-center gap-2 app-title">
-                    <i class="fas fa-receipt text-blue-600"></i>
-                    Költség Nyilvántartó
-                </h1>
-                
-                <div class="flex items-center gap-1.5 ml-2">
-                    <span class="global-network-badge text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-400 font-medium flex items-center gap-1 transition-colors">
-                        <i class="fas fa-network-wired"></i> <span class="global-status-text">Offline</span>
-                    </span>
-                    <span class="supabase-status-icon w-5 h-5 flex items-center justify-center rounded-full bg-gray-100 text-gray-400 border border-transparent transition-all" title="Supabase (Inaktív)">
-                        <i class="fas fa-database text-[10px]"></i>
-                    </span>
-                    <span class="gdrive-status-icon w-5 h-5 flex items-center justify-center rounded-full bg-gray-100 text-gray-400 border border-transparent transition-all" title="Google Drive (Inaktív)">
-                        <i class="fab fa-google-drive text-[10px]"></i>
-                    </span>
-                </div>
-            </div>
-
-            <!-- Gombok és státuszok -->
-            <div class="flex flex-wrap items-center gap-3 w-full md:w-auto">
-                <!-- Új tétel + Hónap + AI -->
-                <div class="flex flex-wrap gap-2">
-                    <button id="btnNewItem"
-                        class="px-5 py-2.5 bg-blue-600 text-white rounded-2xl text-sm font-bold flex items-center gap-2 hover:bg-blue-700 transition shadow-sm">
-                        <i class="fas fa-plus-circle"></i> Tétel
-                    </button>
-                    <button id="btnNewMonth"
-                        class="px-5 py-2.5 bg-emerald-600 text-white rounded-2xl text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 transition shadow-sm">
-                        <i class="fas fa-calendar-plus"></i> Hónap
-                    </button>
-                    <button id="btnAiMagic"
-                        class="px-5 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-2xl text-sm font-bold flex items-center gap-2 hover:from-purple-700 hover:to-indigo-700 transition shadow-sm"
-                        title="AI Gyorsfelvitel">
-                        <i class="fas fa-magic"></i> AI
-                    </button>
-                    <button id="btnCostToMenu"
-                        class="px-4 py-2.5 bg-gray-100 text-gray-700 rounded-2xl text-sm font-bold flex items-center gap-2 hover:bg-gray-200 transition shadow-sm border border-gray-200"
-                        title="Vissza a Főmenübe">
-                        <i class="fas fa-th-large text-gray-500"></i> Főmenü
-                    </button>
-                    <button type="button"
-                        class="btn-modules-toggle px-4 py-2.5 bg-purple-50 text-purple-700 rounded-2xl text-sm font-bold flex items-center gap-2 hover:bg-purple-100 transition shadow-sm border border-purple-200"
-                        title="Modulok és Bővítmények">
-                        <i class="fas fa-puzzle-piece text-purple-600"></i> Modulok
-                    </button>
-                </div>
-
-                <!-- Beállítások + Adatkezelés -->
-                <div class="flex gap-2 relative"> <!-- ← IDE KELL A relative -->
-                    <button id="btnHelp"
-                        class="p-3 bg-white border border-gray-200 rounded-2xl text-indigo-600 hover:bg-indigo-50 transition font-semibold w-11 h-11 flex items-center justify-center shadow-sm"
-                        title="Súgó / Útmutató">
-                        <i class="fas fa-question text-lg"></i>
-                    </button>
-
-                    <button id="btnSettings"
-                        class="p-3 bg-white border border-gray-200 rounded-2xl text-gray-600 hover:bg-gray-50 transition w-11 h-11 flex items-center justify-center shadow-sm"
-                        title="Belépés & Beállítások">
-                        <i class="fas fa-sliders-h"></i>
-                    </button>
-
-                    <button id="btnDataControl"
-                        class="p-3 bg-amber-500 text-white rounded-2xl hover:bg-amber-600 transition w-11 h-11 flex items-center justify-center shadow-sm"
-                        title="Adatbázis & Export">
-                        <i class="fas fa-database"></i>
-                    </button>
-
-                    <button id="btnInstallApp"
-                        class="hidden px-4 py-2 bg-slate-900 text-white rounded-2xl text-sm font-bold flex items-center gap-2 hover:bg-slate-800 transition shadow-sm">
-                        <i class="fas fa-arrow-to-bottom"></i> Telepítés
-                    </button>
-
-                    <!-- ===== ADATKEZELÉS MENÜ ===== -->
-                    <div id="exportMenu"
-                        class="hidden absolute right-[-2rem] sm:right-0 top-full mt-2 w-56 max-w-[calc(100vw-2rem)] bg-white border border-gray-200 rounded-xl shadow-xl z-50 py-1 text-sm overflow-y-auto max-h-[calc(100vh-10rem)]">
-                        <div class="px-3 py-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider">Riportok
-                        </div>
-                        <button id="btnExportExcel"
-                            class="w-full text-left px-3 py-2.5 hover:bg-gray-50 flex items-center gap-2 text-gray-700">
-                            <i class="fas fa-file-excel text-emerald-600"></i> Excel
-                        </button>
-                        <button id="btnExportPdf"
-                            class="w-full text-left px-3 py-2.5 hover:bg-gray-50 flex items-center gap-2 text-gray-700">
-                            <i class="fas fa-file-pdf text-rose-600"></i> PDF
-                        </button>
-                        <div class="border-t border-gray-100 my-1"></div>
-                        <div class="px-3 py-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider">Adatbázis
-                        </div>
-                        <button id="btnExportJson"
-                            class="w-full text-left px-3 py-2.5 hover:bg-gray-50 flex items-center gap-2 text-gray-700">
-                            <i class="fas fa-save text-blue-500"></i> JSON mentés
-                        </button>
-                        <button id="btnImportJson"
-                            class="w-full text-left px-3 py-2.5 hover:bg-gray-50 flex items-center gap-2 text-gray-700">
-                            <i class="fas fa-folder-open text-amber-500"></i> JSON betöltés
-                        </button>
-                        <button id="btnDbAudit"
-                            class="w-full text-left px-3 py-2.5 hover:bg-gray-50 flex items-center gap-2 text-gray-700">
-                            <i class="fas fa-database text-amber-600"></i> IndexedDB Audit
-                        </button>
-                        <div class="border-t border-gray-100 my-1"></div>
-                        <button id="btnForceSync"
-                            class="w-full text-left px-3 py-2.5 hover:bg-gray-50 flex items-center gap-2 text-indigo-600">
-                            <i class="fas fa-arrows-rotate"></i> Szinkronizálás
-                        </button>
-                        <div class="border-t border-gray-100 my-1"></div>
-                        <div class="px-3 py-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider">Backup</div>
-                        <button id="btnRestoreBackup"
-                            class="w-full text-left px-3 py-2.5 hover:bg-gray-50 flex items-center gap-2 text-gray-700">
-                            <i class="fas fa-undo-alt text-purple-500"></i> Visszaállítás backupból
-                        </button>
-                        <button id="btnForceBackup"
-                            class="w-full text-left px-3 py-2.5 hover:bg-gray-50 flex items-center gap-2 text-gray-700">
-                            <i class="fas fa-database text-blue-500"></i> Manuális backup mentés
-                        </button>
-                        <div class="border-t border-gray-100 my-1"></div>
-                        <button id="btnWipeDatabase"
-                            class="w-full text-left px-3 py-2.5 hover:bg-red-50 flex items-center gap-2 text-red-600 font-semibold">
-                            <i class="fas fa-trash-can"></i> Adatbázis törlése
-                        </button>
-                    </div>
-                </div>
-
-                <!-- ===== SZINKRONIZÁCIÓS QUEUE BADGE TOOLTIP ===== -->
-                <div id="syncQueueContainer" class="relative inline-block ml-2 cursor-pointer group"
-                    title="Függőben lévő szinkronizációs műveletek">
-                    <i class="fas fa-cloud-upload-alt text-gray-400 text-lg hover:text-amber-500 transition"></i>
-                    <span id="syncQueueBadge"
-                        class="absolute -top-1 -right-1 bg-amber-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center hidden">0</span>
-
-                    <!-- Tooltip -->
-                    <div
-                        class="sync-queue-tooltip hidden group-hover:block absolute right-0 top-full mt-2 bg-white rounded-2xl shadow-2xl p-4 min-w-[220px] z-50 border border-gray-100">
-                        <div class="text-xs font-bold text-gray-700 mb-2">🔄 Függő műveletek</div>
-                        <div id="tooltipContent" class="text-xs text-gray-500">Nincs adat</div>
-                    </div>
-                </div>
-
-                <!-- EUR státusz -->
-                <div
-                    class="flex items-center gap-2 px-4 py-2.5 bg-gray-50 rounded-2xl border border-gray-200 text-sm font-medium">
-                    <span id="eurLed" class="w-3 h-3 rounded-full bg-gray-400"></span>
-                    <span id="eurStatusText" class="text-gray-700">EUR: ...</span>
-                </div>
-
-                <!-- Reminder státusz -->
-                <div id="reminderGlobalStatus"
-                    class="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 rounded-2xl text-sm font-medium cursor-pointer hover:shadow transition">
-                    <span id="reminderLed" class="w-3 h-3 rounded-full bg-emerald-500"></span>
-                    <span id="reminderStatusText">Határidők OK</span>
-                    <span id="reminderCount"
-                        class="bg-gray-100 text-gray-600 px-2 py-0.5 rounded font-mono text-xs">0</span>
-                </div>
-            </div>
-        </header>
+        <div id="costAppHeaderRoot"></div>
 
 
          <!-- /settingsPanel -->
@@ -492,44 +335,7 @@
         </div>
 
         <!-- ===== TABS NAVIGÁCIÓ ===== -->
-        <div class="flex gap-2 mb-4 overflow-x-auto pb-1">
-            <button
-                class="tab-btn px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all bg-blue-600 text-white shadow-md"
-                data-tab="dashboard">
-                <i class="fas fa-chart-pie mr-1"></i> Áttekintés
-            </button>
-            <button
-                class="tab-btn px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all bg-gray-100 text-gray-600 hover:bg-gray-200"
-                data-tab="table">
-                <i class="fas fa-table mr-1"></i> Táblázat
-            </button>
-            <button
-                class="tab-btn px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all bg-gray-100 text-gray-600 hover:bg-gray-200"
-                data-tab="time">
-                <i class="fas fa-stopwatch mr-1"></i> Idő
-            </button>
-            <button
-                class="tab-btn px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all bg-gray-100 text-gray-600 hover:bg-gray-200"
-                data-tab="charts">
-                <i class="fas fa-chart-line mr-1"></i> Kimutatások
-            </button>
-            <button
-                class="tab-btn px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all bg-gray-100 text-gray-600 hover:bg-gray-200"
-                data-tab="reminders">
-                <i class="fas fa-clock mr-1"></i> Határidők
-            </button>
-            <button
-                class="tab-btn px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all bg-gray-100 text-gray-600 hover:bg-gray-200"
-                data-tab="incoming">
-                <i class="fas fa-arrow-down text-emerald-500 mr-1"></i> Bejövő utalás
-            </button>
-            <button
-                class="tab-btn px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all bg-gray-100 text-gray-600 hover:bg-gray-200"
-                data-tab="stats">
-                <i class="fas fa-calculator mr-1"></i> Részletek
-            </button>
-            <!-- Modulok a Főmenü melletti "Modulok" gombból indíthatók -->
-        </div>
+        <div id="costAppTabsRoot"></div>
 
         <!-- ===== TAB TARTALMAK ===== -->
         <div id="tabContent">
@@ -867,24 +673,6 @@
         </div>
 
         <!-- ===== FOOTER ===== -->
-        <footer
-            class="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-4 py-2 text-xs text-gray-600 flex items-center justify-between z-40">
-            <div class="flex items-center gap-2">
-                <span id="saveLed"
-                    class="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-sm transition-all duration-300"></span>
-                <span id="saveStatusText" class="font-mono uppercase tracking-wider text-[10px] text-gray-500">Rendszer
-                    Online</span>
-            </div>
-            <div class="font-mono text-[10px] text-gray-400">
-                Utolsó mentés: <span id="lastSaveTime">Soha</span>
-            </div>
-            <div class="text-gray-400 relative p-1" id="debugToggleBtnContainer">
-                Költségnyilvántartó <span class="app-version-label">v4.5.0</span>
-                <button id="debugToggleBtn"
-                    class="absolute inset-0 w-full h-full bg-transparent border-none cursor-pointer z-50 focus:outline-none"
-                    title="Debug panel megnyitása (5x kattintás)"></button>
-            </div>
-        </footer>
 
     </div><!-- /max-w-7xl -->
 
@@ -1049,26 +837,10 @@
         </div>
 
         <!-- ===== FOOTER ===== -->
-        <footer
-            class="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-4 py-2 text-xs text-gray-600 flex items-center justify-between z-40">
-            <div class="flex items-center gap-2">
-                <span id="saveLed"
-                    class="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-sm transition-all duration-300"></span>
-                <span id="saveStatusText" class="font-mono uppercase tracking-wider text-[10px] text-gray-500">Rendszer
-                    Online</span>
-            </div>
-            <div class="font-mono text-[10px] text-gray-400">
-                Utolsó mentés: <span id="lastSaveTime">Soha</span>
-            </div>
-            <div class="text-gray-400 relative p-1" id="debugToggleBtnContainer">
-                Költségnyilvántartó <span class="app-version-label">v4.5.0</span>
-                <button id="debugToggleBtn"
-                    class="absolute inset-0 w-full h-full bg-transparent border-none cursor-pointer z-50 focus:outline-none"
-                    title="Debug panel megnyitása (5x kattintás)"></button>
-            </div>
-        </footer>
 
     </div>
+
+    <div id="costAppFooterRoot" class="max-w-7xl mx-auto p-4 md:p-6 pb-20"></div>
 
     <!-- WORK EDITOR / CREATOR MODAL -->
     
@@ -1084,7 +856,7 @@
                         Felhő & Beállítások</span>
                     <div class="flex items-center gap-3">
                         <span id="dbVersionBadge"
-                            class="text-[10px] font-mono bg-indigo-50 text-indigo-600 px-2.5 py-1 rounded-md border border-indigo-100 font-bold app-version-label">v4.5.0</span>
+                            class="text-[10px] font-mono bg-indigo-50 text-indigo-600 px-2.5 py-1 rounded-md border border-indigo-100 font-bold app-version-label">v7.0.1</span>
                         <button type="button" id="btnCloseSettingsModal"
                             class="w-8 h-8 flex items-center justify-center bg-gray-100 hover:bg-gray-200 rounded-lg text-gray-500 transition"
                             title="Bezárás">
@@ -2189,7 +1961,7 @@
                     class="p-4 border-t border-gray-100 bg-slate-50 flex items-center justify-between text-[11px] text-slate-400">
                     <span class="flex items-center gap-1"><i class="fas fa-info-circle text-indigo-500"></i> Tipp: Az
                         adatok szinkronizálásához legyen aktív a felhőkapcsolat!</span>
-                    <span class="font-bold app-version-label">v4.5.0</span>
+                    <span class="font-bold app-version-label">v7.0.1</span>
                 </div>
             </div>
         </div>
