@@ -5,20 +5,10 @@ import { fileURLToPath } from 'url';
 import { GoogleGenAI, Type } from "@google/genai";
 import webpush from 'web-push';
 
-// Determine rootDir: in production (dist/server.cjs), we need the project root, not dist/
-let rootDir: string;
+let rootDir = process.cwd();
 try {
-  // In production bundle, __dirname may be 'dist', so we need to go up one level
   if (typeof __dirname !== 'undefined') {
-    // Check if we're running from dist/server.cjs
-    if (__dirname.endsWith('dist') || __dirname.endsWith('dist/')) {
-      rootDir = path.join(__dirname, '..');
-    } else {
-      rootDir = __dirname;
-    }
-  } else {
-    // ESM fallback: assume we're running from project root
-    rootDir = process.cwd();
+    rootDir = __dirname;
   }
 } catch (e) {
   rootDir = process.cwd();
@@ -284,11 +274,11 @@ app.get('/api/push/status', (req, res) => {
   });
 });
 
-// Individual static folders - fallthrough:false ensures 404s for missing assets instead of SPA fallback
-app.use('/css', express.static(path.join(rootDir, 'css'), { fallthrough: false }));
-app.use('/js', express.static(path.join(rootDir, 'js'), { fallthrough: false }));
-app.use('/icons', express.static(path.join(rootDir, 'icons'), { fallthrough: false }));
-app.use('/Koltseg-Web/assets', express.static(path.join(rootDir, 'assets'), { fallthrough: false }));
+// Individual static folders
+app.use('/css', express.static(path.join(rootDir, 'css')));
+app.use('/js', express.static(path.join(rootDir, 'js')));
+app.use('/icons', express.static(path.join(rootDir, 'icons')));
+app.use('/Koltseg-Web/assets', express.static(path.join(rootDir, 'assets')));
 
 // Individual static files at root
 app.get('/manifest.json', (req, res) => {
