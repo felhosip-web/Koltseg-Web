@@ -1,21 +1,7 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 
 export default function CostAppTabs() {
-    useEffect(() => {
-        // Trigger vanilla logic for tabs once rendered
-        if (window.app?.tabStateMachine) {
-             const tabContainer = document.querySelector('.flex.gap-2.mb-4.overflow-x-auto.pb-1');
-             if (tabContainer) {
-                 tabContainer.addEventListener('click', (e) => {
-                     const btn = e.target.closest('.tab-btn');
-                     if (btn) {
-                         const tabId = btn.dataset.tab;
-                         window.app.tabStateMachine.switchTab(tabId);
-                     }
-                 });
-             }
-        }
-    }, []);
+
 
     return (
         <div className="flex gap-2 mb-4 overflow-x-auto pb-1" id="reactCostTabs">
