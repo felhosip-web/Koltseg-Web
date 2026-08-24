@@ -4,6 +4,7 @@ import LandingApp from './LandingApp.jsx'
 import CostAppHeader from './CostAppHeader.jsx'
 import CostAppTabs from './CostAppTabs.jsx'
 import CostAppFooter from './CostAppFooter.jsx'
+import SettingsPanel from './components/SettingsPanel.jsx'
 import './index.css'
 
 const landingRoot = document.getElementById('appLandingScreenRoot');
@@ -11,6 +12,15 @@ if (landingRoot) {
     ReactDOM.createRoot(landingRoot).render(
       <React.StrictMode>
         <LandingApp />
+      </React.StrictMode>,
+    )
+}
+
+const settingsRoot = document.getElementById('costAppSettingsRoot');
+if (settingsRoot) {
+    ReactDOM.createRoot(settingsRoot).render(
+      <React.StrictMode>
+        <SettingsPanel />
       </React.StrictMode>,
     )
 }
