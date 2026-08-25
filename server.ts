@@ -276,7 +276,7 @@ app.get('/api/push/status', (req, res) => {
 
 // Individual static folders
 // Production static assets are in dist directory when running via built server.cjs
-const isProd = process.env.NODE_ENV === 'production' || __dirname.endsWith('dist');
+const isProd = process.env.NODE_ENV === 'production' || rootDir.endsWith('dist');
 const staticDir = isProd ? path.join(rootDir, 'dist') : rootDir;
 
 app.use('/css', express.static(path.join(rootDir, 'css')));
