@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Költség Nyilvántartó v7.0.2</title>
+    <title>Költség Nyilvántartó v7.0.3</title>
 
     <!-- ===== KÜLSŐ CDN-ek (cache-elve a Service Worker által) ===== -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -342,7 +342,9 @@
 
             <!-- ===== 0. DASHBOARD (ÚJ) ===== -->
             <!-- ===== 0. DASHBOARD (ÚJ V2) ===== -->
-            <div id="tab-dashboard" class="tab-pane"></div>
+            <div id="tab-dashboard" class="tab-pane">
+                <div id="costAppDashboardRoot"></div>
+            </div>
             <div id="tab-table" class="tab-pane">
                 <div id="mainTableContainer"
                     class="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-visible p-0 md:p-2"></div>
@@ -513,120 +515,12 @@
             </div>
 
             <!-- 4. STATISZTIKA -->
+            <!-- 4. STATISZTIKA -->
             <div id="tab-stats" class="tab-pane hidden">
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-                    <div class="bg-white p-6 rounded-3xl shadow border border-gray-100">
-                        <p class="text-gray-500 text-sm">Összes kiadás</p>
-                        <p id="statTotal" class="text-3xl font-bold text-gray-800 mt-2">-</p>
-                    </div>
-                    <div class="bg-white p-6 rounded-3xl shadow border border-gray-100">
-                        <p class="text-gray-500 text-sm">Kártya</p>
-                        <p id="statCard" class="text-3xl font-bold text-blue-600 mt-2">-</p>
-                    </div>
-                    <div class="bg-white p-6 rounded-3xl shadow border border-gray-100">
-                        <p class="text-gray-500 text-sm">Készpénz</p>
-                        <p id="statCash" class="text-3xl font-bold text-emerald-600 mt-2">-</p>
-                    </div>
-                    <div class="bg-white p-6 rounded-3xl shadow border border-gray-100">
-                        <p class="text-gray-500 text-sm">Utalás</p>
-                        <p id="statTransfer" class="text-3xl font-bold text-amber-600 mt-2">-</p>
-                    </div>
-                </div>
-                <!-- ===== BEJÖVŐ STATISZTIKA (ÚJ SOR) ===== -->
-                <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
-                    <div class="bg-white p-6 rounded-3xl shadow border border-gray-100">
-                        <p class="text-gray-500 text-sm flex items-center gap-1">
-                            <i class="fas fa-arrow-down text-emerald-500"></i> Összes bejövő
-                        </p>
-                        <p id="statIncomingTotal" class="text-3xl font-bold text-emerald-600 mt-2">-</p>
-                    </div>
-                    <div class="bg-white p-6 rounded-3xl shadow border border-gray-100">
-                        <p class="text-gray-500 text-sm flex items-center gap-1">
-                            <i class="fas fa-user text-emerald-500"></i> Legtöbb utaló
-                        </p>
-                        <p id="statIncomingTopSender" class="text-xl font-bold text-gray-800 mt-2 truncate">-</p>
-                    </div>
-                    <div class="bg-white p-6 rounded-3xl shadow border border-gray-100">
-                        <p class="text-gray-500 text-sm flex items-center gap-1">
-                            <i class="fas fa-receipt text-emerald-500"></i> Bejövő tételek
-                        </p>
-                        <p id="statIncomingCount" class="text-3xl font-bold text-gray-800 mt-2">-</p>
-                    </div>
-                    <div class="bg-white p-6 rounded-3xl shadow border border-gray-100">
-                        <p class="text-gray-500 text-sm flex items-center gap-1">
-                            <i class="fas fa-scale-balanced text-blue-500"></i> Egyenleg
-                        </p>
-                        <p id="statBalance" class="text-2xl font-bold mt-2">-</p>
-                    </div>
-                </div>
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div class="bg-white p-6 rounded-3xl shadow border border-gray-100">
-                        <p class="text-gray-500 text-sm">Kategóriák száma</p>
-                        <p id="statItems" class="text-3xl font-bold text-indigo-600 mt-2">-</p>
-                    </div>
-                    <div class="bg-white p-6 rounded-3xl shadow border border-gray-100">
-                        <p class="text-gray-500 text-sm">Hónapok száma</p>
-                        <p id="statMonths" class="text-3xl font-bold text-purple-600 mt-2">-</p>
-                    </div>
-                    <div class="bg-white p-6 rounded-3xl shadow border border-gray-100">
-                        <p class="text-gray-500 text-sm">Bejegyzések száma</p>
-                        <p id="statEntries" class="text-3xl font-bold text-rose-600 mt-2">-</p>
-                    </div>
-                </div>
-                <div class="mt-6 bg-white p-6 rounded-3xl shadow border border-gray-100 relative">
-                    <div class="flex justify-between items-center">
-                        <p class="text-gray-500 text-sm flex items-center gap-1.5">
-                            <i class="fas fa-grip text-indigo-500"></i> Táblázat kitöltöttsége
-                        </p>
-                        <!-- Részletek gomb -->
-                        <button id="btnFillDetails" class="text-gray-400 hover:text-indigo-600 transition p-1.5 rounded-full hover:bg-gray-50 flex items-center justify-center" title="Részletes kitöltöttségi mutatók">
-                            <i class="fas fa-info-circle text-base"></i>
-                        </button>
-                    </div>
-                    <div class="flex items-center gap-4 mt-3">
-                        <div class="w-full bg-gray-100 rounded-full h-4 overflow-hidden border border-gray-100">
-                            <div id="statFillBar"
-                                class="bg-gradient-to-r from-blue-500 to-indigo-600 h-4 rounded-full transition-all duration-500 shadow-sm"
-                                style="width: 0%"></div>
-                        </div>
-                        <span id="statFillPercent" class="text-sm font-bold text-gray-800">0%</span>
-                    </div>
-
-                    <!-- Részletek Buborék / Popover -->
-                    <div id="fillDetailsBubble" class="hidden absolute right-6 top-16 bg-white border border-gray-100 rounded-2xl shadow-2xl p-5 min-w-[300px] z-50 text-xs text-gray-600 leading-relaxed transition-all">
-                        <div class="flex justify-between items-center border-b border-gray-100 pb-2 mb-3">
-                            <span class="font-bold text-gray-800 text-sm flex items-center gap-1.5">
-                                <i class="fas fa-chart-bar text-indigo-500"></i> Kitöltési részletek
-                            </span>
-                            <button id="btnCloseFillDetails" class="text-gray-400 hover:text-gray-600 p-0.5 rounded transition">
-                                <i class="fas fa-times"></i>
-                            </button>
-                        </div>
-                        <div class="space-y-3">
-                            <div class="flex justify-between items-center">
-                                <span class="text-gray-500">Aktív (kitöltött) cellák:</span>
-                                <span id="statFillActiveCells" class="font-bold text-gray-800">-</span>
-                            </div>
-                            <div class="flex justify-between items-center">
-                                <span class="text-gray-500">Üres cellák száma:</span>
-                                <span id="statFillEmptyCells" class="font-bold text-gray-800">-</span>
-                            </div>
-                            <div class="flex justify-between items-center">
-                                <span class="text-gray-500">Összes rögzített tétel:</span>
-                                <span id="statFillTotalEntries" class="font-bold text-gray-800">-</span>
-                            </div>
-                            <div class="flex justify-between items-center">
-                                <span class="text-gray-500">Átlagos tétel / cella:</span>
-                                <span id="statFillAvgEntries" class="font-bold text-gray-800">-</span>
-                            </div>
-                        </div>
-                        <div class="mt-3.5 pt-2.5 border-t border-gray-100 text-[10px] text-gray-400">
-                            A kitöltöttség a kategóriák és hónapok által alkotott mátrix aktív (legalább egy tranzakciót tartalmazó) celláinak arányát mutatja.
-                        </div>
-                    </div>
-                </div>
+                <div id="costAppStatsRoot"></div>
             </div>
-            <!-- ===== 5. BEJÖVŐ UTALÁSOK ===== -->
+
+            <!-- 5. BEJÖVŐ UTALÁSOK -->
             <div id="tab-incoming" class="tab-pane hidden">
                 <div class="flex justify-between items-center mb-4">
                     <h3 class="text-sm font-bold text-gray-700 flex items-center gap-2">
@@ -648,25 +542,25 @@
         <!-- ===== MODÁLOK ===== -->
 
         <!-- CELL EDITOR MODAL -->
-        
+
 
         <!-- INPUT MODAL -->
-        
+
 
         <!-- GLOBÁLIS MEGERŐSÍTŐ MODAL -->
-        
+
 
         <!-- REMINDER EDIT MODAL -->
-        
 
-        
 
-        
 
-        
+
+
+
+
 
         <!-- DB Audit Modal -->
-        
+
 
         <!-- TOAST -->
         <div id="hmiToastContainer" class="fixed top-4 right-4 z-[300000] flex flex-col gap-2 pointer-events-none">
@@ -686,7 +580,7 @@
                     <i class="fas fa-briefcase text-emerald-600"></i>
                     Munka Nyilvántartás
                 </h1>
-                
+
                 <div class="flex items-center gap-1.5 ml-2">
                     <span class="global-network-badge text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-400 font-medium flex items-center gap-1 transition-colors">
                         <i class="fas fa-network-wired"></i> <span class="global-status-text">Offline</span>
@@ -843,7 +737,7 @@
     <div id="costAppFooterRoot" class="max-w-7xl mx-auto p-4 md:p-6 pb-20"></div>
 
     <!-- WORK EDITOR / CREATOR MODAL -->
-    
+
         <!-- ===== MODALS & OVERLAYS (GLOBAL) ===== -->
 <!-- ===== BELÉPTETŐ ÉS BEÁLLÍTÁSOK PANEL (React Component Mount Point) ===== -->
         <div id="costAppSettingsRoot"></div>
@@ -1279,7 +1173,7 @@
                     class="p-4 border-t border-gray-100 bg-slate-50 flex items-center justify-between text-[11px] text-slate-400">
                     <span class="flex items-center gap-1"><i class="fas fa-info-circle text-indigo-500"></i> Tipp: Az
                         adatok szinkronizálásához legyen aktív a felhőkapcsolat!</span>
-                    <span class="font-bold app-version-label">v7.0.2</span>
+                    <span class="font-bold app-version-label">v7.0.3</span>
                 </div>
             </div>
         </div>

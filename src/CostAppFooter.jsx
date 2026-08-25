@@ -14,7 +14,7 @@ export default function CostAppFooter() {
                 Utolsó mentés: <span id="lastSaveTime">Soha</span>
             </div>
             <div className="text-gray-400 relative p-1" id="debugToggleBtnContainer">
-                Költségnyilvántartó <span className="app-version-label">v7.0.2</span>
+                Költségnyilvántartó <span className="app-version-label">v7.0.3</span>
                 <button id="debugToggleBtn"
                     className="absolute inset-0 w-full h-full bg-transparent border-none cursor-pointer z-50 focus:outline-none"
                     title="Debug panel megnyitása (5x kattintás)"></button>
