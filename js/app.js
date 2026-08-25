@@ -617,7 +617,7 @@ class App {
             const due = dayjs(rem.due_date);
             const diff = due.diff(today, 'day');
             if (diff < 0) overdue++;
-            else if (diff <= 7) soon++;
+            else if (diff > 0 && diff <= 7) soon++;
         });
 
         const led = document.getElementById('reminderLed');

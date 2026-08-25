@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
+import { db } from '../../../js/db.js';
 
 // A minimal port of the dashboard rendering logic using React state
 
@@ -131,17 +132,27 @@ export default function DashboardTab() {
                 if (Math.abs(change) > 2) {
                     notifications.push({ type: 'info', icon: '💶', text: `EUR árfolyam ${change > 0 ? '↗︎' : '↘︎'} ${Math.abs(change).toFixed(1)}% (${savedRate} → ${eurRate} Ft)` });
                 }
-                localStorage.setItem('last_eur_rate', eurRate.toString());
             }
+            localStorage.setItem('last_eur_rate', eurRate.toString());
 
             // TODAY FOCUS
-            const notes = app.notepadNotes || (JSON.parse(localStorage.getItem('plugin_notepad_notes')) || []);
-            let calendarEvents = app.calendarEvents || (JSON.parse(localStorage.getItem('plugin_calendar_events')) || []);
+            const safeJsonParse = (key, fallback = []) => {
+                try {
+                    const item = localStorage.getItem(key);
+                    return item ? JSON.parse(item) : fallback;
+                } catch (e) {
+                    console.warn(`[DASHBOARD] Failed to parse localStorage key "${key}":`, e);
+                    return fallback;
+                }
+            };
+
+            const notes = app.notepadNotes || safeJsonParse('plugin_notepad_notes', []);
+            let calendarEvents = app.calendarEvents || safeJsonParse('plugin_calendar_events', []);
             if (!calendarEvents || calendarEvents.length === 0) {
-                calendarEvents = JSON.parse(localStorage.getItem('calendar_events')) || [];
+                calendarEvents = safeJsonParse('calendar_events', []);
             }
-            const shoppingItems = app.shoppingItems || (JSON.parse(localStorage.getItem('plugin_shopping_list_items')) || []);
-            const kmEntries = app.fuelLogs || (JSON.parse(localStorage.getItem('plugin_fuel_logs')) || []);
+            const shoppingItems = app.shoppingItems || safeJsonParse('plugin_shopping_list_items', []);
+            const kmEntries = app.fuelLogs || safeJsonParse('plugin_fuel_logs', []);
 
             const urgentItems = [];
             const todayStrISO = now.toISOString ? now.toISOString().split('T')[0] : todayStr;
@@ -288,32 +299,54 @@ export default function DashboardTab() {
             setWeatherData({ icon: iconClass, color: colorClass, temp, city });
         };
 
-        fetchWeather();
+        const handleAppUpdate = () => {
+            if (window.app) {
+                fetchWeather();
+            }
+        };
+
+        if (window.app) {
+            fetchWeather();
+        }
+
+        window.addEventListener('app-data-updated', handleAppUpdate);
+        return () => window.removeEventListener('app-data-updated', handleAppUpdate);
     }, []);
 
     useEffect(() => {
         // Fetch Time Tracker Data async
-        if (window.app && window.app.timeTracker && window.dayjs && window.db) {
-            const startOfWeek = window.dayjs().startOf('week').format('YYYY-MM-DD');
-            const endOfWeek = window.dayjs().endOf('week').format('YYYY-MM-DD');
+        const fetchTimeTrackerData = () => {
+            if (window.app && window.app.timeTracker && window.dayjs && db) {
+                const startOfWeek = window.dayjs().startOf('week').format('YYYY-MM-DD');
+                const endOfWeek = window.dayjs().endOf('week').format('YYYY-MM-DD');
 
-            window.db.timeEntries.where('date').between(startOfWeek, endOfWeek, true, true).toArray().then(weekEntries => {
-                let weekMinutes = 0;
-                let weekEarnings = 0;
-                weekEntries.forEach(e => {
-                    weekMinutes += e.durationMin;
-                    weekEarnings += e.earnings;
-                });
+                db.timeEntries.where('date').between(startOfWeek, endOfWeek, true, true).toArray().then(weekEntries => {
+                    let weekMinutes = 0;
+                    let weekEarnings = 0;
+                    weekEntries.forEach(e => {
+                        weekMinutes += e.durationMin;
+                        weekEarnings += e.earnings;
+                    });
 
-                const h = Math.floor(weekMinutes / 60);
-                const m = weekMinutes % 60;
-                setTimeTrackerStats({
-                    hours: h > 0 ? `${h}ó` : '',
-                    minutes: `${m}p`,
-                    earnings: weekEarnings.toLocaleString('hu-HU')
-                });
-            }).catch(e => console.error(e));
-        }
+                    const h = Math.floor(weekMinutes / 60);
+                    const m = weekMinutes % 60;
+                    setTimeTrackerStats({
+                        hours: h > 0 ? `${h}ó` : '',
+                        minutes: `${m}p`,
+                        earnings: weekEarnings.toLocaleString('hu-HU')
+                    });
+                }).catch(e => console.error('[TIME_TRACKER]', e));
+            }
+        };
+
+        const handleAppUpdate = () => {
+            fetchTimeTrackerData();
+        };
+
+        fetchTimeTrackerData();
+
+        window.addEventListener('app-data-updated', handleAppUpdate);
+        return () => window.removeEventListener('app-data-updated', handleAppUpdate);
     }, []);
 
     useEffect(() => {

@@ -7,9 +7,10 @@
       "version": "7.0.3",
       "date": "2026-08-24",
       "changes": [
-        "React Phase 3: Settings (or Help) panel migrated to React",
-        "Still hybrid: table, boot, sync remain vanilla",
-        "Vite production build pipeline preserved"
+        "React Phase 4: Dashboard and Stats tabs migrated to React",
+        "DashboardV2 component with full state management and Chart.js integration",
+        "StatsRenderer component for enhanced analytics visualization",
+        "Hybrid architecture: table, boot, sync remain vanilla for stability"
       ]
     },
     {

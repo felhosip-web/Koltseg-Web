@@ -7,4 +7,7 @@ db.version(2).stores({
     timeEntries: '++id, projectId, date, createdAt'
 });
 
+// Expose db globally for React components
+window.db = db;
+
 export { db };
