@@ -327,6 +327,8 @@ export default function DashboardTab() {
 
             if (window.dayjs) {
                 setCurrentDateStr(window.dayjs().format('YYYY. MMMM D., dddd'));
+            } else {
+                setCurrentDateStr(new Date().toLocaleDateString('hu-HU', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' }));
             }
 
             try {
@@ -342,7 +344,11 @@ export default function DashboardTab() {
             updateTimeAndNameDays();
         };
         window.addEventListener('app-data-updated', handleUpdate);
-        return () => window.removeEventListener('app-data-updated', handleUpdate);
+        const timerId = setInterval(updateTimeAndNameDays, 60000);
+        return () => {
+            window.removeEventListener('app-data-updated', handleUpdate);
+            clearInterval(timerId);
+        };
     }, []);
 
     useEffect(() => {
