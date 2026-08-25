@@ -1,8 +1,17 @@
 {
-  "version": "7.0.1",
+  "version": "7.0.2",
   "build": "2026-08-23T14:35:31.958Z",
   "release": "stable",
   "changelog": [
+    {
+      "version": "7.0.2",
+      "date": "2026-08-24",
+      "changes": [
+        "React Phase 3: Settings (or Help) panel migrated to React",
+        "Still hybrid: table, boot, sync remain vanilla",
+        "Vite production build pipeline preserved"
+      ]
+    },
     {
       "version": "6.1.7",
       "date": "2026-08-14",
