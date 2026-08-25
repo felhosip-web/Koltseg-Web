@@ -51,9 +51,7 @@ export class BootManager {
             if (this.app.renderer && typeof this.app.renderer.renderTable === 'function') {
                 this.app.renderer.renderTable();
             }
-            if (this.app.renderStats && typeof this.app.renderStats === 'function') {
-                this.app.renderStats();
-            }
+            window.dispatchEvent(new Event('app-data-updated'));
             if (this.app.updateReminderStatus && typeof this.app.updateReminderStatus === 'function') {
                 this.app.updateReminderStatus();
             }
@@ -123,7 +121,7 @@ export class BootManager {
         }
         
         this.app.renderer.renderTable();
-        this.app.renderStats();
+        window.dispatchEvent(new Event('app-data-updated'));
         this.app.updateReminderStatus();
         
         // Initial Work Log rendering

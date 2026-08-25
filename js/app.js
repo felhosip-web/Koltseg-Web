@@ -32,9 +32,6 @@ import { DataSyncController } from './data-sync-controller.js';
 import { DataExportController } from './data-export-controller.js';
 import { DataMaintenanceController } from './data-maintenance-controller.js';
 import { ServiceDevManager } from './service-dev-manager.js';
-import { DashboardV2 } from './views/dashboard-v2.js';
-import { DashboardRenderer } from './dashboard-renderer.js';
-import { StatsRenderer } from './stats-renderer.js';
 import { setupDebugConsole, initDebugPanel } from './debug-panel.js';
 import { IncomingRenderer } from './incoming-renderer.js';
 import { LogManager } from './log-manager.js';
@@ -142,24 +139,19 @@ class App {
         this._dashboardChart = null;
 
         // === 13. TAB ÁLLAPOTGÉP ===
-        this.dashboardV2 = new DashboardV2(this);
-        this.dashboardRenderer = new DashboardRenderer(this);
-        this.statsRenderer = new StatsRenderer(this);
 
         this.tabStateMachine = {
             dashboard: () => {
-                const container = document.getElementById('tab-dashboard');
-                if (container) {
-                    container.innerHTML = this.dashboardV2.render();
-                    this.dashboardV2.attachEvents();
-                }
+                window.dispatchEvent(new Event('app-data-updated'));
             },
             table: () => this.renderer.renderTable(),
             charts: () => this.chartsRenderer.renderAll(this.currentFilter),
             time: () => this.timeTracker.renderTab(),
             reminders: () => this.remindersRenderer.renderList(),
             incoming: () => this.incomingRenderer.render(),
-            stats: () => this.renderStats()
+            stats: () => {
+                window.dispatchEvent(new Event('app-data-updated'));
+            }
         };
     }
 
@@ -615,16 +607,40 @@ class App {
         console.log('[APP] Tab event listeners takarítva');
     }
 
-    renderDashboard() {
-        this.dashboardRenderer.renderDashboard();
-    }
-
-    renderStats() {
-        this.statsRenderer.renderStats();
-    }
-
     updateReminderStatus() {
-        this.statsRenderer.updateReminderStatus();
+        // Minimal fallback for reminder LED if needed, otherwise handled by React
+        const reminders = this.reminderManager?.reminders || [];
+        const today = dayjs();
+        let overdue = 0, soon = 0;
+
+        reminders.forEach(rem => {
+            const due = dayjs(rem.due_date);
+            const diff = due.diff(today, 'day');
+            if (diff < 0) overdue++;
+            else if (diff <= 7) soon++;
+        });
+
+        const led = document.getElementById('reminderLed');
+        const text = document.getElementById('reminderStatusText');
+        const count = document.getElementById('reminderCount');
+
+        if (!led || !text || !count) return;
+
+        count.textContent = reminders.length;
+
+        if (overdue > 0) {
+            led.className = 'w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse';
+            text.textContent = `${overdue} LEJÁRT`;
+            text.className = 'text-red-600 font-bold';
+        } else if (soon > 0) {
+            led.className = 'w-2.5 h-2.5 rounded-full bg-amber-500';
+            text.textContent = `${soon} esedékes`;
+            text.className = 'text-amber-600 font-medium';
+        } else {
+            led.className = 'w-2.5 h-2.5 rounded-full bg-emerald-500';
+            text.textContent = 'Minden rendben';
+            text.className = 'text-emerald-600';
+        }
     }
 
  // ================================================================
@@ -749,9 +765,7 @@ async reload() {
             this.remindersRenderer.renderList();
         }
         
-        if (typeof this.renderStats === 'function') {
-            this.renderStats();
-        }
+        window.dispatchEvent(new Event('app-data-updated'));
         
         if (typeof this.updateReminderStatus === 'function') {
             this.updateReminderStatus();
@@ -813,10 +827,8 @@ refreshAllTabs() {
         this.incomingRenderer.render();
     }
 
-    // 6. Statisztika
-    if (typeof this.renderStats === 'function') {
-        this.renderStats();
-    }
+    // 6. Statisztika (React)
+    window.dispatchEvent(new Event('app-data-updated'));
 
     // 7. Reminder státusz (lábléc)
     if (typeof this.updateReminderStatus === 'function') {
@@ -1073,5 +1085,5 @@ console.log('📌 Elérhető parancsok:');
 console.log('  window.app.getVersionInfo() - Verzió információ');
 console.log('  window.app.checkVersion()   - Frissítés ellenőrzés');
 console.log('  window.app.reload()         - Adatok újratöltése');
-console.log('  window.app.renderDashboard() - Dashboard frissítése');
+
 console.log('  window.runDbHealthCheck()   - Adatbázis állapot ellenőrzése');

@@ -70,7 +70,7 @@ export default function LandingApp() {
                     <i className="fas fa-layer-group"></i>
                 </div>
                 <h1 className="text-4xl md:text-5xl font-black tracking-tight text-white bg-gradient-to-r from-emerald-400 via-emerald-300 to-teal-400 bg-clip-text text-transparent">
-                    MULTI-DASHBOARD <span className="app-version-label text-slate-400 text-sm">v7.0.2</span>
+                    MULTI-DASHBOARD <span className="app-version-label text-slate-400 text-sm">v7.0.3</span>
                 </h1>
                 <p className="text-sm md:text-base text-slate-400 max-w-xl mx-auto font-medium">
                     Üdvözöljük a megújult rendszerben! Válassza ki az indítani kívánt feladatkezelő vagy pénzügyi
@@ -117,7 +117,7 @@ export default function LandingApp() {
             </div>
 
             <div className="text-[11px] text-slate-500 pt-6">
-                <p className="font-semibold uppercase tracking-widest">HMI Rendszerplatform • Verzió <span className="app-version-label text-slate-500">v7.0.2</span></p>
+                <p className="font-semibold uppercase tracking-widest">HMI Rendszerplatform • Verzió <span className="app-version-label text-slate-500">v7.0.3</span></p>
                 <p className="mt-1">Copyright © 2026. Minden jog fenntartva.</p>
             </div>
         </div>
