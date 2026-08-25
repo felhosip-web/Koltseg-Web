@@ -1,7 +1,8 @@
 import React, { useEffect, useRef } from 'react';
 
 export default function SettingsPanel() {
-    const handleClose = () => {
+    const handleClose = (e) => {
+        e?.stopPropagation();
         window.app?.uiController?.togglePanel('settingsPanel');
     };
 
@@ -179,7 +180,7 @@ export default function SettingsPanel() {
     };
 
     return (
-        <div id="settingsPanel" onClick={(e) => { if (e.target.id === 'settingsPanel') handleClose(); }}
+        <div id="settingsPanel" onClick={(e) => { if (e.target.id === 'settingsPanel') handleClose(e); }}
             className="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[1450] modal select-none">
             <div
                 className="bg-white rounded-[32px] p-6 border border-gray-200 shadow-2xl transition-all max-w-4xl w-full max-h-[90vh] overflow-y-auto relative">
@@ -190,7 +191,7 @@ export default function SettingsPanel() {
                     <div className="flex items-center gap-3">
                         <span id="dbVersionBadge"
                             className="text-[10px] font-mono bg-indigo-50 text-indigo-600 px-2.5 py-1 rounded-md border border-indigo-100 font-bold app-version-label">v7.0.3</span>
-                        <button type="button" id="btnCloseSettingsModal" onClick={handleClose}
+                        <button type="button" id="btnCloseSettingsModal" onClick={(e) => handleClose(e)}
                             className="w-8 h-8 flex items-center justify-center bg-gray-100 hover:bg-gray-200 rounded-lg text-gray-500 transition"
                             title="Bezárás">
                             <i className="fas fa-times"></i>

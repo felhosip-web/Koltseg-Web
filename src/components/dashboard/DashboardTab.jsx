@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { db } from '../../../js/db.js';
+import { NameDays } from '../../../js/utils/namedays.js';
 
 // A minimal port of the dashboard rendering logic using React state
 
@@ -10,6 +11,9 @@ export default function DashboardTab() {
 
     const [weatherData, setWeatherData] = useState({ icon: 'fa-cloud', color: 'text-sky-400', temp: '--', city: 'Betöltés...' });
     const [timeTrackerStats, setTimeTrackerStats] = useState({ hours: '--', minutes: '--', earnings: '--' });
+    const [nameDays, setNameDays] = useState({ today: '', tomorrow: '' });
+    const [greeting, setGreeting] = useState('');
+    const [currentDateStr, setCurrentDateStr] = useState('');
 
     useEffect(() => {
         const loadData = () => {
@@ -314,6 +318,34 @@ export default function DashboardTab() {
     }, []);
 
     useEffect(() => {
+        const updateTimeAndNameDays = async () => {
+            const hour = new Date().getHours();
+            if (hour < 5) setGreeting('Jó éjszakát!');
+            else if (hour < 10) setGreeting('Jó reggelt!');
+            else if (hour < 18) setGreeting('Jó napot!');
+            else setGreeting('Jó estét!');
+
+            if (window.dayjs) {
+                setCurrentDateStr(window.dayjs().format('YYYY. MMMM D., dddd'));
+            }
+
+            try {
+                const nd = await NameDays.getTodayAndTomorrow();
+                setNameDays(nd);
+            } catch (e) {
+                console.error(e);
+            }
+        };
+        updateTimeAndNameDays();
+
+        const handleUpdate = () => {
+            updateTimeAndNameDays();
+        };
+        window.addEventListener('app-data-updated', handleUpdate);
+        return () => window.removeEventListener('app-data-updated', handleUpdate);
+    }, []);
+
+    useEffect(() => {
         // Fetch Time Tracker Data async
         const fetchTimeTrackerData = () => {
             if (window.app && window.app.timeTracker && window.dayjs && db) {
@@ -448,6 +480,22 @@ export default function DashboardTab() {
 
     return (
         <div className="max-w-7xl mx-auto space-y-6">
+
+            <div className="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <div>
+                    <h1 className="text-2xl font-black text-gray-800 tracking-tight">{greeting}</h1>
+                    <p className="text-sm text-gray-500 font-medium mt-1 capitalize">{currentDateStr}</p>
+                </div>
+                <div className="bg-white px-4 py-2.5 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-500 flex items-center justify-center shrink-0">
+                        <i className="fas fa-calendar-star"></i>
+                    </div>
+                    <div className="text-right">
+                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Névnap</p>
+                        <p className="text-sm font-bold text-gray-700">{nameDays.today || '...'}</p>
+                    </div>
+                </div>
+            </div>
 
             {/* HERO CARDS */}
             <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
