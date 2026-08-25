@@ -31,7 +31,7 @@ export default function SettingsPanel() {
         if (darkModeToggle) darkModeToggle.checked = false;
         window.app?.uiController?.updateBgThemeSelectorUI('white');
         window.app?.hmiNotif?.showToast('Megjelenés visszaállítva alapértelmezettre!', 'info');
-        window.app?.logger?.log('Megjelenés', 'Visszaállítás alapértelmezett beállításokra');
+        window.app?.logger?.log('Megjelenés', 'info', 'Visszaállítás alapértelmezett beállításokra');
     };
 
     const handleSaveLogs = () => {
@@ -46,7 +46,7 @@ export default function SettingsPanel() {
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
-            window.app.logger.log('system', 'info', 'Eseménynapló exportálva/letöltve.');
+            window.app?.logger?.log('system', 'info', 'Eseménynapló exportálva/letöltve.');
         }
     };
 
@@ -166,7 +166,7 @@ export default function SettingsPanel() {
         localStorage.setItem('appearance_bg_theme', theme);
         localStorage.setItem('settings_updated_at', new Date().toISOString());
         window.app?.uiController?.updateBgThemeSelectorUI(theme);
-        window.app?.logger?.log('Megjelenés', `Háttér téma módosítva: ${theme}`);
+        window.app?.logger?.log('Megjelenés', 'info', `Háttér téma módosítva: ${theme}`);
     };
 
     // Dark mode toggle
@@ -175,7 +175,7 @@ export default function SettingsPanel() {
         window.app?.uiController?.applyDarkMode(isDark);
         localStorage.setItem('appearance_dark_mode', String(isDark));
         localStorage.setItem('settings_updated_at', new Date().toISOString());
-        window.app?.logger?.log('Megjelenés', `Sötét mód ${isDark ? 'bekapcsolva' : 'kikapcsolva'}`);
+        window.app?.logger?.log('Megjelenés', 'info', `Sötét mód ${isDark ? 'bekapcsolva' : 'kikapcsolva'}`);
     };
 
     return (
