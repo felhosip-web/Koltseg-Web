@@ -1,8 +1,17 @@
 {
-  "version": "7.0.3",
+  "version": "7.0.4",
   "build": "2026-08-23T14:35:31.958Z",
   "release": "stable",
   "changelog": [
+    {
+      "version": "7.0.4",
+      "date": "2026-08-26",
+      "changes": [
+        "React Phase 5: main cost table UI migrated toward React (hybrid)",
+        "Settings close fix",
+        "Table data/logic still driven by vanilla window.app / existing renderers where needed"
+      ]
+    },
     {
       "version": "7.0.3",
       "date": "2026-08-24",
