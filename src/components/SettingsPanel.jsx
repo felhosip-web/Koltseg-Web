@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 
 export default function SettingsPanel() {
     const handleClose = (e) => {
+        e?.preventDefault();
         e?.stopPropagation();
         window.app?.uiController?.togglePanel('settingsPanel');
     };

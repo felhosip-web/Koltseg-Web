@@ -326,6 +326,7 @@ export default function DashboardTab() {
             else setGreeting('Jó estét!');
 
             if (window.dayjs) {
+                window.dayjs.locale('hu');
                 setCurrentDateStr(window.dayjs().format('YYYY. MMMM D., dddd'));
             } else {
                 setCurrentDateStr(new Date().toLocaleDateString('hu-HU', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' }));
@@ -499,6 +500,7 @@ export default function DashboardTab() {
                     <div className="text-right">
                         <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Névnap</p>
                         <p className="text-sm font-bold text-gray-700">{nameDays.today || '...'}</p>
+                        <p className="text-[10px] font-medium text-gray-500 mt-0.5">Holnap: {nameDays.tomorrow || '...'}</p>
                     </div>
                 </div>
             </div>
