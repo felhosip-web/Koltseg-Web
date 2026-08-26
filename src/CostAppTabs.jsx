@@ -1,5 +1,10 @@
 import React from 'react';
 
+/**
+ * Tab navigation component for switching between different views in the cost tracking app.
+ * Provides tabs for dashboard, table, time tracking, charts, reminders, incoming transfers, and stats.
+ * @returns {JSX.Element} The tab navigation component
+ */
 export default function CostAppTabs() {
 
 

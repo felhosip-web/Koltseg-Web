@@ -1,28 +1,53 @@
 import React, { useEffect, useRef } from 'react';
 
+/**
+ * Settings panel component providing configuration options for authentication, cloud sync,
+ * appearance, security, AI settings, and module management.
+ * Features multiple tabs for organizing different settings categories.
+ * @returns {JSX.Element} The settings panel modal component
+ */
 export default function SettingsPanel() {
+    /**
+     * Closes the settings panel by toggling its visibility.
+     * @param {Event} e - The event object
+     */
     const handleClose = (e) => {
         e?.preventDefault();
         e?.stopPropagation();
         window.app?.uiController?.togglePanel('settingsPanel');
     };
 
+    /**
+     * Saves the Google OAuth client ID settings.
+     */
     const handleGoogleClientSave = () => {
         window.app?.uiController?._handleGoogleClientSave();
     };
 
+    /**
+     * Tests the Supabase database connection with current settings.
+     */
     const handleTestSupabaseConn = () => {
         window.app?.uiController?._testSupabaseConnection();
     };
 
+    /**
+     * Opens the inline help documentation.
+     */
     const handleHelpInline = () => {
         window.app?.hmiNotif?.openHelp?.();
     };
 
+    /**
+     * Saves general application settings including EUR rate, intervals, and weather location.
+     */
     const handleSaveSettings = () => {
         window.app?.uiController?._handleSettingsSave();
     };
 
+    /**
+     * Resets appearance settings to default values (light mode, white background).
+     */
     const handleResetAppearance = () => {
         window.app?.uiController?.applyDarkMode(false);
         window.app?.uiController?.applyBgTheme('white');
@@ -36,6 +61,9 @@ export default function SettingsPanel() {
         window.app?.logger?.log('Megjelenés', 'info', 'Visszaállítás alapértelmezett beállításokra');
     };
 
+    /**
+     * Exports and downloads the event log as a text file.
+     */
     const handleSaveLogs = () => {
         if (window.app?.logger) {
             const text = window.app.logger.exportToText();
@@ -52,6 +80,9 @@ export default function SettingsPanel() {
         }
     };
 
+    /**
+     * Clears the event log after user confirmation.
+     */
     const handleClearLogs = async () => {
         if (window.app?.logger) {
             const confirmed = await window.app.hmiNotif?.showConfirm?.({
@@ -69,6 +100,9 @@ export default function SettingsPanel() {
         }
     };
 
+    /**
+     * Verifies the root password and upgrades current user to owner privileges.
+     */
     const handleUpgradeToOwner = () => {
         const rootInput = document.getElementById('securityRootPasswordInput');
         if (rootInput) {
@@ -76,6 +110,9 @@ export default function SettingsPanel() {
         }
     };
 
+    /**
+     * Toggles visibility of the root password input field.
+     */
     const handleToggleShowRootPassword = () => {
         const rootInput = document.getElementById('securityRootPasswordInput');
         const toggleRootPassBtn = document.getElementById('btnToggleShowRootPassword');
@@ -91,14 +128,23 @@ export default function SettingsPanel() {
         }
     };
 
+    /**
+     * Manually locks the application immediately.
+     */
     const handleLockAppNow = () => {
         window.app?.securityGuard?.lock();
     };
 
+    /**
+     * Saves security settings including lock status, auto-lock timeout, and access PINs.
+     */
     const handleSaveSecuritySettings = () => {
         window.app?.securityGuard?.saveSettingsFromUI();
     };
 
+    /**
+     * Saves AI assistant settings including API key and model selection.
+     */
     const handleSaveAiSettings = () => {
         const aiApiKey = document.getElementById('aiApiKey').value.trim();
         const aiModel = document.getElementById('aiModel').value;
@@ -114,7 +160,10 @@ export default function SettingsPanel() {
         window.app?.hmiNotif?.showToast('AI beállítások mentve!', 'success');
     };
 
-    // Tab switching logic (needs to run via React onClick or attach refs)
+    /**
+     * Handles switching between different settings tabs.
+     * @param {Event} e - The click event from the tab button
+     */
     const handleTabClick = (e) => {
         const targetTab = e.currentTarget.getAttribute('data-settings-tab');
 
@@ -161,7 +210,10 @@ export default function SettingsPanel() {
         }
     };
 
-    // Theme switching logic
+    /**
+     * Handles background theme selection and application.
+     * @param {Event} e - The click event from the theme button
+     */
     const handleThemeClick = (e) => {
         const theme = e.currentTarget.getAttribute('data-bg-theme');
         window.app?.uiController?.applyBgTheme(theme);
@@ -171,7 +223,10 @@ export default function SettingsPanel() {
         window.app?.logger?.log('Megjelenés', 'info', `Háttér téma módosítva: ${theme}`);
     };
 
-    // Dark mode toggle
+    /**
+     * Toggles dark mode on or off based on checkbox state.
+     * @param {Event} e - The change event from the dark mode toggle
+     */
     const handleDarkModeToggle = (e) => {
         const isDark = e.target.checked;
         window.app?.uiController?.applyDarkMode(isDark);

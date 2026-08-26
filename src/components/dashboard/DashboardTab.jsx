@@ -4,6 +4,11 @@ import { NameDays } from '../../../js/utils/namedays.js';
 
 // A minimal port of the dashboard rendering logic using React state
 
+/**
+ * Dashboard tab component providing an overview of financial statistics, weather, notifications,
+ * and quick actions. Displays monthly balance, expense trends, top categories, and time tracker stats.
+ * @returns {JSX.Element} The dashboard overview component
+ */
 export default function DashboardTab() {
     const [stats, setStats] = useState(null);
     const chartRef = useRef(null);
@@ -458,6 +463,10 @@ export default function DashboardTab() {
 
     if (!stats) return <div className="p-4 text-gray-500">Adatok betöltése...</div>;
 
+    /**
+     * Navigates to a specific module or tab in the application.
+     * @param {string} mod - The module identifier to navigate to
+     */
     const navigateTo = (mod) => {
         if (mod === 'cost') {
             window.app?.switchTab('table');
@@ -470,6 +479,10 @@ export default function DashboardTab() {
         }
     };
 
+    /**
+     * Triggers a quick action such as creating a new cost entry, note, or shopping item.
+     * @param {string} action - The action identifier to trigger
+     */
     const triggerAction = (action) => {
         if (action === 'new_cost') {
             document.getElementById('btnNewItem')?.click();
