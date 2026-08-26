@@ -9,7 +9,12 @@ export default function MainTable() {
             }
         };
 
-        renderTable();
+        // Avoid double render if already booted, though app-data-updated will trigger it
+        if (!window.app?.isBooted) {
+             // Only force render if not booted yet, or let boot manager handle it
+        } else {
+             renderTable();
+        }
         window.addEventListener('app-data-updated', renderTable);
         return () => window.removeEventListener('app-data-updated', renderTable);
     }, []);
