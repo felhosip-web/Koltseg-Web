@@ -37,6 +37,12 @@ export function parseCellKey(entryOrCellKey) {
     return { itemId: null, month: null };
 }
 
+/**
+ * Parses a cellKey string to extract itemId and month components.
+ * Handles both standard and legacy formats.
+ * @param {string} cellKey - The cellKey string to parse
+ * @returns {{itemId: string|null, month: string|null}}
+ */
 function parseCellKeyString(cellKey) {
     if (typeof cellKey !== 'string') return { itemId: null, month: null };
 

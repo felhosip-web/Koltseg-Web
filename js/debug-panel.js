@@ -2,7 +2,9 @@
 // === DEBUG CONSOLE PATCH + DEBUG PANEL (JAVÍTOTT) ===
 // ================================================================
 
-// Biztonságos console monkey-patch normál függvényként definálva
+/**
+ * Debug konzol beállítása - console.log és console.error monkey-patch
+ */
 export function setupDebugConsole() {
     if (window.__debugConsolePatched) return;
 
@@ -47,6 +49,9 @@ export function setupDebugConsole() {
 // === DEBUG PANEL HELPER FÜGGVÉNYEK ===
 // ================================================================
 
+/**
+ * Debug panel inicializálása és eseménykezelők beállítása
+ */
 export function initDebugPanel() {
     const panel = document.getElementById('debugPanel');
     const closeBtn = document.getElementById('closeDebugPanel');

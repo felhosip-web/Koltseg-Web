@@ -26,16 +26,31 @@ export const useAppStore = createStore((set, get) => ({
 // Bootstrapping flag a kezdeti betöltés és backup visszaállítás alatti redundáns írások elkerülésére
 let isBootstrapping = true;
 
+/**
+ * Bootstrapping mód beállítása
+ * @param {boolean} val - Bootstrapping állapot
+ */
 export function setBootstrapping(val) {
     isBootstrapping = !!val;
     console.log(`[STORE] Bootstrapping mód: ${isBootstrapping}`);
 }
 
+/**
+ * Bootstrapping mód lekérdezése
+ * @returns {boolean} Az aktuális bootstrapping állapot
+ */
 export function getBootstrapping() {
     return isBootstrapping;
 }
 
-// Segédfüggvény a Zustand állapotváltozások IndexedDB-be való szinkronizálására
+/**
+ * Zustand állapotváltozások szinkronizálása IndexedDB-be
+ * @param {string} table - A tábla neve
+ * @param {Array} newArray - Az új adatok tömbje
+ * @param {Array} oldArray - A régi adatok tömbje
+ * @param {string} keyField - A kulcs mező neve (alapértelmezett: 'id')
+ * @returns {Promise<void>}
+ */
 async function syncTableToIndexedDB(table, newArray, oldArray, keyField = 'id') {
     if (isBootstrapping) return;
     const db = window.__globalDb || window.app?.db;
@@ -125,6 +140,10 @@ useAppStore.subscribe(async (state, prevState) => {
     }
 });
 
+/**
+ * Globális adatbázis példány beállítása
+ * @param {Object} db - Az adatbázis példány
+ */
 export function setGlobalDb(db) {
     window.__globalDb = db;
 }

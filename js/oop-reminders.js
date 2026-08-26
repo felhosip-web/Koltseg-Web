@@ -2,6 +2,11 @@
 import { UIModalController } from './ui-modal-controller.js';
 
 export class RemindersRenderer {
+    /**
+     * Konstruktor - Reminders Renderer inicializálása
+     * @param {Object} app - Az alkalmazás fő példánya
+     * @param {Object} hmiNotif - Értesítési kezelő példány
+     */
     constructor(app, hmiNotif) {
         this.app = app;
         this.hmiNotif = hmiNotif;
@@ -9,6 +14,9 @@ export class RemindersRenderer {
         this.currentFilter = 'all';
     }
 
+    /**
+     * Határidők listájának renderelése
+     */
     renderList() {
         const now = Date.now();
         if (now - this.lastRenderTime < 80) return;
@@ -87,6 +95,11 @@ export class RemindersRenderer {
         this._updateFilterButtons();
     }
 
+    /**
+     * Gyakoriság formázása emberileg olvasható formára
+     * @param {string} freq - A gyakoriság kódja
+     * @returns {string} A formázott gyakoriság szöveg
+     */
     _formatFrequency(freq) {
         switch (freq) {
             case 'monthly': return 'Havi';
@@ -96,6 +109,9 @@ export class RemindersRenderer {
         }
     }
 
+    /**
+     * Szűrő gombok vizuális állapotának frissítése
+     */
     _updateFilterButtons() {
         const filterGroup = document.getElementById('reminderFilterGroup');
         if (filterGroup) {
@@ -110,6 +126,9 @@ export class RemindersRenderer {
         }
     }
 
+    /**
+     * Eseményfigyelők hozzárendelése a határidő lista elemeire
+     */
     _attachEventListeners() {
         // Szűrő gombok kattintása
         const filterGroup = document.getElementById('reminderFilterGroup');

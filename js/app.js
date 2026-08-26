@@ -47,6 +47,9 @@ import { TimeTrackerModule } from './modules/time-tracker/time-tracker.js';
 // ================================================================
 
 class App {
+    /**
+     * Konstruktor - Alkalmazás fő példányának inicializálása
+     */
     constructor() {
         // === 1. ALAP KOMPONENSEK ===
         this.config = new ConfigManager();

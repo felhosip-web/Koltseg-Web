@@ -3,6 +3,10 @@ import { generateUUID } from './uuid-utils.js';
 import { parseCellKey, buildCellKey } from './utils/cell-key-utils.js';
 
 export class DatabaseAudit {
+    /**
+     * Konstruktor - Database Audit inicializálása
+     * @param {Object} app - Az alkalmazás fő példánya
+     */
     constructor(app) {
         this.app = app;
         this.diagnostics = {};
@@ -31,6 +35,10 @@ export class DatabaseAudit {
         }
     }
 
+    /**
+     * Összes IndexedDB tároló auditálása
+     * @returns {Promise<void>}
+     */
     async _auditAllStores() {
         const storeNames = ['items', 'months', 'entries', 'templates', 'reminders', 'incomings', 'incoming_senders', 'works'];
         
@@ -77,6 +85,11 @@ export class DatabaseAudit {
         }
     }
 
+    /**
+     * Adat méretének becslése
+     * @param {Array} data - Az adat tömb
+     * @returns {number} A becsült méret bájtban
+     */
     _estimateSize(data) {
         try {
             return new Blob([JSON.stringify(data)]).size;
@@ -85,6 +98,10 @@ export class DatabaseAudit {
         }
     }
 
+    /**
+     * Adatkonzisztencia ellenőrzése (árva bejegyzések, hibás hivatkozások)
+     * @returns {Promise<void>}
+     */
     async _checkDataConsistency() {
         const entries = await this.app.db.getAll('entries');
         const itemIds = new Set((await this.app.db.getAll('items')).map(i => i.id));
@@ -127,6 +144,10 @@ export class DatabaseAudit {
         };
     }
 
+    /**
+     * Böngésző tárhely kvóta ellenőrzése
+     * @returns {Promise<void>}
+     */
     async _checkStorageQuota() {
         if ('storage' in navigator && 'estimate' in navigator.storage) {
             try {

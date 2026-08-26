@@ -4,10 +4,18 @@ import { setBootstrapping } from './store.js';
 import { parseCellKey } from './utils/cell-key-utils.js';
 
 export class DataExportController {
+    /**
+     * Konstruktor - Data Export vezérlő inicializálása
+     * @param {Object} app - Az alkalmazás fő példánya
+     */
     constructor(app) {
         this.app = app;
     }
 
+    /**
+     * Alkalmazás adatainak lekérdezése
+     * @returns {Object} Az alkalmazás összes adata
+     */
     _getData() {
         return {
             entries: this.app.entries?.entries || [],
@@ -18,6 +26,10 @@ export class DataExportController {
         };
     }
 
+    /**
+     * Teljes backup adat struktúra felépítése
+     * @returns {Object} A backup adatstruktúra
+     */
     _buildBackupData() {
         return {
             version: 'v4.0',
@@ -43,6 +55,10 @@ export class DataExportController {
     }
 
     // ==================== EXCEL EXPORT ====================
+    /**
+     * Excel formátumú export generálása és letöltése
+     * @returns {Promise<void>}
+     */
     async exportExcel() {
         this.app.renderer.updateFooterStatus('Részletes Excel generálása...', false);
 
@@ -85,6 +101,10 @@ export class DataExportController {
     }
 
     // ==================== PDF EXPORT ====================
+    /**
+     * PDF formátumú export generálása és letöltése
+     * @returns {Promise<void>}
+     */
     async exportPdf() {
         this.app.renderer.updateFooterStatus('Részletes PDF generálása...', false);
 
@@ -142,6 +162,10 @@ export class DataExportController {
     }
 
     // ==================== JSON EXPORT / IMPORT ====================
+    /**
+     * JSON formátumú teljes backup export
+     * @returns {Promise<void>}
+     */
     async exportJson() {
         this.app.renderer.updateFooterStatus('Teljes JSON backup készítése...', false);
 
@@ -163,6 +187,10 @@ export class DataExportController {
         }
     }
 
+    /**
+     * JSON backup import fájlból
+     * @returns {Promise<void>}
+     */
     async importJson() {
         const fileInput = document.createElement('input');
         fileInput.type = 'file';

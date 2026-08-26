@@ -71,3 +71,13 @@ if (footerRoot) {
       </React.StrictMode>,
     )
 }
+
+import MainTable from './components/table/MainTable.jsx'
+const tableRoot = document.getElementById('costAppTableRoot');
+if (tableRoot) {
+    ReactDOM.createRoot(tableRoot).render(
+      <React.StrictMode>
+        <MainTable />
+      </React.StrictMode>,
+    )
+}

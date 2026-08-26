@@ -6,6 +6,10 @@ import { generateUUID } from './uuid-utils.js';
  * with the asynchronous local IndexedDB and cloud SyncService.
  */
 export class PluginStorage {
+    /**
+     * Konstruktor - Plugin Storage inicializálása
+     * @param {Object} app - Az alkalmazás fő példánya
+     */
     constructor(app) {
         this.app = app;
         this.cache = {};
@@ -18,6 +22,10 @@ export class PluginStorage {
         ];
     }
 
+    /**
+     * Plugin tárolók inicializálása és localStorage migrálás
+     * @returns {Promise<void>}
+     */
     async init() {
         if (!this.app.db) {
             console.warn('[PluginStorage] app.db not initialized yet.');
@@ -62,6 +70,11 @@ export class PluginStorage {
         console.log('[PluginStorage] Initialized with tables:', this.tables);
     }
 
+    /**
+     * Tábla elemek lekérdezése
+     * @param {string} table - A tábla neve
+     * @returns {Array} Az elemek tömbje
+     */
     getItems(table) {
         if (!this.tables.includes(table)) {
             console.warn(`[PluginStorage] Table ${table} is not registered.`);
@@ -70,6 +83,11 @@ export class PluginStorage {
         return this.cache[table] || [];
     }
 
+    /**
+     * Elem mentése a táblába
+     * @param {string} table - A tábla neve
+     * @param {Object} item - A mentendő elem
+     */
     saveItem(table, item) {
         if (!this.tables.includes(table)) {
             console.warn(`[PluginStorage] Table ${table} is not registered.`);
@@ -97,6 +115,12 @@ export class PluginStorage {
         });
     }
 
+    /**
+     * Aszinkron mentés IndexedDB-be és felhőbe
+     * @param {string} table - A tábla neve
+     * @param {Object} item - A mentendő elem
+     * @returns {Promise<void>}
+     */
     async _asyncSave(table, item) {
         if (this.app.db) {
             await this.app.db.save(table, item);
@@ -106,6 +130,11 @@ export class PluginStorage {
         }
     }
 
+    /**
+     * Elem törlése a táblából
+     * @param {string} table - A tábla neve
+     * @param {string} id - Az elem azonosítója
+     */
     deleteItem(table, id) {
         if (!this.tables.includes(table)) {
             console.warn(`[PluginStorage] Table ${table} is not registered.`);
@@ -123,6 +152,12 @@ export class PluginStorage {
         });
     }
 
+    /**
+     * Aszinkron törlés IndexedDB-ből és felhőből
+     * @param {string} table - A tábla neve
+     * @param {string} id - Az elem azonosítója
+     * @returns {Promise<void>}
+     */
     async _asyncDelete(table, id) {
         if (this.app.db) {
             await this.app.db.delete(table, id);
@@ -132,6 +167,10 @@ export class PluginStorage {
         }
     }
 
+    /**
+     * Összes elem törlése a táblából
+     * @param {string} table - A tábla neve
+     */
     clearAll(table) {
         if (!this.tables.includes(table)) {
             return;
