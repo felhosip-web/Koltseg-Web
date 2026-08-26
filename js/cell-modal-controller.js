@@ -2,14 +2,18 @@
 // Cell Modal Controller - Rész-tételek kezelése egy cellában (2026-os javított verzió)
 
 export class CellModalController {
+    /**
+     * Konstruktor - Cell Modal vezérlő inicializálása
+     * @param {Object} app - Az alkalmazás fő példánya
+     */
     constructor(app) {
         this.app = app;
-        
+
         // Aktuális állapot
         this.currentCellBaseKey = null;   // Pl.: "5_2026-07"
         this.selectedColor = 'transparent';
         this.editingEntryId = null;       // Szerkesztés esetén az aktuális entry ID
-        
+
         // Event listener-ek tisztításához (memory leak megelőzés)
         this.boundEvents = new Set();
     }

@@ -4,6 +4,11 @@
 import { CloudSync } from './oop-core.js';
 
 export class SyncService {
+    /**
+     * Konstruktor - Sync Service inicializálása
+     * @param {Object} configManager - Konfiguráció kezelő példány
+     * @param {Object} offlineHandler - Offline kezelő példány
+     */
     constructor(configManager, offlineHandler) {
         this.config = configManager;
         this.offline = offlineHandler;

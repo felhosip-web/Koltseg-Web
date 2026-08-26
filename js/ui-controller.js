@@ -8,6 +8,10 @@ import { DataMaintenanceController } from './data-maintenance-controller.js';
 import { parseCellKey } from './utils/cell-key-utils.js';
 
 export class UIController {
+    /**
+     * Konstruktor - UI Controller inicializálása
+     * @param {Object} app - Az alkalmazás fő példánya
+     */
     constructor(app) {
         this.app = app;
 
@@ -19,18 +23,21 @@ export class UIController {
         // Meglévő controllerek
         this.cellModal = new CellModalController(app);
         this.inputModal = new InputModalController(app);
-        
+
         // ===== ÚJ: SYNC QUEUE BADGE =====
         this.syncQueueBadge = null;
         this.syncQueueContainer = null;
-        this._setupSyncQueueBadge();    
+        this._setupSyncQueueBadge();
         this.initAppearance();
     }
     
-        // ========================================================
+    // ========================================================
     // === ÚJ: SYNC QUEUE BADGE ===
     // ========================================================
-_setupSyncQueueBadge() {
+    /**
+     * Szinkronizálási várólista badge beállítása
+     */
+    _setupSyncQueueBadge() {
     // Csak a meglévő elemeket keressük meg
     this.syncQueueContainer = document.getElementById('syncQueueContainer');
     this.syncQueueBadge = document.getElementById('syncQueueBadge');
@@ -62,6 +69,10 @@ _setupSyncQueueBadge() {
     }
 }
   
+    /**
+     * Szinkronizálási várólista badge frissítése
+     * @param {Object} status - A várólista státusza
+     */
     _updateSyncQueueBadge(status) {
         if (!this.syncQueueBadge) return;
         
@@ -90,6 +101,10 @@ _setupSyncQueueBadge() {
         }
     }
 
+    /**
+     * Tooltip hozzáadása a konténerhez
+     * @param {HTMLElement} container - A konténer elem
+     */
     _addTooltip(container) {
         // Tooltip div
         const tooltip = document.createElement('div');
@@ -112,6 +127,9 @@ _setupSyncQueueBadge() {
         });
     }
 
+    /**
+     * Tooltip tartalmának frissítése
+     */
     _updateTooltipContent() {
         const content = document.getElementById('tooltipContent');
         if (!content) return;

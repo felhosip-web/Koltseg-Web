@@ -3,10 +3,14 @@
 import { CategoryIcons } from './category-icons.js';
 
 export class AiModalController {
+    /**
+     * Konstruktor - AI Modal vezérlő inicializálása
+     * @param {Object} app - Az alkalmazás fő példánya
+     */
     constructor(app) {
         this.app = app;
         this.parsedData = null;
-        
+
         // Gomb bekötése
         const btnOpen = document.getElementById('btnOpenAiModal');
         if (btnOpen) {

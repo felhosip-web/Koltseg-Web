@@ -3,12 +3,20 @@
 import { setBootstrapping } from './store.js';
 
 export class BootManager {
+    /**
+     * Konstruktor - Boot Manager inicializálása
+     * @param {Object} app - Az alkalmazás fő példánya
+     */
     constructor(app) {
         this.app = app;
         this.bootSteps = [];
         this.currentStep = 0;
     }
 
+    /**
+     * Alkalmazás indítási folyamat végrehajtása
+     * @returns {Promise<void>}
+     */
     async boot() {
         console.log('[BOOT] Rendszer indítása (gyors UI váz renderelés)...');
         
@@ -37,6 +45,10 @@ export class BootManager {
         console.log('[BOOT] ✅ Alaprendszer sikeresen elindult, adatok töltődnek a háttérben!');
     }
 
+    /**
+     * Háttérfolyamatok futtatása az indítás után
+     * @returns {Promise<void>}
+     */
     async _runBackgroundBootTasks() {
         console.log('[BOOT-BACKGROUND] Háttér adatbetöltés indítása...');
         try {
@@ -92,6 +104,10 @@ export class BootManager {
         }
     }
 
+    /**
+     * Összes alkalmazás adat betöltése
+     * @returns {Promise<void>}
+     */
     async _loadAllData() {
         setBootstrapping(true);
         try {
@@ -112,6 +128,10 @@ export class BootManager {
         }
     }
 
+    /**
+     * UI komponensek inicializálása
+     * @returns {Promise<void>}
+     */
     async _initUI() {
         this.app.uiController.bindStaticEvents();
         this.app._initTabs();
@@ -133,6 +153,9 @@ export class BootManager {
         this._initLandingPage();
     }
 
+    /**
+     * Landing page modul választó inicializálása
+     */
     _initLandingPage() {
         const landing = document.getElementById('appLandingScreen');
         const costApp = document.getElementById('costAppView');
@@ -188,6 +211,10 @@ export class BootManager {
         }
     }
 
+    /**
+     * Felhő szolgáltatások inicializálása
+     * @returns {Promise<void>}
+     */
     async _initCloud() {
         if (this.app._syncManagerPromise) {
             await this.app._syncManagerPromise;
@@ -209,6 +236,10 @@ export class BootManager {
         }
     }
 
+    /**
+     * Adatok szinkronizálása a felhővel
+     * @returns {Promise<void>}
+     */
     async _syncData() {
         if (this.app.config.useSupabase && navigator.onLine) {
             try {
@@ -219,15 +250,27 @@ export class BootManager {
         }
     }
 
+    /**
+     * Automatikus backup szolgáltatás indítása
+     * @returns {Promise<void>}
+     */
     async _initBackup() {
         this.app.backupManager.startAutoBackup();
     }
 
+    /**
+     * PWA (Progressive Web App) szolgáltatások inicializálása
+     * @returns {Promise<void>}
+     */
     async _initPWA() {
         this.app.pwaManager.registerServiceWorker();
         this.app.pwaManager.bindInstallPrompt();
     }
 
+    /**
+     * Boot folyamat véglegesítése és eseményfigyelők beállítása
+     * @returns {Promise<void>}
+     */
     async _finalize() {
         // Online/Offline eseményfigyelők
         window.addEventListener('online', async () => {
