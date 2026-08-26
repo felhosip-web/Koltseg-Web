@@ -1,5 +1,11 @@
 import React from 'react';
 
+/**
+ * Header component for the cost tracking application.
+ * Displays the app title, network status indicators, action buttons for creating items/months,
+ * settings access, data controls, and export/sync options.
+ * @returns {JSX.Element} The header component with navigation and controls
+ */
 export default function CostAppHeader() {
     return (
         <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 border-b border-gray-100 pb-5">

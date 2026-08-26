@@ -1,5 +1,11 @@
 import React, { useEffect, useState } from 'react';
 
+/**
+ * Landing screen component that allows users to choose between different app modules.
+ * Provides options to launch the Cost Tracking app or Work Management app.
+ * Manages visibility state and synchronizes with vanilla JavaScript module state.
+ * @returns {JSX.Element|null} The landing screen or null if hidden
+ */
 export default function LandingApp() {
   const [isVisible, setIsVisible] = useState(true);
 
@@ -33,6 +39,10 @@ export default function LandingApp() {
     return () => observer.disconnect();
   }, []);
 
+  /**
+   * Launches the cost tracking application module.
+   * Hides the landing screen and shows the cost app view.
+   */
   const handleLaunchCostApp = () => {
     setIsVisible(false);
     const costApp = document.getElementById('costAppView');
@@ -47,6 +57,10 @@ export default function LandingApp() {
     }
   };
 
+  /**
+   * Launches the work management application module.
+   * Hides the landing screen and shows the work app view.
+   */
   const handleLaunchWorkApp = () => {
     setIsVisible(false);
     const workApp = document.getElementById('workAppView');

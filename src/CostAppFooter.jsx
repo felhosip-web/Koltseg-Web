@@ -1,5 +1,10 @@
 import React from 'react';
 
+/**
+ * Footer component displaying system status, save indicators, and app version.
+ * Shows a save status LED, last save timestamp, and version information with debug toggle button.
+ * @returns {JSX.Element} The footer component
+ */
 export default function CostAppFooter() {
     return (
         <footer

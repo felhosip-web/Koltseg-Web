@@ -4,6 +4,11 @@ import { NameDays } from '../../../js/utils/namedays.js';
 
 // A minimal port of the dashboard rendering logic using React state
 
+/**
+ * Dashboard tab component providing an overview of financial statistics, weather, notifications,
+ * and quick actions. Displays monthly balance, expense trends, top categories, and time tracker stats.
+ * @returns {JSX.Element} The dashboard overview component
+ */
 export default function DashboardTab() {
     const [stats, setStats] = useState(null);
     const chartRef = useRef(null);
@@ -326,6 +331,7 @@ export default function DashboardTab() {
             else setGreeting('Jó estét!');
 
             if (window.dayjs) {
+                window.dayjs.locale('hu');
                 setCurrentDateStr(window.dayjs().format('YYYY. MMMM D., dddd'));
             } else {
                 setCurrentDateStr(new Date().toLocaleDateString('hu-HU', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' }));
@@ -457,6 +463,10 @@ export default function DashboardTab() {
 
     if (!stats) return <div className="p-4 text-gray-500">Adatok betöltése...</div>;
 
+    /**
+     * Navigates to a specific module or tab in the application.
+     * @param {string} mod - The module identifier to navigate to
+     */
     const navigateTo = (mod) => {
         if (mod === 'cost') {
             window.app?.switchTab('table');
@@ -469,6 +479,10 @@ export default function DashboardTab() {
         }
     };
 
+    /**
+     * Triggers a quick action such as creating a new cost entry, note, or shopping item.
+     * @param {string} action - The action identifier to trigger
+     */
     const triggerAction = (action) => {
         if (action === 'new_cost') {
             document.getElementById('btnNewItem')?.click();
@@ -499,6 +513,7 @@ export default function DashboardTab() {
                     <div className="text-right">
                         <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Névnap</p>
                         <p className="text-sm font-bold text-gray-700">{nameDays.today || '...'}</p>
+                        <p className="text-[10px] font-medium text-gray-500 mt-0.5">Holnap: {nameDays.tomorrow || '...'}</p>
                     </div>
                 </div>
             </div>

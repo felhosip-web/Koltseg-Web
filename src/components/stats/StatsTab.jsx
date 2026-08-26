@@ -1,5 +1,11 @@
 import React, { useEffect, useState } from 'react';
 
+/**
+ * Statistics tab component displaying detailed financial analytics.
+ * Shows expense breakdowns by payment method, income statistics, category counts,
+ * balance information, and table completion percentage with drill-down details.
+ * @returns {JSX.Element} The statistics view component
+ */
 export default function StatsTab() {
     const [stats, setStats] = useState(null);
     const [showDetails, setShowDetails] = useState(false);
