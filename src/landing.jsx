@@ -8,6 +8,9 @@ import SettingsPanel from './components/SettingsPanel.jsx'
 import DashboardTab from './components/dashboard/DashboardTab.jsx'
 import StatsTab from './components/stats/StatsTab.jsx'
 import './index.css'
+import MainTable from './components/table/MainTable.jsx'
+import WorkAppHeader from './WorkAppHeader.jsx'
+import WorkAppList from './WorkAppList.jsx'
 
 const landingRoot = document.getElementById('appLandingScreenRoot');
 if (landingRoot) {
@@ -72,12 +75,32 @@ if (footerRoot) {
     )
 }
 
-import MainTable from './components/table/MainTable.jsx'
+
+
+
 const tableRoot = document.getElementById('costAppTableRoot');
 if (tableRoot) {
     ReactDOM.createRoot(tableRoot).render(
       <React.StrictMode>
         <MainTable />
+      </React.StrictMode>,
+    )
+}
+
+const workAppHeaderRoot = document.getElementById('workAppHeaderRoot');
+if (workAppHeaderRoot) {
+    ReactDOM.createRoot(workAppHeaderRoot).render(
+      <React.StrictMode>
+        <WorkAppHeader />
+      </React.StrictMode>,
+    )
+}
+
+const workAppListRoot = document.getElementById('workAppListRoot');
+if (workAppListRoot) {
+    ReactDOM.createRoot(workAppListRoot).render(
+      <React.StrictMode>
+        <WorkAppList />
       </React.StrictMode>,
     )
 }

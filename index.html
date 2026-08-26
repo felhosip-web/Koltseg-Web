@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Költség Nyilvántartó v7.0.4</title>
+    <title>Költség Nyilvántartó v7.0.5</title>
 
     <!-- ===== KÜLSŐ CDN-ek (cache-elve a Service Worker által) ===== -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -572,168 +572,9 @@
 
     <!-- ===== BRAND NEW: 5.2.0 WORK LOG VIEW ===== -->
     <div id="workAppView" class="max-w-7xl mx-auto p-4 md:p-6 hidden">
-        <!-- ===== WORK HEADER ===== -->
-        <header
-            class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 border-b border-gray-100 pb-5">
-            <div class="flex items-center gap-3">
-                <h1 class="text-2xl font-bold text-gray-800 flex items-center gap-2 app-title" id="workMainTitle">
-                    <i class="fas fa-briefcase text-emerald-600"></i>
-                    Munka Nyilvántartás
-                </h1>
-
-                <div class="flex items-center gap-1.5 ml-2">
-                    <span class="global-network-badge text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-400 font-medium flex items-center gap-1 transition-colors">
-                        <i class="fas fa-network-wired"></i> <span class="global-status-text">Offline</span>
-                    </span>
-                    <span class="supabase-status-icon w-5 h-5 flex items-center justify-center rounded-full bg-gray-100 text-gray-400 border border-transparent transition-all" title="Supabase (Inaktív)">
-                        <i class="fas fa-database text-[10px]"></i>
-                    </span>
-                    <span class="gdrive-status-icon w-5 h-5 flex items-center justify-center rounded-full bg-gray-100 text-gray-400 border border-transparent transition-all" title="Google Drive (Inaktív)">
-                        <i class="fab fa-google-drive text-[10px]"></i>
-                    </span>
-                    <span
-                        class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200 font-bold flex items-center gap-1 ml-1">
-                        v5.2.0
-                    </span>
-                </div>
-            </div>
-
-            <!-- Action buttons -->
-            <div class="flex flex-wrap items-center gap-3 w-full md:w-auto justify-end">
-                <button type="button" id="btnNewWork"
-                    class="px-5 py-2.5 bg-emerald-600 text-white rounded-2xl text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 transition shadow-sm">
-                    <i class="fas fa-plus-circle"></i> Új munka felvitele
-                </button>
-                <button type="button" id="btnWorkToMenu"
-                    class="px-4 py-2.5 bg-gray-100 text-gray-700 rounded-2xl text-sm font-bold flex items-center gap-2 hover:bg-gray-200 transition shadow-sm border border-gray-200">
-                    <i class="fas fa-th-large text-gray-500"></i> Főmenü
-                </button>
-                <button type="button"
-                    class="btn-modules-toggle px-4 py-2.5 bg-purple-50 text-purple-700 rounded-2xl text-sm font-bold flex items-center gap-2 hover:bg-purple-100 transition shadow-sm border border-purple-200"
-                    title="Modulok és Bővítmények">
-                    <i class="fas fa-puzzle-piece text-purple-600"></i> Modulok
-                </button>
-
-                <!-- Beállítások, Súgó és Adatkezelés a Munka nézetben is -->
-                <div class="flex gap-2 relative">
-                    <button type="button" id="btnHelpWork"
-                        class="p-3 bg-white border border-gray-200 rounded-2xl text-indigo-600 hover:bg-indigo-50 transition font-semibold w-11 h-11 flex items-center justify-center shadow-sm"
-                        title="Súgó / Útmutató">
-                        <i class="fas fa-question text-lg"></i>
-                    </button>
-
-                    <button type="button" id="btnSettingsWork"
-                        class="p-3 bg-white border border-gray-200 rounded-2xl text-gray-600 hover:bg-gray-50 transition w-11 h-11 flex items-center justify-center shadow-sm"
-                        title="Belépés & Beállítások">
-                        <i class="fas fa-sliders-h"></i>
-                    </button>
-
-                    <button type="button" id="btnDataControlWork"
-                        class="p-3 bg-amber-500 text-white rounded-2xl hover:bg-amber-600 transition w-11 h-11 flex items-center justify-center shadow-sm"
-                        title="Adatbázis & Export">
-                        <i class="fas fa-database"></i>
-                    </button>
-
-                    <!-- ===== ADATKEZELÉS MENÜ WORK ===== -->
-                    <div id="exportMenuWork"
-                        class="hidden absolute right-[-2rem] sm:right-0 top-full mt-2 w-56 max-w-[calc(100vw-2rem)] bg-white border border-gray-200 rounded-xl shadow-xl z-50 py-1 text-sm overflow-y-auto max-h-[calc(100vh-10rem)] text-left">
-                        <div class="px-3 py-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider">Riportok
-                        </div>
-                        <button type="button" id="btnExportExcelWork"
-                            class="w-full text-left px-3 py-2.5 hover:bg-gray-50 flex items-center gap-2 text-gray-700">
-                            <i class="fas fa-file-excel text-emerald-600"></i> Excel export
-                        </button>
-                        <button type="button" id="btnExportPdfWork"
-                            class="w-full text-left px-3 py-2.5 hover:bg-gray-50 flex items-center gap-2 text-gray-700">
-                            <i class="fas fa-file-pdf text-rose-600"></i> PDF export
-                        </button>
-                        <div class="border-t border-gray-100 my-1"></div>
-                        <div class="px-3 py-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider">Adatbázis
-                        </div>
-                        <button type="button" id="btnExportJsonWork"
-                            class="w-full text-left px-3 py-2.5 hover:bg-gray-50 flex items-center gap-2 text-gray-700">
-                            <i class="fas fa-save text-blue-500"></i> JSON mentés
-                        </button>
-                        <button type="button" id="btnImportJsonWork"
-                            class="w-full text-left px-3 py-2.5 hover:bg-gray-50 flex items-center gap-2 text-gray-700">
-                            <i class="fas fa-upload text-amber-500"></i> JSON betöltés
-                        </button>
-                        <button type="button" id="btnForceSyncWork"
-                            class="w-full text-left px-3 py-2.5 hover:bg-gray-50 flex items-center gap-2 text-indigo-600 font-bold border-t border-gray-100">
-                            <i class="fas fa-sync-alt"></i> Szinkronizáció
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </header>
-
-        <!-- KPI summary for work -->
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6" id="workKpis">
-            <div class="bg-white p-5 rounded-2xl shadow border border-gray-100 hover:shadow-lg transition">
-                <p class="text-gray-500 text-xs font-medium uppercase tracking-wider flex items-center gap-1.5">
-                    <i class="fas fa-clock text-amber-500"></i> Folyamatban lévő munkák
-                </p>
-                <p id="workKpiActive" class="text-2xl font-bold text-gray-800 mt-1">0 db</p>
-            </div>
-            <div class="bg-white p-5 rounded-2xl shadow border border-gray-100 hover:shadow-lg transition">
-                <p class="text-gray-500 text-xs font-medium uppercase tracking-wider flex items-center gap-1.5">
-                    <i class="fas fa-check-circle text-emerald-500"></i> Elvégzett munkák
-                </p>
-                <p id="workKpiDone" class="text-2xl font-bold text-emerald-600 mt-1">0 db</p>
-            </div>
-            <div class="bg-white p-5 rounded-2xl shadow border border-gray-100 hover:shadow-lg transition">
-                <p class="text-gray-500 text-xs font-medium uppercase tracking-wider flex items-center gap-1.5">
-                    <i class="fas fa-times-circle text-rose-500"></i> Meghiúsult munkák
-                </p>
-                <p id="workKpiFailed" class="text-2xl font-bold text-rose-600 mt-1">0 db</p>
-            </div>
-        </div>
-
-        <!-- Work Table Container -->
-        <div class="bg-white rounded-3xl shadow-xl border border-gray-100 overflow-hidden">
-            <div class="overflow-x-auto">
-                <table class="w-full text-left border-collapse" id="workTable">
-                    <thead>
-                        <tr class="bg-gray-50 border-b border-gray-200">
-                            <th class="p-4 font-bold text-gray-600 text-xs uppercase tracking-wider w-16 text-center">
-                                Sorszám</th>
-                            <th class="p-4 font-bold text-gray-600 text-xs uppercase tracking-wider">Munka neve</th>
-                            <th class="p-4 font-bold text-gray-600 text-xs uppercase tracking-wider">Leírás</th>
-                            <th class="p-4 font-bold text-gray-600 text-xs uppercase tracking-wider">Hol</th>
-                            <th class="p-4 font-bold text-gray-600 text-xs uppercase tracking-wider text-center">Mikor
-                            </th>
-                            <th class="p-4 font-bold text-gray-600 text-xs uppercase tracking-wider text-center">Hány
-                                nap</th>
-                            <th class="p-4 font-bold text-gray-600 text-xs uppercase tracking-wider text-center w-36">
-                                Státusz</th>
-                            <th class="p-4 font-bold text-gray-600 text-xs uppercase tracking-wider text-center w-20">
-                                Művelet</th>
-                        </tr>
-                    </thead>
-                    <tbody id="workTableBody" class="divide-y divide-gray-100">
-                        <!-- Works loaded here dynamically -->
-                        <tr>
-                            <td colspan="8" class="p-12 text-center text-gray-400 italic">
-                                <div class="flex flex-col items-center gap-2">
-                                    <i class="fas fa-briefcase text-4xl text-gray-200"></i>
-                                    <span>Nincsenek rögzített munkák. Kattintson az "Új munka felvitele" gombra!</span>
-                                </div>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-            <div class="p-4 bg-gray-50 text-[11px] text-gray-400 flex items-center gap-1.5 border-t border-gray-100">
-                <i class="fas fa-info-circle text-emerald-500"></i>
-                <span>Tipp: Egy sorra való hosszú nyomással (mobil) vagy dupla kattintással (asztali) is megnyitható a
-                    teljes bejegyzés szerkesztése!</span>
-            </div>
-        </div>
-
-        <!-- ===== FOOTER ===== -->
-
+        <div id="workAppHeaderRoot"></div>
+        <div id="workAppListRoot"></div>
     </div>
-
     <div id="costAppFooterRoot" class="max-w-7xl mx-auto p-4 md:p-6 pb-20"></div>
 
     <!-- WORK EDITOR / CREATOR MODAL -->
@@ -1173,7 +1014,7 @@
                     class="p-4 border-t border-gray-100 bg-slate-50 flex items-center justify-between text-[11px] text-slate-400">
                     <span class="flex items-center gap-1"><i class="fas fa-info-circle text-indigo-500"></i> Tipp: Az
                         adatok szinkronizálásához legyen aktív a felhőkapcsolat!</span>
-                    <span class="font-bold app-version-label">v7.0.4</span>
+                    <span class="font-bold app-version-label">v7.0.5</span>
                 </div>
             </div>
         </div>
