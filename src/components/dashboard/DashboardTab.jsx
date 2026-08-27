@@ -22,18 +22,18 @@ export default function DashboardTab() {
 
     useEffect(() => {
         const loadData = () => {
-            if (!window.app || !window.app.entries || !window.app.items || !window.app.months) {
+            if (!window.app || typeof window.app.getAppSnapshot !== 'function') {
                 return;
             }
 
-            const app = window.app;
-            const dayjs = window.dayjs;
+            const snapshot = window.app.getAppSnapshot();
+            const { dayjs } = snapshot;
 
-            const entries = (app.entries.entries || []).filter(e => !e.isStorno);
-            const items = app.items.items || [];
-            const months = app.months.months || [];
-            const incomings = (app.incomingManager?.incomings || []).filter(e => !e.isStorno);
-            const eurRate = app.config.eurRate || 400;
+            const entries = snapshot.entries.filter(e => !e.isStorno);
+            const items = snapshot.items;
+            const months = snapshot.months;
+            const incomings = snapshot.incomings.filter(e => !e.isStorno);
+            const eurRate = snapshot.eurRate || 400;
 
             // KIADÁSOK
             let total = 0;
@@ -114,7 +114,7 @@ export default function DashboardTab() {
 
             // ÉRTESÍTÉSEK
             const notifications = [];
-            const reminders = app.reminderManager?.reminders || [];
+            const reminders = snapshot.reminders || [];
 
             const todayStr = dayjs ? dayjs().format('YYYY-MM-DD') : now.toISOString().split('T')[0];
             const overdue = reminders.filter(r => r.due_date < todayStr);
@@ -145,23 +145,10 @@ export default function DashboardTab() {
             localStorage.setItem('last_eur_rate', eurRate.toString());
 
             // TODAY FOCUS
-            const safeJsonParse = (key, fallback = []) => {
-                try {
-                    const item = localStorage.getItem(key);
-                    return item ? JSON.parse(item) : fallback;
-                } catch (e) {
-                    console.warn(`[DASHBOARD] Failed to parse localStorage key "${key}":`, e);
-                    return fallback;
-                }
-            };
-
-            const notes = app.notepadNotes || safeJsonParse('plugin_notepad_notes', []);
-            let calendarEvents = app.calendarEvents || safeJsonParse('plugin_calendar_events', []);
-            if (!calendarEvents || calendarEvents.length === 0) {
-                calendarEvents = safeJsonParse('calendar_events', []);
-            }
-            const shoppingItems = app.shoppingItems || safeJsonParse('plugin_shopping_list_items', []);
-            const kmEntries = app.fuelLogs || safeJsonParse('plugin_fuel_logs', []);
+            const notes = snapshot.notes;
+            let calendarEvents = snapshot.calendarEvents;
+            const shoppingItems = snapshot.shoppingItems;
+            const kmEntries = snapshot.fuelLogs;
 
             const urgentItems = [];
             const todayStrISO = now.toISOString ? now.toISOString().split('T')[0] : todayStr;
@@ -221,8 +208,12 @@ export default function DashboardTab() {
              loadData();
         }
 
-        window.addEventListener('app-data-updated', handleUpdate);
-        return () => window.removeEventListener('app-data-updated', handleUpdate);
+        if (window.app && typeof window.app.subscribeAppData === 'function') {
+            return window.app.subscribeAppData(handleUpdate);
+        } else {
+            window.addEventListener('app-data-updated', handleUpdate);
+            return () => window.removeEventListener('app-data-updated', handleUpdate);
+        }
     }, []);
 
     useEffect(() => {
