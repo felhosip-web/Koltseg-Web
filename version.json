@@ -1,8 +1,17 @@
 {
-  "version": "7.0.6",
-  "build": "2026-08-27T10:00:00.000Z",
+  "version": "7.0.7",
+  "build": "2026-08-27T18:53:09.791Z",
   "release": "stable",
   "changelog": [
+    {
+      "version": "7.0.7",
+      "date": "2026-08-27",
+      "changes": [
+        "React Phase 8: Cost main table rows rendered from getAppSnapshot / subscribeAppData",
+        "Row actions still call existing vanilla handlers (edit/delete/etc.)",
+        "No rewrite of IndexedDB, boot, or sync"
+      ]
+    },
     {
       "version": "7.0.6",
       "date": "2026-08-27",
