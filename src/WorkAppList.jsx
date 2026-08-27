@@ -14,8 +14,12 @@ export default function WorkAppList() {
              renderList();
         }
 
-        window.addEventListener('app-data-updated', renderList);
-        return () => window.removeEventListener('app-data-updated', renderList);
+        if (window.app && typeof window.app.subscribeAppData === 'function') {
+            return window.app.subscribeAppData(renderList);
+        } else {
+            window.addEventListener('app-data-updated', renderList);
+            return () => window.removeEventListener('app-data-updated', renderList);
+        }
     }, []);
 
     return (

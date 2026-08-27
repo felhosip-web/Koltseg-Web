@@ -1,8 +1,17 @@
 {
-  "version": "7.0.5",
-  "build": "2026-08-23T14:35:31.958Z",
+  "version": "7.0.6",
+  "build": "2026-08-27T10:00:00.000Z",
   "release": "stable",
   "changelog": [
+    {
+      "version": "7.0.6",
+      "date": "2026-08-27",
+      "changes": [
+        "React Phase 7: shared app data bridge for React components",
+        "Dashboard and Stats tabs now read from shared getAppSnapshot bridge",
+        "Vanilla boot/DB/sync unchanged"
+      ]
+    },
     {
       "version": "7.0.5",
       "date": "2026-08-26",

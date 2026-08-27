@@ -401,6 +401,56 @@ class App {
     }
 
     // ================================================================
+    // === REACT SHARED API BRIDGE ===
+    // ================================================================
+
+    /**
+     * Creates a snapshot of the core application data for React components.
+     * @returns {Object} Data snapshot
+     */
+    getAppSnapshot() {
+        const safeJsonParse = (key, fallback = []) => {
+            try {
+                const item = localStorage.getItem(key);
+                return item ? JSON.parse(item) : fallback;
+            } catch (e) {
+                console.warn(`[APP] Failed to parse localStorage key "${key}":`, e);
+                return fallback;
+            }
+        };
+
+        let calendarEvents = this.calendarEvents || safeJsonParse('plugin_calendar_events', []);
+        if (!calendarEvents || calendarEvents.length === 0) {
+            calendarEvents = safeJsonParse('calendar_events', []);
+        }
+
+        return {
+            entries: this.entries?.entries || [],
+            items: this.items?.items || [],
+            months: this.months?.months || [],
+            incomings: this.incomingManager?.incomings || [],
+            eurRate: this.config?.eurRate || 400,
+            reminders: this.reminderManager?.reminders || [],
+            notes: this.notepadNotes || safeJsonParse('plugin_notepad_notes', []),
+            calendarEvents: calendarEvents,
+            shoppingItems: this.shoppingItems || safeJsonParse('plugin_shopping_list_items', []),
+            fuelLogs: this.fuelLogs || safeJsonParse('plugin_fuel_logs', []),
+            isBooted: this.isBooted,
+            dayjs: window.dayjs
+        };
+    }
+
+    /**
+     * Subscribes a listener to the global app-data-updated event.
+     * @param {Function} listener
+     * @returns {Function} Unsubscribe function
+     */
+    subscribeAppData(listener) {
+        window.addEventListener('app-data-updated', listener);
+        return () => window.removeEventListener('app-data-updated', listener);
+    }
+
+    // ================================================================
     // === HÁLÓZATI KEZELÉS ===
     // ================================================================
 

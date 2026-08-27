@@ -12,16 +12,17 @@ export default function StatsTab() {
 
     useEffect(() => {
         const loadData = () => {
-            if (!window.app || !window.app.entries || !window.app.items || !window.app.months) {
+            if (!window.app || typeof window.app.getAppSnapshot !== 'function') {
                 return;
             }
 
-            const app = window.app;
-            const entries = (app.entries.entries || []).filter(e => !e.isStorno);
-            const items = app.items.items || [];
-            const months = app.months.months || [];
-            const incomings = (app.incomingManager?.incomings || []).filter(e => !e.isStorno);
-            const eurRate = app.config.eurRate || 400;
+            const snapshot = window.app.getAppSnapshot();
+
+            const entries = snapshot.entries.filter(e => !e.isStorno);
+            const items = snapshot.items;
+            const months = snapshot.months;
+            const incomings = snapshot.incomings.filter(e => !e.isStorno);
+            const eurRate = snapshot.eurRate || 400;
 
             // === KIADÁS STATISZTIKA ===
             let total = 0, card = 0, cash = 0, transfer = 0;
@@ -110,8 +111,12 @@ export default function StatsTab() {
              loadData();
         }
 
-        window.addEventListener('app-data-updated', handleUpdate);
-        return () => window.removeEventListener('app-data-updated', handleUpdate);
+        if (window.app && typeof window.app.subscribeAppData === 'function') {
+            return window.app.subscribeAppData(handleUpdate);
+        } else {
+            window.addEventListener('app-data-updated', handleUpdate);
+            return () => window.removeEventListener('app-data-updated', handleUpdate);
+        }
     }, []);
 
     if (!stats) return <div className="p-4 text-gray-500">Adatok betöltése...</div>;
