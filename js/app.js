@@ -435,6 +435,7 @@ class App {
             calendarEvents: calendarEvents,
             shoppingItems: this.shoppingItems || safeJsonParse('plugin_shopping_list_items', []),
             fuelLogs: this.fuelLogs || safeJsonParse('plugin_fuel_logs', []),
+            works: this.workLogManager?.works || [],
             isBooted: this.isBooted,
             dayjs: window.dayjs
         };

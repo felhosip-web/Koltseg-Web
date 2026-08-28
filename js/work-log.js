@@ -113,124 +113,14 @@ export class WorkLogRenderer {
      * Render the table of works
      */
     renderTable() {
-        const tbody = document.getElementById('workTableBody');
-        if (!tbody) return;
-
-        let html = '';
-        if (this.manager.works.length === 0) {
-            html = `
-                <tr>
-                    <td colspan="8" class="p-12 text-center text-gray-400 italic">
-                        <div class="flex flex-col items-center gap-2">
-                            <i class="fas fa-briefcase text-4xl text-gray-200 animate-pulse"></i>
-                            <span class="text-sm font-semibold text-gray-500">Nincsenek rögzített munkák</span>
-                            <span class="text-xs">Kattintson az "Új munka felvitele" gombra új tétel rögzítéséhez!</span>
-                        </div>
-                    </td>
-                </tr>
-            `;
-            tbody.innerHTML = html;
-            return;
-        }
-
-        this.manager.works.forEach((work, index) => {
-            let statusBadge = '';
-            let rowClass = '';
-            
-            switch (work.status) {
-                case 'elvégzett':
-                    statusBadge = '<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">🟢 Elvégzett</span>';
-                    rowClass = 'bg-emerald-50/40 hover:bg-emerald-100/50 text-emerald-950';
-                    break;
-                case 'folyamatban':
-                    statusBadge = '<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200">🟡 Folyamatban</span>';
-                    rowClass = 'bg-amber-50/40 hover:bg-amber-100/50 text-amber-950';
-                    break;
-                case 'meghiúsult':
-                    statusBadge = '<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-100 text-rose-800 border border-rose-200">🔴 Meghiúsult</span>';
-                    rowClass = 'bg-rose-50/40 hover:bg-rose-100/50 text-rose-950';
-                    break;
-                default:
-                    statusBadge = '<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-gray-100 text-gray-800">⚪ Ismeretlen</span>';
-                    rowClass = 'hover:bg-gray-50 text-gray-900';
-            }
-
-            const cleanDescription = (work.description || '').replace(/\n/g, ' ');
-            const truncatedDesc = cleanDescription.length > 50 ? cleanDescription.substring(0, 47) + '...' : cleanDescription;
-
-            html += `
-                <tr class="${rowClass} cursor-pointer select-none transition-colors border-b border-gray-100" data-id="${work.id}">
-                    <td class="p-4 text-center font-bold font-mono text-xs text-gray-500">${index + 1}</td>
-                    <td class="p-4 font-bold text-sm">${this.escapeHtml(work.name || '')}</td>
-                    <td class="p-4 text-xs text-gray-500 font-medium" title="${this.escapeHtml(work.description || '')}">${this.escapeHtml(truncatedDesc || '-')}</td>
-                    <td class="p-4 text-xs font-semibold text-gray-600">${this.escapeHtml(work.location || '-')}</td>
-                    <td class="p-4 text-xs text-center font-bold text-gray-500 font-mono">${work.date || '-'}</td>
-                    <td class="p-4 text-xs text-center font-bold text-gray-700 font-mono">${work.duration || 1} nap</td>
-                    <td class="p-4 text-center">${statusBadge}</td>
-                    <td class="p-4 text-center">
-                        <button type="button" class="btn-edit-work text-gray-400 hover:text-emerald-600 p-1.5 rounded-lg hover:bg-white/50 transition-colors" data-id="${work.id}" title="Szerkesztés">
-                            <i class="fas fa-edit"></i>
-                        </button>
-                    </td>
-                </tr>
-            `;
-        });
-
-        tbody.innerHTML = html;
-
-        // Attach event listeners to rows
-        const rows = tbody.querySelectorAll('tr[data-id]');
-        rows.forEach(row => {
-            const id = row.getAttribute('data-id');
-            
-            // Double click handler
-            row.addEventListener('dblclick', () => {
-                this.openModal(id);
-            });
-
-            // Long press handler
-            let pressTimer;
-            row.addEventListener('touchstart', () => {
-                pressTimer = setTimeout(() => {
-                    this.openModal(id);
-                }, 600); // 600ms long press
-            }, { passive: true });
-
-            row.addEventListener('touchend', () => {
-                clearTimeout(pressTimer);
-            }, { passive: true });
-
-            row.addEventListener('touchmove', () => {
-                clearTimeout(pressTimer);
-            }, { passive: true });
-            
-            // Edit button handler
-            const editBtn = row.querySelector('.btn-edit-work');
-            if (editBtn) {
-                editBtn.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    this.openModal(id);
-                });
-            }
-        });
+        window.dispatchEvent(new Event('app-data-updated'));
     }
 
     /**
      * Update KPI counter cards
      */
     updateKpis() {
-        const works = this.manager.works;
-        const active = works.filter(w => w.status === 'folyamatban').length;
-        const done = works.filter(w => w.status === 'elvégzett').length;
-        const failed = works.filter(w => w.status === 'meghiúsult').length;
-
-        const kpiActive = document.getElementById('workKpiActive');
-        const kpiDone = document.getElementById('workKpiDone');
-        const kpiFailed = document.getElementById('workKpiFailed');
-
-        if (kpiActive) kpiActive.innerText = `${active} db`;
-        if (kpiDone) kpiDone.innerText = `${done} db`;
-        if (kpiFailed) kpiFailed.innerText = `${failed} db`;
+        window.dispatchEvent(new Event('app-data-updated'));
     }
 
     /**
