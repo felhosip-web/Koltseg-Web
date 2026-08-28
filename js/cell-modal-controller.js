@@ -23,12 +23,14 @@ export class CellModalController {
      */
     open(cellElement) {
         this.currentCellBaseKey = cellElement.getAttribute('data-cellbasekey');
-        
-        this.resetForm();
-        this.refreshList();                    // Rész-tételek betöltése
-        
-        document.getElementById('cellEditorModal').classList.remove('hidden');
-        document.getElementById('cellAmountInput').focus();
+
+        const modalRoot = document.getElementById('costAppCellEditorRoot');
+        if (!modalRoot) {
+            console.error('[CellModal] A React modal gyökére nem található.');
+            return;
+        }
+
+        modalRoot.dispatchEvent(new CustomEvent('cell-editor-open'));
     }
 
     /**
@@ -332,7 +334,8 @@ export class CellModalController {
      */
     close() {
         this._cleanupEvents();
-        document.getElementById('cellEditorModal').classList.add('hidden');
+        document.getElementById('costAppCellEditorRoot')
+            ?.dispatchEvent(new CustomEvent('cell-editor-close'));
     }
 
     // Destructor-szerű metódus (ha kell takarítani)

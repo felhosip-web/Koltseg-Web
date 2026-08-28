@@ -11,6 +11,7 @@ import './index.css'
 import MainTable from './components/table/MainTable.jsx'
 import WorkAppHeader from './WorkAppHeader.jsx'
 import WorkAppList from './WorkAppList.jsx'
+import CellEditorModal from './components/CellEditorModal.jsx'
 
 const landingRoot = document.getElementById('appLandingScreenRoot');
 if (landingRoot) {
@@ -44,6 +45,15 @@ if (settingsRoot) {
     ReactDOM.createRoot(settingsRoot).render(
       <React.StrictMode>
         <SettingsPanel />
+      </React.StrictMode>,
+    )
+}
+
+const cellEditorRoot = document.getElementById('costAppCellEditorRoot');
+if (cellEditorRoot) {
+    ReactDOM.createRoot(cellEditorRoot).render(
+      <React.StrictMode>
+        <CellEditorModal />
       </React.StrictMode>,
     )
 }
