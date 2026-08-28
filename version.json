@@ -1,8 +1,17 @@
 {
-  "version": "7.0.7",
+  "version": "7.0.8",
   "build": "2026-08-27T18:53:09.791Z",
   "release": "stable",
   "changelog": [
+    {
+      "version": "7.0.8",
+      "date": "2026-08-28",
+      "changes": [
+        "React Phase 9: cost entry add/edit modal UI in React",
+        "Save/validation still uses existing vanilla handlers / window.app",
+        "Table, boot, sync unchanged in behavior"
+      ]
+    },
     {
       "version": "7.0.7",
       "date": "2026-08-27",
