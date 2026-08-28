@@ -1005,6 +1005,7 @@ export class UIController {
                 await this.app.items.load().catch(() => {});
                 await this.app.entries.load().catch(() => {});
 
+                window.dispatchEvent(new Event('app-data-updated'));
                 this.app.hmiNotif.showToast(`"${itemName}" sikeresen eltávolítva.`, 'success');
                 this.app.renderer.updateFooterStatus('Sikeres fizikai törlés', false);
             } catch (error) {
@@ -1012,7 +1013,6 @@ export class UIController {
                 this.app.hmiNotif.showToast('Hiba törlés közben.', 'error');
                 this.app.renderer.updateFooterStatus('Törlési hiba', true);
             } finally {
-                this.app.renderer.renderTable();
                 if (typeof this.app.renderer.renderSummary === 'function') {
                     this.app.renderer.renderSummary();
                 }
@@ -1045,6 +1045,7 @@ export class UIController {
                 await this.app.months.load().catch(() => {});
                 await this.app.entries.load().catch(() => {});
 
+                window.dispatchEvent(new Event('app-data-updated'));
                 this.app.hmiNotif.showToast(`"${month}" hónap sikeresen eltávolítva.`, 'success');
                 this.app.renderer.updateFooterStatus('Sikeres fizikai törlés', false);
             } catch (error) {
@@ -1052,7 +1053,6 @@ export class UIController {
                 this.app.hmiNotif.showToast('Hiba a hónap törlésekor.', 'error');
                 this.app.renderer.updateFooterStatus('Törlési hiba', true);
             } finally {
-                this.app.renderer.renderTable();
                 if (typeof this.app.refreshAllTabs === 'function') {
                     this.app.refreshAllTabs();
                 }
