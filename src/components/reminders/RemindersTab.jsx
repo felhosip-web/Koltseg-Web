@@ -229,7 +229,7 @@ export default function RemindersTab() {
                     </thead>
                     <tbody>
                         {sortedReminders.map(rem => {
-                            const dueDate = new Date(rem.due_date);
+                            const dueDate = new Date(`${rem.due_date}T00:00:00`);
                             dueDate.setHours(0, 0, 0, 0);
                             const diffTime = dueDate.getTime() - today.getTime();
                             const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
