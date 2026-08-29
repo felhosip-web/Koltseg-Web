@@ -724,7 +724,11 @@ showSimulatedPushNotification(title, body) {
             // Globális keresési eredmények
             let matchCount = 0;
             HELP_SECTIONS.forEach(section => {
-                const matchedArticles = section.articles.filter(art => 
+                const articlesToSearch = section.id === 'version_changelog'
+                    ? this._getDynamicChangelogArticles()
+                    : section.articles;
+
+                const matchedArticles = articlesToSearch.filter(art =>
                     art.title.toLowerCase().includes(keyword) || 
                     art.content.toLowerCase().includes(keyword)
                 );
@@ -765,11 +769,47 @@ showSimulatedPushNotification(title, body) {
             `;
             this.helpContentContainer.appendChild(header);
 
-            section.articles.forEach(art => {
-                const card = this.createArticleCard(art);
-                this.helpContentContainer.appendChild(card);
-            });
+            if (section.id === 'version_changelog') {
+                const dynamicArticles = this._getDynamicChangelogArticles();
+                dynamicArticles.forEach(art => {
+                    const card = this.createArticleCard(art);
+                    this.helpContentContainer.appendChild(card);
+                });
+            } else {
+                section.articles.forEach(art => {
+                    const card = this.createArticleCard(art);
+                    this.helpContentContainer.appendChild(card);
+                });
+            }
         }
+    }
+
+    _getDynamicChangelogArticles() {
+        const app = this.app || window.app;
+        if (!app || !app.version || !app.version.changelog) return [];
+
+        const currentVersion = app.version.version;
+        return app.version.changelog.map(entry => {
+            const isCurrent = entry.version === currentVersion;
+
+            let itemsHtml = '';
+            if (entry.changes && Array.isArray(entry.changes)) {
+                itemsHtml = entry.changes.map(c => `<li>${c}</li>`).join('');
+            } else if (entry.features && Array.isArray(entry.features)) {
+                itemsHtml = entry.features.map(f => `<li>${f}</li>`).join('');
+            }
+
+            let descriptionHtml = entry.description ? `<strong>${entry.description}</strong><br>` : '';
+
+            return {
+                title: `v${entry.version}${isCurrent ? ' (Aktuális verzió)' : ''}`,
+                content: `<strong>Megjelenés:</strong> ${entry.date || 'Ismeretlen'}<br><br>
+                ${descriptionHtml}
+                <ul class="list-disc pl-5 mt-2 space-y-1">
+                    ${itemsHtml}
+                </ul>`
+            };
+        });
     }
 
     getDynamicModulesListHTML() {
