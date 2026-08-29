@@ -30,7 +30,8 @@ export class PwaManager {
 
     async checkAppVersion() {
         try {
-            const response = await fetch('/version.json?t=' + Date.now(), {
+            const basePath = window.location.pathname.includes('/Koltseg-Web') ? '/Koltseg-Web' : '';
+            const response = await fetch(`${basePath}/version.json?t=` + Date.now(), {
                 cache: 'no-store',
                 headers: {
                     'Cache-Control': 'no-cache'
