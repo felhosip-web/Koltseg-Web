@@ -12,6 +12,7 @@ import MainTable from './components/table/MainTable.jsx'
 import WorkAppHeader from './WorkAppHeader.jsx'
 import WorkAppList from './WorkAppList.jsx'
 import CellEditorModal from './components/CellEditorModal.jsx'
+import AiEntryModal from './components/AiEntryModal.jsx'
 
 const landingRoot = document.getElementById('appLandingScreenRoot');
 if (landingRoot) {
@@ -111,6 +112,15 @@ if (workAppListRoot) {
     ReactDOM.createRoot(workAppListRoot).render(
       <React.StrictMode>
         <WorkAppList />
+      </React.StrictMode>,
+    )
+}
+
+const aiModalRoot = document.getElementById('costAppAiModalRoot');
+if (aiModalRoot) {
+    ReactDOM.createRoot(aiModalRoot).render(
+      <React.StrictMode>
+        <AiEntryModal />
       </React.StrictMode>,
     )
 }

@@ -1,8 +1,17 @@
 {
-  "version": "7.0.8",
+  "version": "7.0.10",
   "build": "2026-08-27T18:53:09.791Z",
   "release": "stable",
   "changelog": [
+    {
+      "version": "7.0.10",
+      "date": "2026-08-29",
+      "description": "React Phase 11: AI / quick-entry modal UI in React",
+      "features": [
+        "Submit/parse still uses existing vanilla / window.app handlers where needed",
+        "Version labels stay single-source via version.json"
+      ]
+    },
     {
       "version": "7.0.8",
       "date": "2026-08-28",
