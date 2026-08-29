@@ -1,3 +1,4 @@
+import RemindersTab from './components/reminders/RemindersTab.jsx'
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import LandingApp from './LandingApp.jsx'
@@ -121,6 +122,15 @@ if (aiModalRoot) {
     ReactDOM.createRoot(aiModalRoot).render(
       <React.StrictMode>
         <AiEntryModal />
+      </React.StrictMode>,
+    )
+}
+
+const remindersRoot = document.getElementById('costAppRemindersRoot');
+if (remindersRoot) {
+    ReactDOM.createRoot(remindersRoot).render(
+      <React.StrictMode>
+        <RemindersTab />
       </React.StrictMode>,
     )
 }
