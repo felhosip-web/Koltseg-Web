@@ -1,15 +1,23 @@
 {
-    "version": "7.0.12",
+    "version": "7.0.14",
     "build": "2026-08-27T18:53:09.791Z",
     "release": "stable",
     "changelog": [
         {
-            "version": "7.0.12",
+            "version": "7.0.14",
             "date": "2026-08-30",
             "changes": [
-                "React Phase 13: Time Tracker (Idő) tab UI in React",
-                "Time tracking start/stop/save still uses existing vanilla handlers",
-                "Other modules unchanged"
+                "React Phase 15: Kimutatások (reports/charts) tab UI in React",
+                "Aggregations still from existing vanilla / getAppSnapshot data",
+                "Chart library usage only if already in project — no new heavy deps without need"
+            ]
+        },
+        {
+            "version": "7.0.13",
+            "date": "2026-08-30",
+            "changes": [
+                "React Phase 14: Settings & Data Modal UI in React",
+                "Table and other tabs unaffected"
             ]
         },
         {

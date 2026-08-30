@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Költség Nyilvántartó v7.0.12</title>
+    <title>Költség Nyilvántartó v7.0.14</title>
 
     <!-- ===== KÜLSŐ CDN-ek (cache-elve a Service Worker által) ===== -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -358,70 +358,7 @@
 
             <!-- 2. KIMUTATÁSOK (grafikonok) -->
             <div id="tab-charts" class="tab-pane hidden">
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div class="bg-white p-6 rounded-3xl shadow-xl border border-gray-100 md:col-span-2">
-                        <h3 class="text-base font-semibold text-gray-700 mb-4 flex items-center gap-2">
-                            <i class="fas fa-chart-column text-blue-500"></i> Kiadások tételenként (Ft)
-                        </h3>
-                        <div class="relative h-[300px]"><canvas id="barChart"></canvas></div>
-                    </div>
-                    <div class="bg-white p-6 rounded-3xl shadow-xl border border-gray-100">
-                        <h3 class="text-base font-semibold text-gray-700 mb-4 flex items-center gap-2">
-                            <i class="fas fa-chart-pie text-purple-500"></i> Fizetési módok aránya
-                        </h3>
-                        <div class="relative h-[250px] flex justify-center"><canvas id="doughnutChart"></canvas></div>
-                    </div>
-                    <div class="bg-white p-6 rounded-3xl shadow-xl border border-gray-100">
-                        <h3 class="text-base font-semibold text-gray-700 mb-4 flex items-center gap-2">
-                            <i class="fas fa-wallet text-emerald-500"></i> Valuta szerinti megoszlás
-                        </h3>
-                        <div class="relative h-[250px] flex justify-center"><canvas id="currencyChart"></canvas></div>
-                    </div>
-                </div>
-                <!-- ===== ÚJ: BEJÖVŐ UTALÁSOK TREND ===== -->
-                <div class="mt-6 grid grid-cols-1 gap-6">
-                    <div class="bg-white p-6 rounded-3xl shadow-xl border border-gray-100">
-                        <h3 class="text-base font-semibold text-gray-700 mb-4 flex items-center gap-2">
-                            <i class="fas fa-arrow-down text-emerald-500"></i> Bejövő utalások trendje
-                        </h3>
-                        <div class="relative h-[250px]">
-                            <canvas id="incomingTrendChart"></canvas>
-                        </div>
-                    </div>
-                </div>
-                <!-- ===== ÚJ: TANKOLÁSI MODUL GRAFIKONOK ===== -->
-                <div id="fuelChartsSection" class="mt-6 grid grid-cols-1 md:grid-cols-3 gap-6 hidden">
-                    <div class="bg-white p-6 rounded-3xl shadow-xl border border-gray-100">
-                        <h3 class="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-                            <i class="fas fa-tachometer-alt text-blue-500"></i> Km-óra állás alakulása
-                        </h3>
-                        <div class="relative h-[220px]">
-                            <canvas id="fuelOdoChart"></canvas>
-                        </div>
-                    </div>
-                    <div class="bg-white p-6 rounded-3xl shadow-xl border border-gray-100">
-                        <h3 class="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-                            <i class="fas fa-gas-pump text-emerald-500"></i> Átlagfogyasztás (l/100km)
-                        </h3>
-                        <div class="relative h-[220px]">
-                            <canvas id="fuelConsumptionChart"></canvas>
-                        </div>
-                    </div>
-                    <div class="bg-white p-6 rounded-3xl shadow-xl border border-gray-100">
-                        <h3 class="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-                            <i class="fas fa-tags text-amber-500"></i> Üzemanyagár (Ft/l)
-                        </h3>
-                        <div class="relative h-[220px]">
-                            <canvas id="fuelPriceChart"></canvas>
-                        </div>
-                    </div>
-                </div>
-                <div class="mt-4 flex justify-end">
-                    <select id="monthFilter"
-                        class="bg-white border border-gray-200 text-gray-700 px-4 py-2.5 rounded-2xl shadow-sm text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                        <option value="all">Összes hónap</option>
-                    </select>
-                </div>
+                <div id="costAppChartsRoot"></div>
             </div>
 
             <!-- 3. HATÁRIDŐK -->
@@ -776,7 +713,7 @@
                     class="p-4 border-t border-gray-100 bg-slate-50 flex items-center justify-between text-[11px] text-slate-400">
                     <span class="flex items-center gap-1"><i class="fas fa-info-circle text-indigo-500"></i> Tipp: Az
                         adatok szinkronizálásához legyen aktív a felhőkapcsolat!</span>
-                    <span class="font-bold app-version-label">v7.0.12</span>
+                    <span class="font-bold app-version-label">v7.0.14</span>
                 </div>
             </div>
         </div>
