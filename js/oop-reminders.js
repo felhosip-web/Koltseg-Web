@@ -314,12 +314,17 @@ export class RemindersApp {
         console.log('[REMINDERS] Reminders subsystem booted successfully.');
     }
 
-    async _handleNewReminder() {
-        const title = document.getElementById('remTitleInput').value.trim();
-        const amount = parseFloat(document.getElementById('remAmountInput').value);
-        const currency = document.getElementById('remCurrencySelect').value;
-        const due_date = document.getElementById('remDateInput').value;
-        const frequency = document.getElementById('remFreqSelect').value;
+    async _handleNewReminder(data = null) {
+        let title, amount, currency, due_date, frequency;
+        if (data) {
+            ({ title, amount, currency, due_date, frequency } = data);
+        } else {
+            title = document.getElementById('remTitleInput').value.trim();
+            amount = parseFloat(document.getElementById('remAmountInput').value);
+            currency = document.getElementById('remCurrencySelect').value;
+            due_date = document.getElementById('remDateInput').value;
+            frequency = document.getElementById('remFreqSelect').value;
+        }
 
         if (!title || !title.length) {
             await this.hmiNotif.showInfo('Hiányzó adatok', 'A határidő címe nem lehet üres!');
@@ -338,19 +343,28 @@ export class RemindersApp {
 
         await this.app.reminderManager.add({ title, amount, currency, due_date, frequency });
         
-        document.getElementById('reminderForm').reset();
-        this.renderer.renderList();
+        if (document.getElementById('reminderForm')) {
+            document.getElementById('reminderForm').reset();
+        }
+        if (this.renderer && this.renderer.renderList) {
+            this.renderer.renderList();
+        }
         this.app.updateReminderStatus?.();
         this.hmiNotif.showToast('Határidő rögzítve!', 'success');
     }
 
-    async _updateReminder() {
-        const id = document.getElementById('editRemId').value; // UUID string
-        const title = document.getElementById('editRemTitle').value.trim();
-        const amount = parseFloat(document.getElementById('editRemAmount').value);
-        const currency = document.getElementById('editRemCurrency').value;
-        const due_date = document.getElementById('editRemDate').value;
-        const frequency = document.getElementById('editRemFreq').value;
+    async _updateReminder(data = null) {
+        let id, title, amount, currency, due_date, frequency;
+        if (data) {
+            ({ id, title, amount, currency, due_date, frequency } = data);
+        } else {
+            id = document.getElementById('editRemId').value; // UUID string
+            title = document.getElementById('editRemTitle').value.trim();
+            amount = parseFloat(document.getElementById('editRemAmount').value);
+            currency = document.getElementById('editRemCurrency').value;
+            due_date = document.getElementById('editRemDate').value;
+            frequency = document.getElementById('editRemFreq').value;
+        }
 
         if (!title || !title.length) {
             await this.hmiNotif.showInfo('Hiányzó adatok', 'A határidő címe nem lehet üres!');
@@ -374,9 +388,101 @@ export class RemindersApp {
             await this.app.reminderManager.syncService.push('reminders', rem);
         }
 
-        document.getElementById('editReminderModal').classList.add('hidden');
-        this.renderer.renderList();
+        if (document.getElementById('editReminderModal')) {
+            document.getElementById('editReminderModal').classList.add('hidden');
+        }
+        if (this.renderer && this.renderer.renderList) {
+            this.renderer.renderList();
+        }
         this.app.updateReminderStatus?.();
         this.hmiNotif.showToast('Határidő frissítve!', 'success');
+    }
+
+    async _handleCompleteReminder(id) {
+        const rem = this.app.reminderManager.reminders.find(r => String(r.id) === String(id));
+        if (!rem) return;
+
+        // 1. Megjelölés teljesítettnek
+        await this.app.reminderManager.markAsCompleted(id);
+        if (this.renderer && this.renderer.renderList) this.renderer.renderList();
+        this.app.updateReminderStatus?.();
+
+        // 2. Intelligens Költség-rögzítés felajánlása
+        const logAsExpense = await this.hmiNotif.showConfirm({
+            title: '💸 Kiadás rögzítése?',
+            message: `Szeretnéd a(z) "${rem.title}" (${rem.amount.toLocaleString('hu-HU')} ${rem.currency || 'HUF'}) határidőt kiadásként is automatikusan rögzíteni a táblázatban?`,
+            type: 'success',
+            confirmText: 'Igen, rögzítsük',
+            cancelText: 'Nem szükséges'
+        });
+
+        if (logAsExpense) {
+            const categories = this.app.items?.items || [];
+            if (categories.length === 0) {
+                this.hmiNotif.showToast('Nincsenek kategóriák rögzítve az adatlapon!', 'error');
+                return;
+            }
+
+            // Kategóriaválasztó modal megjelenítése
+            const categoryNames = categories.map(c => c.name);
+            const selectedCatName = await this.hmiNotif.showSelectModal({
+                title: 'Válaszd ki a kategóriát',
+                options: categoryNames,
+                placeholder: 'Kategória kiválasztása...'
+            });
+
+            if (selectedCatName) {
+                const selectedCat = categories.find(c => c.name === selectedCatName);
+                if (selectedCat) {
+                    const month = rem.due_date.substring(0, 7); // Pl.: "2026-07"
+                    const cellBaseKey = `${selectedCat.id}_${month}`;
+                    const cellKey = `${cellBaseKey}_${Date.now()}`;
+
+                    const entryData = {
+                        cellKey,
+                        itemId: selectedCat.id,
+                        month: month,
+                        amount: rem.amount,
+                        currency: rem.currency || 'HUF',
+                        paymentMethod: 'Kártya',
+                        note: rem.title,
+                        color: 'transparent',
+                        timestamp: new Date().toISOString(),
+                        updated_at: new Date().toISOString()
+                    };
+
+                    await this.app.entries.saveEntry(entryData);
+                    await this.app.entries.load();
+
+                    // Fő táblázat frissítése
+                    if (this.app.renderer) {
+                        this.app.renderer.renderTable();
+                        this.app.renderer.renderSummary?.();
+                        this.app.renderer.updateFooterStatus('Határidő teljesítve és kiadásként rögzítve!', false);
+                    }
+                    this.hmiNotif.showToast('Kiadás sikeresen rögzítve!', 'success');
+                }
+            }
+        } else {
+            this.hmiNotif.showToast('Határidő teljesítettnek jelölve!', 'success');
+        }
+    }
+
+    async _handleDeleteReminder(id) {
+        const rem = this.app.reminderManager.reminders.find(r => String(r.id) === String(id));
+        if (!rem) return;
+
+        const confirmed = await this.hmiNotif.showConfirm({
+            title: 'Határidő törlése',
+            message: `Biztosan törli a "${rem.title}" határidőt?`,
+            type: 'warning',
+            confirmText: 'Törlés'
+        });
+
+        if (confirmed) {
+            await this.app.reminderManager.delete(id);
+            if (this.renderer && this.renderer.renderList) this.renderer.renderList();
+            this.app.updateReminderStatus?.();
+        }
     }
 }

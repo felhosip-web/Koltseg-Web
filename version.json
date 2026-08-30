@@ -1,8 +1,17 @@
 {
-  "version": "7.0.10",
+  "version": "7.0.11",
   "build": "2026-08-27T18:53:09.791Z",
   "release": "stable",
   "changelog": [
+    {
+      "version": "7.0.11",
+      "date": "2026-08-29",
+      "changes": [
+        "React Phase 12: Reminders UI migrated to React",
+        "Reminder save/load still uses existing vanilla / window.app handlers",
+        "Changelog remains driven by version.json"
+      ]
+    },
     {
       "version": "7.0.10",
       "date": "2026-08-29",
