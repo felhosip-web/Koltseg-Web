@@ -45,19 +45,9 @@ export class TimeTrackerModule {
         }
     }
 
-    startTicker() {
-        if (this.ticker) clearInterval(this.ticker);
-        this.ticker = setInterval(() => {
-            this.updateActiveTimerUI();
-        }, 1000);
-    }
+    startTicker() { return; }
 
-    stopTicker() {
-        if (this.ticker) {
-            clearInterval(this.ticker);
-            this.ticker = null;
-        }
-    }
+    stopTicker() { return; }
 
     startTimer(projectId, task) {
         if (this.activeTimer) {
@@ -185,27 +175,9 @@ export class TimeTrackerModule {
         };
     }
 
-    updateActiveTimerUI() {
-        const el = document.getElementById('active-timer-display');
-        if (el && this.activeTimer) {
-            let totalElapsedMs = this.activeTimer.elapsedPausedMs;
-            if (!this.activeTimer.isPaused) {
-                const now = new Date().getTime();
-                const start = new Date(this.activeTimer.startISO).getTime();
-                totalElapsedMs += (now - start);
-            }
-            const diffSec = Math.floor(totalElapsedMs / 1000);
-            const h = String(Math.floor(diffSec / 3600)).padStart(2, '0');
-            const m = String(Math.floor((diffSec % 3600) / 60)).padStart(2, '0');
-            const s = String(diffSec % 60).padStart(2, '0');
-            el.textContent = `${h}:${m}:${s}`;
-        }
-    }
+    updateActiveTimerUI() { return; }
 
     async renderTab() {
-        const container = document.getElementById('tab-time');
-        if (!container) return;
-
         await this.loadProjects();
         const today = dayjs().format('YYYY-MM-DD');
         const entries = await this.loadEntriesForDate(today);
@@ -239,136 +211,32 @@ export class TimeTrackerModule {
             monthEarnings += e.earnings;
         });
 
-        let activeTimerHtml = '';
-        if (this.activeTimer) {
-            const project = this.projects.find(p => p.id === this.activeTimer.projectId);
-            let totalElapsedMs = this.activeTimer.elapsedPausedMs;
-            if (!this.activeTimer.isPaused) {
-                const now = new Date().getTime();
-                const start = new Date(this.activeTimer.startISO).getTime();
-                totalElapsedMs += (now - start);
-            }
-            const diffSec = Math.floor(totalElapsedMs / 1000);
-            const h = String(Math.floor(diffSec / 3600)).padStart(2, '0');
-            const m = String(Math.floor((diffSec % 3600) / 60)).padStart(2, '0');
-            const s = String(diffSec % 60).padStart(2, '0');
+        this.todayEntries = entries;
+        this.stats = {
+            todayMinutes,
+            todayEarnings,
+            weekMinutes,
+            weekEarnings,
+            monthMinutes,
+            monthEarnings
+        };
 
-            activeTimerHtml = `
-                <div class="bg-blue-50 border border-blue-200 p-6 rounded-2xl mb-6 text-center shadow-sm">
-                    <h2 class="text-xs font-bold text-blue-800 uppercase tracking-wider mb-2">Aktív időmérő</h2>
-                    <div id="active-timer-display" class="text-4xl font-mono font-bold text-blue-900 mb-2 ${this.activeTimer.isPaused ? 'opacity-50' : ''}">${h}:${m}:${s}</div>
-                    <div class="text-sm text-blue-700 mb-4 font-medium">${project?.name || 'Ismeretlen'} - ${this.activeTimer.task}</div>
-                    <div class="flex justify-center gap-3">
-                        ${this.activeTimer.isPaused
-                            ? `<button id="btnResumeTimer" class="px-6 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-bold shadow-sm transition"><i class="fas fa-play"></i> ▶ Folytatás</button>`
-                            : `<button id="btnPauseTimer" class="px-6 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-bold shadow-sm transition"><i class="fas fa-pause"></i> ⏸ Szünet</button>`
-                        }
-                        <button id="btnStopTimer" class="px-6 py-2 bg-rose-500 hover:bg-rose-600 text-white rounded-xl font-bold shadow-sm transition">
-                            <i class="fas fa-stop"></i> ⏹ Stop + Mentés
-                        </button>
-                    </div>
-                </div>
-            `;
+        window.dispatchEvent(new CustomEvent('app-data-updated'));
+    }
+
+    async deleteEntry(id) {
+        if (confirm('Biztosan törlöd a bejegyzést?')) {
+            await db.timeEntries.delete(id);
+            this.renderTab();
         }
+    }
 
-        const projectOptions = this.projects.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
-
-        let entriesHtml = entries.map(e => {
-            const p = this.projects.find(p => p.id === e.projectId);
-            const earnStr = e.earnings > 0 ? `<div class="font-bold text-emerald-600">${e.earnings.toLocaleString('hu-HU')} Ft</div>` : '<div class="font-bold text-gray-400">— Ft</div>';
-            return `
-                <div class="flex justify-between items-center p-3 border-b border-gray-100 last:border-0 bg-white group hover:bg-gray-50 cursor-pointer entry-row" data-id="${e.id}">
-                    <div>
-                        <div class="text-sm font-bold text-gray-800">${p?.name || 'Ismeretlen'}</div>
-                        <div class="text-xs text-gray-500">${e.task}</div>
-                    </div>
-                    <div class="text-right flex items-center gap-3">
-                        <div>
-                            <div class="text-sm font-mono text-gray-600">${this.formatDuration(e.durationMin)}</div>
-                            ${earnStr}
-                        </div>
-                        <button class="text-gray-400 hover:text-rose-500 transition btn-delete-entry hidden group-hover:block" data-id="${e.id}" title="Törlés"><i class="fas fa-trash"></i></button>
-                    </div>
-                </div>
-            `;
-        }).join('');
-
-        if (entries.length === 0) {
-            entriesHtml = `<div class="p-4 text-center text-gray-400 text-sm italic">Nincs ma mért idő. Indíts egy projektet!</div>`;
+    async deleteProject(id) {
+        if (confirm('Biztosan törlöd a projektet? (A hozzá tartozó időmérők megmaradnak, de ismeretlen projektként jelennek meg)')) {
+            await db.projects.delete(id);
+            await this.loadProjects();
+            this.renderTab();
         }
-
-        const html = `
-            <div class="p-4 md:p-6 max-w-3xl mx-auto pb-24 animate-fade-in">
-                <h1 class="text-2xl font-bold text-gray-800 flex items-center gap-2 mb-6">
-                    <i class="fas fa-stopwatch text-purple-500"></i> Időmérő
-                </h1>
-
-                ${activeTimerHtml}
-
-                <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 mb-6 flex flex-col md:flex-row gap-3">
-                    <select id="timerProjectSelect" class="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 flex-1 font-medium">
-                        <option value="">Válassz projektet...</option>
-                        ${projectOptions}
-                    </select>
-                    <input type="text" id="timerTaskInput" placeholder="Mit csinálsz épp?" class="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 flex-1 font-medium">
-                    <button id="btnStartTimer" class="bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl px-5 py-2 font-bold transition flex items-center gap-2 justify-center shadow-sm">
-                        <i class="fas fa-play"></i> ▶ Indítás
-                    </button>
-                </div>
-
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                    <div class="bg-purple-50 p-4 rounded-2xl border border-purple-100 text-center">
-                        <div class="text-xs font-bold text-purple-800 uppercase tracking-wider mb-1">Ma</div>
-                        <div class="text-base font-bold text-purple-900">${this.formatDuration(todayMinutes)} • ${todayEarnings.toLocaleString('hu-HU')} Ft</div>
-                    </div>
-                    <div class="bg-indigo-50 p-4 rounded-2xl border border-indigo-100 text-center">
-                        <div class="text-xs font-bold text-indigo-800 uppercase tracking-wider mb-1">Ezen a héten</div>
-                        <div class="text-base font-bold text-indigo-900">${this.formatDuration(weekMinutes)} • ${weekEarnings.toLocaleString('hu-HU')} Ft</div>
-                    </div>
-                    <div class="bg-blue-50 p-4 rounded-2xl border border-blue-100 text-center">
-                        <div class="text-xs font-bold text-blue-800 uppercase tracking-wider mb-1">Ebben a hónapban</div>
-                        <div class="text-base font-bold text-blue-900">${this.formatDuration(monthMinutes)} • ${monthEarnings.toLocaleString('hu-HU')} Ft</div>
-                    </div>
-                </div>
-
-                <div class="bg-white rounded-2xl shadow-sm border border-gray-100 mb-6 overflow-hidden">
-                    <div class="bg-gray-50 px-4 py-3 border-b border-gray-100 font-bold text-gray-700 text-sm flex justify-between">
-                        <span>Mai bejegyzések</span>
-                        <button id="btnManualAdd" class="text-purple-600 hover:text-purple-800 transition flex items-center gap-1"><i class="fas fa-plus"></i> Kézi</button>
-                    </div>
-                    <div>
-                        ${entriesHtml}
-                    </div>
-                </div>
-
-                <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-                    <div class="bg-gray-50 px-4 py-3 border-b border-gray-100 font-bold text-gray-700 text-sm flex justify-between items-center cursor-pointer hover:bg-gray-100 transition" id="toggleProjectsBtn">
-                        <span>Projektek (${this.projects.length})</span>
-                        <i class="fas fa-chevron-down text-gray-400"></i>
-                    </div>
-                    <div id="projectsListContainer" class="hidden">
-                        <div class="p-3 bg-white border-b border-gray-50">
-                            <button id="btnNewProject" class="w-full py-2.5 bg-purple-50 text-purple-700 rounded-xl text-sm font-bold hover:bg-purple-100 transition shadow-sm border border-purple-100">
-                                + Új projekt
-                            </button>
-                        </div>
-                        ${this.projects.map(p => `
-                            <div class="p-4 border-b border-gray-100 last:border-0 flex justify-between items-center text-sm hover:bg-gray-50 transition group">
-                                <div><span class="font-bold text-gray-800">${p.name}</span> <span class="text-xs text-gray-500">${p.client ? `(${p.client})` : ''}</span></div>
-                                <div class="flex items-center gap-4">
-                                    <div class="font-mono text-gray-600 bg-gray-100 px-2 py-1 rounded text-xs font-bold">${p.hourlyRate ? `${p.hourlyRate.toLocaleString('hu-HU')} Ft/óra` : 'Nincs óradíj'}</div>
-                                    <button class="text-gray-400 hover:text-rose-500 transition hidden group-hover:block btn-delete-project" data-id="${p.id}" title="Törlés"><i class="fas fa-trash"></i></button>
-                                </div>
-                            </div>
-                        `).join('')}
-                        ${this.projects.length === 0 ? '<div class="p-6 text-center text-gray-400 text-sm italic">Nincsenek projektek. Kattints az Új projekt gombra!</div>' : ''}
-                    </div>
-                </div>
-            </div>
-        `;
-
-        container.innerHTML = html;
-        this.attachEvents();
     }
 
     attachEvents() {

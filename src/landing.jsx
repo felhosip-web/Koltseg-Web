@@ -14,12 +14,22 @@ import WorkAppHeader from './WorkAppHeader.jsx'
 import WorkAppList from './WorkAppList.jsx'
 import CellEditorModal from './components/CellEditorModal.jsx'
 import AiEntryModal from './components/AiEntryModal.jsx'
+import TimeTrackerTab from './components/time-tracker/TimeTrackerTab.jsx'
 
 const landingRoot = document.getElementById('appLandingScreenRoot');
 if (landingRoot) {
     ReactDOM.createRoot(landingRoot).render(
       <React.StrictMode>
         <LandingApp />
+      </React.StrictMode>,
+    )
+}
+
+const timeTrackerRoot = document.getElementById('costAppTimeTrackerRoot');
+if (timeTrackerRoot) {
+    ReactDOM.createRoot(timeTrackerRoot).render(
+      <React.StrictMode>
+        <TimeTrackerTab />
       </React.StrictMode>,
     )
 }

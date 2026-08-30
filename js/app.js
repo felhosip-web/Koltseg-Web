@@ -409,6 +409,11 @@ class App {
      * @returns {Object} Data snapshot
      */
     getAppSnapshot() {
+                const timeTracker = this.timeTracker;
+                const timeTrackerState = timeTracker ? {
+                    projects: timeTracker.projects || [],
+                    activeTimer: timeTracker.activeTimer || null
+                } : null;
         const safeJsonParse = (key, fallback = []) => {
             try {
                 const item = localStorage.getItem(key);
@@ -437,6 +442,7 @@ class App {
             fuelLogs: this.fuelLogs || safeJsonParse('plugin_fuel_logs', []),
             works: this.workLogManager?.works || [],
             isBooted: this.isBooted,
+            timeTracker: timeTrackerState,
             dayjs: window.dayjs
         };
     }
