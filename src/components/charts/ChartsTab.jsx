@@ -121,7 +121,7 @@ export default function ChartsTab() {
                     const normDate = l.date.replace(/\s+/g, '').replace(/\./g, '-');
                     return normDate.includes(filterMonth);
                 }
-                return true;
+                return false;
             });
         }
 
