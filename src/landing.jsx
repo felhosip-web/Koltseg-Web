@@ -15,6 +15,7 @@ import WorkAppList from './WorkAppList.jsx'
 import CellEditorModal from './components/CellEditorModal.jsx'
 import AiEntryModal from './components/AiEntryModal.jsx'
 import TimeTrackerTab from './components/time-tracker/TimeTrackerTab.jsx'
+import ChartsTab from './components/charts/ChartsTab.jsx'
 
 const landingRoot = document.getElementById('appLandingScreenRoot');
 if (landingRoot) {
@@ -30,6 +31,15 @@ if (timeTrackerRoot) {
     ReactDOM.createRoot(timeTrackerRoot).render(
       <React.StrictMode>
         <TimeTrackerTab />
+      </React.StrictMode>,
+    )
+}
+
+const chartsRoot = document.getElementById('costAppChartsRoot');
+if (chartsRoot) {
+    ReactDOM.createRoot(chartsRoot).render(
+      <React.StrictMode>
+        <ChartsTab />
       </React.StrictMode>,
     )
 }
