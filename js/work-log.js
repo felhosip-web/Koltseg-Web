@@ -76,6 +76,9 @@ export class WorkLogRenderer {
             btnNewWork.addEventListener('click', () => this.openModal());
         }
 
+        // React owns the editor controls when its mount point is present.
+        if (document.getElementById('workAppEditorRoot')) return;
+
         // Close modal buttons
         const btnCloseWorkModalX = document.getElementById('btnCloseWorkModalX');
         if (btnCloseWorkModalX) {
