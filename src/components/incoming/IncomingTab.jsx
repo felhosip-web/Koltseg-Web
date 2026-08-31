@@ -13,8 +13,9 @@ export default function IncomingTab() {
         };
         fetchIncomings();
 
+        const hasAppDataSubscription = window.app && typeof window.app.subscribeAppData === 'function';
         let listener = null;
-        if (window.app && typeof window.app.subscribeAppData === 'function') {
+        if (hasAppDataSubscription) {
             listener = window.app.subscribeAppData((data) => {
                 if (data.incomings) {
                     setIncomings([...data.incomings]);
@@ -25,13 +26,15 @@ export default function IncomingTab() {
             });
         }
 
-        const interval = setInterval(fetchIncomings, 1000);
+        const interval = hasAppDataSubscription ? null : setInterval(fetchIncomings, 1000);
 
         return () => {
             if (listener && window.app && typeof window.app.unsubscribeAppData === 'function') {
                 window.app.unsubscribeAppData(listener);
             }
-            clearInterval(interval);
+            if (interval) {
+                clearInterval(interval);
+            }
         };
     }, []);
 
