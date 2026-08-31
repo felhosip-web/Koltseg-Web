@@ -1,3 +1,4 @@
+import IncomingTab from './components/incoming/IncomingTab.jsx'
 import WorkEditorModal from './components/WorkEditorModal.jsx'
 import RemindersTab from './components/reminders/RemindersTab.jsx'
 import React from 'react'
@@ -161,6 +162,15 @@ if (workAppEditorRoot) {
     ReactDOM.createRoot(workAppEditorRoot).render(
       <React.StrictMode>
         <WorkEditorModal />
+      </React.StrictMode>,
+    )
+}
+
+const incomingRoot = document.getElementById('costAppIncomingRoot');
+if (incomingRoot) {
+    ReactDOM.createRoot(incomingRoot).render(
+      <React.StrictMode>
+        <IncomingTab />
       </React.StrictMode>,
     )
 }
