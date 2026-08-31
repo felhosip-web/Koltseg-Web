@@ -1,7 +1,7 @@
 {
   "name": "react-example",
   "private": true,
-  "version": "7.0.14",
+  "version": "7.0.15",
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
@@ -21,6 +21,7 @@
     "express": "^4.21.2",
     "lucide-react": "^1.32.0",
     "motion": "^12.23.24",
+    "playwright": "^1.62.1",
     "playwright-core": "^1.62.1",
     "postcss": "^8.4.49",
     "react": "^19.0.1",
@@ -36,7 +37,7 @@
     "fake-indexeddb": "^6.2.5",
     "jsdom": "^30.0.1",
     "lighthouse": "^13.4.1",
-    "tsx": "^4.23.12",
+    "tsx": "^4.23.13",
     "typescript": "~5.8.2"
   }
 }
