@@ -349,8 +349,6 @@ export class UIController {
                 this.togglePanel('settingsPanel');
             }
         });
-        document.getElementById('btnDataControl')?.addEventListener('click', () => this.togglePanel('exportMenu'));
-        document.getElementById('btnDataControlWork')?.addEventListener('click', () => this.togglePanel('exportMenuWork'));
         document.getElementById('btnHelp')?.addEventListener('click', () => {
             this.app.hmiNotif?.openHelp?.();
         });
@@ -361,11 +359,7 @@ export class UIController {
             this.app.hmiNotif?.openHelp?.();
         });
 
-        // ====================== SZINKRONIZÁCIÓ ======================
-        document.getElementById('btnForceSync')?.addEventListener('click', () => {
-            this.togglePanel('exportMenu');
-            this.openSyncModal();           // ← Eredeti metódus
-        });
+
         document.getElementById('btnForceSyncWork')?.addEventListener('click', () => {
             this.togglePanel('exportMenuWork');
             this.openSyncModal();
@@ -381,68 +375,8 @@ export class UIController {
         document.getElementById('btnCancelSync')?.addEventListener('click', closeSyncModal);
 
         // ====================== EXPORT GOMBOK ======================
-        document.getElementById('btnExportExcel')?.addEventListener('click', () => {
-            this.togglePanel('exportMenu');
-            this.exportController.exportExcel();
-        });
-        document.getElementById('btnExportExcelWork')?.addEventListener('click', () => {
-            this.togglePanel('exportMenuWork');
-            this.exportController.exportWorkExcel();
-        });
-
-        document.getElementById('btnExportPdf')?.addEventListener('click', () => {
-            this.togglePanel('exportMenu');
-            this.exportController.exportPdf();
-        });
-        document.getElementById('btnExportPdfWork')?.addEventListener('click', () => {
-            this.togglePanel('exportMenuWork');
-            this.exportController.exportWorkPdf();
-        });
-
-        document.getElementById('btnExportJson')?.addEventListener('click', () => {
-            this.togglePanel('exportMenu');
-            this.exportController.exportJson();
-        });
-        document.getElementById('btnExportJsonWork')?.addEventListener('click', () => {
-            this.togglePanel('exportMenuWork');
-            this.exportController.exportWorkJson();
-        });
-
-        document.getElementById('btnImportJson')?.addEventListener('click', () => {
-            this.togglePanel('exportMenu');
-            this.exportController.importJson();
-        });
-        document.getElementById('btnImportJsonWork')?.addEventListener('click', () => {
-            this.togglePanel('exportMenuWork');
-            this.exportController.importWorkJson();
-        });
-
         // ====================== KARANTARTÁS ======================
-        document.getElementById('btnForceBackup')?.addEventListener('click', () => {
-            this.togglePanel('exportMenu');
-            this.maintenanceController.performManualBackup();
-        });
-
-        document.getElementById('btnRestoreBackup')?.addEventListener('click', () => {
-            this.togglePanel('exportMenu');
-            this.maintenanceController.restoreFromBackup();
-        });
-
-        document.getElementById('btnWipeDatabase')?.addEventListener('click', async () => {
-            if (this.app.securityGuard && this.app.securityGuard.currentUser === 'guest') {
-                this.app.hmiNotif?.showToast('❌ Művelet elutasítva: Vendég (User 2) módban az adatbázis törlése le van tiltva!', 'error');
-                return;
-            }
-            this.togglePanel('exportMenu');
-            await this.maintenanceController.wipeDatabase();
-        });
-
         // ====================== DB AUDIT (ÚJ) ======================
-        document.getElementById('btnDbAudit')?.addEventListener('click', () => {
-            this.togglePanel('exportMenu');
-            this.openDbAuditModal();
-        });
-
         // ====================== INPUT ÉS CELL MODAL ======================
         document.getElementById('btnCancelInputModal')?.addEventListener('click', () => this.inputModal.close());
         document.getElementById('hmiInputSaveBtn')?.addEventListener('click', () => this.inputModal.save());
@@ -611,20 +545,10 @@ export class UIController {
         // Click outside to close export menus
         document.addEventListener('click', (e) => {
             const dataControlBtn = document.getElementById('btnDataControl');
-            const exportMenu = document.getElementById('exportMenu');
-            if (exportMenu && !exportMenu.classList.contains('hidden')) {
-                if (dataControlBtn && !dataControlBtn.contains(e.target) && !exportMenu.contains(e.target)) {
-                    exportMenu.classList.add('hidden');
-                }
-            }
+
 
             const dataControlBtnWork = document.getElementById('btnDataControlWork');
-            const exportMenuWork = document.getElementById('exportMenuWork');
-            if (exportMenuWork && !exportMenuWork.classList.contains('hidden')) {
-                if (dataControlBtnWork && !dataControlBtnWork.contains(e.target) && !exportMenuWork.contains(e.target)) {
-                    exportMenuWork.classList.add('hidden');
-                }
-            }
+
         });
     }
 
