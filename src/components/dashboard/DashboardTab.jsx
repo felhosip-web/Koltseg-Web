@@ -476,7 +476,7 @@ export default function DashboardTab() {
      */
     const triggerAction = (action) => {
         if (action === 'new_cost') {
-            document.getElementById('btnNewItem')?.click();
+            window.app?.uiController?.inputModal?.open('item');
         } else if (action === 'new_note') {
             navigateTo('notepad');
             setTimeout(() => {

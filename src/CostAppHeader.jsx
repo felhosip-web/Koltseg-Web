@@ -31,11 +31,11 @@ export default function CostAppHeader() {
             <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
                 <div className="flex flex-wrap gap-2">
                     <button id="btnNewItem"
-                        className="px-5 py-2.5 bg-blue-600 text-white rounded-2xl text-sm font-bold flex items-center gap-2 hover:bg-blue-700 transition shadow-sm">
+                        className="px-5 py-2.5 bg-blue-600 text-white rounded-2xl text-sm font-bold flex items-center gap-2 hover:bg-blue-700 transition shadow-sm" onClick={() => window.app?.uiController?.inputModal?.open('item')}>
                         <i className="fas fa-plus-circle"></i> Tétel
                     </button>
                     <button id="btnNewMonth"
-                        className="px-5 py-2.5 bg-emerald-600 text-white rounded-2xl text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 transition shadow-sm">
+                        className="px-5 py-2.5 bg-emerald-600 text-white rounded-2xl text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 transition shadow-sm" onClick={() => window.app?.uiController?.inputModal?.open('month')}>
                         <i className="fas fa-calendar-plus"></i> Hónap
                     </button>
                     <button id="btnAiMagic"

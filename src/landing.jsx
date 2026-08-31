@@ -1,3 +1,4 @@
+import HmiInputModal from './components/HmiInputModal.jsx'
 import IncomingTab from './components/incoming/IncomingTab.jsx'
 import WorkEditorModal from './components/WorkEditorModal.jsx'
 import RemindersTab from './components/reminders/RemindersTab.jsx'
@@ -171,6 +172,15 @@ if (incomingRoot) {
     ReactDOM.createRoot(incomingRoot).render(
       <React.StrictMode>
         <IncomingTab />
+      </React.StrictMode>,
+    )
+}
+
+const hmiInputRoot = document.getElementById('costAppHmiInputRoot');
+if (hmiInputRoot) {
+    ReactDOM.createRoot(hmiInputRoot).render(
+      <React.StrictMode>
+        <HmiInputModal />
       </React.StrictMode>,
     )
 }

@@ -246,7 +246,7 @@ export default function SettingsPanel() {
                         Felhő & Beállítások</span>
                     <div className="flex items-center gap-3">
                         <span id="dbVersionBadge"
-                            className="text-[10px] font-mono bg-indigo-50 text-indigo-600 px-2.5 py-1 rounded-md border border-indigo-100 font-bold app-version-label">v7.0.15</span>
+                            className="text-[10px] font-mono bg-indigo-50 text-indigo-600 px-2.5 py-1 rounded-md border border-indigo-100 font-bold app-version-label">v7.0.17</span>
                         <button type="button" id="btnCloseSettingsModal" onClick={(e) => handleClose(e)}
                             className="w-8 h-8 flex items-center justify-center bg-gray-100 hover:bg-gray-200 rounded-lg text-gray-500 transition"
                             title="Bezárás">
