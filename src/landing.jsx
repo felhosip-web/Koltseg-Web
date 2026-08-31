@@ -1,3 +1,4 @@
+import WorkEditorModal from './components/WorkEditorModal.jsx'
 import RemindersTab from './components/reminders/RemindersTab.jsx'
 import React from 'react'
 import ReactDOM from 'react-dom/client'
@@ -151,6 +152,15 @@ if (remindersRoot) {
     ReactDOM.createRoot(remindersRoot).render(
       <React.StrictMode>
         <RemindersTab />
+      </React.StrictMode>,
+    )
+}
+
+const workAppEditorRoot = document.getElementById('workAppEditorRoot');
+if (workAppEditorRoot) {
+    ReactDOM.createRoot(workAppEditorRoot).render(
+      <React.StrictMode>
+        <WorkEditorModal />
       </React.StrictMode>,
     )
 }

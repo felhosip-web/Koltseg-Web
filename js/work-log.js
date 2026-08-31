@@ -76,6 +76,9 @@ export class WorkLogRenderer {
             btnNewWork.addEventListener('click', () => this.openModal());
         }
 
+        // React owns the editor controls when its mount point is present.
+        if (document.getElementById('workAppEditorRoot')) return;
+
         // Close modal buttons
         const btnCloseWorkModalX = document.getElementById('btnCloseWorkModalX');
         if (btnCloseWorkModalX) {
@@ -172,7 +175,14 @@ export class WorkLogRenderer {
             if (btnDelete) btnDelete.classList.add('hidden');
         }
 
-        modal.classList.remove('hidden');
+
+        // Instead of classList removal, trigger custom event for React Modal
+        const reactRoot = document.getElementById('workAppEditorRoot');
+        if (reactRoot) {
+            reactRoot.dispatchEvent(new CustomEvent('work-editor-open'));
+        } else {
+            modal.classList.remove('hidden');
+        }
     }
 
     /**
@@ -181,7 +191,14 @@ export class WorkLogRenderer {
     closeModal() {
         const modal = document.getElementById('workEditorModal');
         if (modal) {
-            modal.classList.add('hidden');
+
+            // Instead of classList addition, trigger custom event for React Modal
+            const reactRoot = document.getElementById('workAppEditorRoot');
+            if (reactRoot) {
+                reactRoot.dispatchEvent(new CustomEvent('work-editor-close'));
+            } else {
+                modal.classList.add('hidden');
+            }
         }
     }
 
