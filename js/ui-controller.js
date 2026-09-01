@@ -855,49 +855,6 @@ export class UIController {
         this.cellModal.open(cellElement);
     }
 
-    handleRenameItem(itemId, currentName) {
-        const input = document.getElementById('hmiInputValue');
-        const title = document.getElementById('hmiInputTitle');
-        const label = document.getElementById('hmiInputLabel');
-        const colorContainer = document.getElementById('hmiColorContainer');
-        
-        title.textContent = 'Kategória átnevezése';
-        label.textContent = 'Új név';
-        input.value = currentName || '';
-        input.type = 'text';
-        colorContainer?.classList.add('hidden');
-        
-        const modal = document.getElementById('hmiInputModal');
-        modal.classList.remove('hidden');
-        input.focus();
-        input.select();
-
-        const saveBtn = document.getElementById('hmiInputSaveBtn');
-        const originalOnClick = saveBtn.onclick;
-
-        saveBtn.onclick = async () => {
-            const newName = input.value.trim();
-            if (!newName || newName === currentName) {
-                modal.classList.add('hidden');
-                saveBtn.onclick = originalOnClick;
-                return;
-            }
-
-            try {
-                await this.app.items.update(itemId, { name: newName });
-                await this.app.items.load();
-                this.app.renderer.renderTable();
-                this.app.hmiNotif.showToast('Kategória átnevezve!', 'success');
-            } catch (err) {
-                console.error(err);
-                this.app.hmiNotif.showToast('Hiba az átnevezés során!', 'error');
-            }
-
-            modal.classList.add('hidden');
-            saveBtn.onclick = originalOnClick;
-        };
-    }
-
     async handleRowDeleteSequence(itemIdStr, itemName) {
         const itemId = itemIdStr;
         if (!itemId) return;
