@@ -1,15 +1,15 @@
 {
-  "version": "7.0.15",
+  "version": "7.0.17",
   "build": "2026-08-27T18:53:09.791Z",
   "release": "stable",
   "changelog": [
     {
-      "version": "7.0.15",
+      "version": "7.0.17",
       "date": "2026-08-31",
       "changes": [
-        "React Phase 16: Work add/edit modal UI in React",
-        "Save/validation still uses existing vanilla work handlers / window.app",
-        "Work list and Cost modules unchanged in behavior"
+        "✅ React Phase 18: HMI Input Modal (new category / new month) in React",
+        "✅ Submit still uses existing vanilla handlers / window.app",
+        "✅ Reduces document.getElementById hacks from React callers (e.g. Dashboard)"
       ]
     },
     {
@@ -401,6 +401,14 @@
         "✅ Egységes modal rendszer",
         "✅ PWA támogatás frissítve"
       ]
+    }
+  ],
+  "releaseHistory": [
+    {
+      "version": "7.0.17",
+      "date": "2026-08-31",
+      "notes": "React Phase 18: HMI Input Modal",
+      "isMajor": false
     }
   ]
 }

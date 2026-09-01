@@ -330,8 +330,8 @@ export class UIController {
 
     bindStaticEvents() {
         // ====================== FŐ GOMBOK ======================
-        document.getElementById('btnNewItem')?.addEventListener('click', () => this.inputModal.open('item'));
-        document.getElementById('btnNewMonth')?.addEventListener('click', () => this.inputModal.open('month'));
+
+
         document.getElementById('btnAiMagic')?.addEventListener('click', () => this.app.aiModal?.open());
         document.getElementById('btnSettings')?.addEventListener('click', () => {
             this.populateSettingsForm();
@@ -378,8 +378,8 @@ export class UIController {
         // ====================== KARANTARTÁS ======================
         // ====================== DB AUDIT (ÚJ) ======================
         // ====================== INPUT ÉS CELL MODAL ======================
-        document.getElementById('btnCancelInputModal')?.addEventListener('click', () => this.inputModal.close());
-        document.getElementById('hmiInputSaveBtn')?.addEventListener('click', () => this.inputModal.save());
+
+
 
         document.getElementById('btnCancelCellModal')?.addEventListener('click', () => this.cellModal.close());
         document.getElementById('btnCloseCellModalX')?.addEventListener('click', () => this.cellModal.close());
@@ -860,13 +860,13 @@ export class UIController {
         const title = document.getElementById('hmiInputTitle');
         const label = document.getElementById('hmiInputLabel');
         const colorContainer = document.getElementById('hmiColorContainer');
-        
+
         title.textContent = 'Kategória átnevezése';
         label.textContent = 'Új név';
         input.value = currentName || '';
         input.type = 'text';
         colorContainer?.classList.add('hidden');
-        
+
         const modal = document.getElementById('hmiInputModal');
         modal.classList.remove('hidden');
         input.focus();
