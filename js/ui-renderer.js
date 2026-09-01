@@ -228,7 +228,7 @@ export class UIRenderer {
                         el.classList.remove('bg-rose-100');
                         
                         if (action === 'rename') {
-                            this.app.uiController.inputModal.openRename(el.dataset.itemid, el.dataset.itemname);
+                            this.app.uiController.handleRenameItem(el.dataset.itemid, el.dataset.itemname);
                         } else if (action === 'delete') {
                             // Wait for the category actions modal to finish its 150ms close animation
                             // before triggering the confirmation modal in the delete sequence
