@@ -208,18 +208,18 @@ export default function CostAppHeader() {
                     </div>
                 </div>
 
-                <div id="syncQueueContainer" className="relative inline-block ml-2 cursor-pointer group"
-                    title="Függőben lévő szinkronizációs műveletek" onClick={() => window.app?.uiController?._handleQueueClick?.()}>
-                    <i className="fas fa-cloud-upload-alt text-gray-400 text-lg hover:text-amber-500 transition"></i>
+                <button type="button" id="syncQueueContainer" className="relative inline-block ml-2 cursor-pointer group bg-transparent border-none p-1 hover:bg-gray-50 rounded transition-colors"
+                    title="Függőben lévő szinkronizációs műveletek" aria-label="Szinkronizációs várólista" onClick={() => window.app?.uiController?._handleQueueClick?.()}>
+                    <i className="fas fa-cloud-upload-alt text-gray-400 text-lg group-hover:text-amber-500 transition"></i>
                     <span id="syncQueueBadge"
                         className="absolute -top-1 -right-1 bg-amber-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center hidden">0</span>
 
                     <div
-                        className="sync-queue-tooltip hidden group-hover:block absolute right-0 top-full mt-2 bg-white rounded-2xl shadow-2xl p-4 min-w-[220px] z-50 border border-gray-100">
+                        className="sync-queue-tooltip hidden group-hover:block absolute right-0 top-full mt-2 bg-white rounded-2xl shadow-2xl p-4 min-w-[220px] z-50 border border-gray-100 text-left">
                         <div className="text-xs font-bold text-gray-700 mb-2">🔄 Függő műveletek</div>
                         <div id="tooltipContent" className="text-xs text-gray-500">Nincs adat</div>
                     </div>
-                </div>
+                </button>
 
                 <div
                     className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 rounded-2xl border border-gray-200 text-sm font-medium">
