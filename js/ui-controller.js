@@ -341,14 +341,6 @@ export class UIController {
             this.populateSettingsForm();
             this.togglePanel('settingsPanel');
         });
-        document.getElementById('btnCloseSettingsModal')?.addEventListener('click', () => {
-            this.togglePanel('settingsPanel');
-        });
-        document.getElementById('settingsPanel')?.addEventListener('click', (e) => {
-            if (e.target === e.currentTarget) {
-                this.togglePanel('settingsPanel');
-            }
-        });
         document.getElementById('btnHelp')?.addEventListener('click', () => {
             this.app.hmiNotif?.openHelp?.();
         });
