@@ -15,11 +15,21 @@ export class InputModalController {
         document.dispatchEvent(event);
     }
 
+    openRename(itemId, currentName) {
+        const event = new CustomEvent('hmi-input-open', {
+            detail: { type: 'rename', itemId, currentName }
+        });
+        const root = document.getElementById('costAppHmiInputRoot');
+        if (root) root.dispatchEvent(event);
+        document.dispatchEvent(event);
+    }
+
     async performSave(type, val, color) {
         this.modalType = type;
+        val = val.trim();
         if (!val) {
             this.app.hmiNotif.showToast('A mező nem lehet üres!', 'error');
-            return;
+            return false;
         }
 
         if (this.modalType === 'item') {
@@ -38,7 +48,7 @@ export class InputModalController {
                     confirmText: 'Értem',
                     showCancel: false
                 });
-                return;
+                return false;
             }
 
             // Szín használata (a felhasználó által kiválasztott)
@@ -56,7 +66,7 @@ export class InputModalController {
             // Formátum ellenőrzés (YYYY-MM)
             if (!/^\d{4}-\d{2}$/.test(val) || Number.isNaN(new Date(val + '-01').getTime())) {
                 this.app.hmiNotif.showToast('Hibás dátumformátum! (ÉÉÉÉ-HH)', 'error');
-                return;
+                return false;
             }
 
             if (this.app.months.months.includes(val)) {
@@ -67,7 +77,7 @@ export class InputModalController {
                     confirmText: 'Értem',
                     showCancel: false
                 });
-                return;
+                return false;
             }
 
             await this.app.months.add(val);
@@ -75,8 +85,28 @@ export class InputModalController {
 
             this.app.hmiNotif.showToast(`✅ ${val} hónap megnyitva`, 'success');
             this.app.renderer.renderTable();           // Táblázat frissítése
+        } else {
+            return false;
         }
-        this.app.refreshAllTabs();
+        await this.app.refreshAllTabs();
+        return true;
+    }
+
+    async performRename(itemId, currentName, value) {
+        const newName = value.trim();
+        if (!newName || newName === currentName) return true;
+
+        try {
+            await this.app.items.update(itemId, { name: newName });
+            await this.app.items.load();
+            this.app.renderer.renderTable();
+            this.app.hmiNotif.showToast('Kategória átnevezve!', 'success');
+            return true;
+        } catch (err) {
+            console.error(err);
+            this.app.hmiNotif.showToast('Hiba az átnevezés során!', 'error');
+            return false;
+        }
     }
 
     _normalizeColor(color) {
