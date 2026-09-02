@@ -411,5 +411,13 @@
         "✅ PWA támogatás frissítve"
       ]
     }
+  ],
+  "releaseHistory": [
+    {
+      "version": "7.0.17",
+      "date": "2026-08-31",
+      "notes": "React Phase 18: HMI Input Modal",
+      "isMajor": false
+    }
   ]
 }
