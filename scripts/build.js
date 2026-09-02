@@ -49,6 +49,16 @@ function updateVersion(type = 'patch') {
     console.log(`✅ Verzió frissítve: ${newVersion}`);
     console.log(`📅 Build: ${data.build}`);
     
+    // Frissítjük a service-worker.js-ben a CACHE_VERSION és BUILD_DATE értékeket
+    const SW_FILE = path.join(path.dirname(new URL(import.meta.url).pathname), '..', 'service-worker.js');
+    if (fs.existsSync(SW_FILE)) {
+        let swContent = fs.readFileSync(SW_FILE, 'utf8');
+        swContent = swContent.replace(/const CACHE_VERSION = '[^']+';/, `const CACHE_VERSION = '${newVersion}';`);
+        swContent = swContent.replace(/const BUILD_DATE = '[^']+';/, `const BUILD_DATE = '${data.build.slice(0, 10)}';`);
+        fs.writeFileSync(SW_FILE, swContent);
+        console.log(`✅ service-worker.js frissítve (CACHE_VERSION: ${newVersion})`);
+    }
+
     // Git tag létrehozás (opcionális)
     if (process.argv.includes('--tag')) {
         try {

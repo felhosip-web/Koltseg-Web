@@ -88,27 +88,15 @@ export function initDebugPanel() {
         clickTimer = setTimeout(() => { clickCount = 0; }, 1000);
     }
 
-    // Select all version labels, debug buttons, and footer container
-    const triggerElements = document.querySelectorAll('.app-version-label, #debugToggleBtn, #debugToggleBtnContainer');
-
-    triggerElements.forEach(el => {
-        el.addEventListener('click', (e) => {
+    // Delegált kattintásfigyelő a Súgóból nyitható fejlesztői és debug panelhez, és az 5x kattintáshoz
+    document.addEventListener('click', (e) => {
+        const triggerEl = e.target.closest('.app-version-label, #debugToggleBtn, #debugToggleBtnContainer');
+        if (triggerEl) {
             e.preventDefault();
             handleTrigger(e);
-        });
-        el.addEventListener('touchstart', (e) => {
-            // Do not call preventDefault on touchstart here, as it might block standard scroll or focus in parents,
-            // but we stop propagation and count the touch.
-            handleTrigger(e);
-        }, { passive: true });
-    });
+            return;
+        }
 
-    closeBtn?.addEventListener('click', () => {
-        panel.classList.add('hidden');
-    });
-
-    // Delegált kattintásfigyelő a Súgóból nyitható fejlesztői és debug panelhez
-    document.addEventListener('click', (e) => {
         const btn = e.target.closest('#helpOpenDevPanelBtn');
         if (btn) {
             e.preventDefault();
@@ -117,7 +105,24 @@ export function initDebugPanel() {
             updateDebugLogs();
             updateSupabaseDebugInfo();
             updateNotificationPermissionStatus();
+            updateGDriveDebugInfo();
         }
+    });
+
+    document.addEventListener('touchstart', (e) => {
+        const triggerEl = e.target.closest('.app-version-label, #debugToggleBtn, #debugToggleBtnContainer');
+        if (triggerEl) {
+            handleTrigger(e);
+        }
+    }, { passive: true });
+
+    closeBtn?.addEventListener('click', () => {
+        panel.classList.add('hidden');
+    });
+
+    // Delegált kattintásfigyelő a Súgóból nyitható fejlesztői és debug panelhez
+    document.addEventListener('click', (e) => {
+        // ... handled above already, but keeping the service btn handling here:
 
         const srvBtn = e.target.closest('#helpOpenServicePanelBtn');
         if (srvBtn) {

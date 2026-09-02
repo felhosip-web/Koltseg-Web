@@ -15,8 +15,8 @@ const { CacheFirst, StaleWhileRevalidate, NetworkFirst, NetworkOnly } = workbox.
 const { ExpirationPlugin } = workbox.expiration;
 const { CacheableResponsePlugin } = workbox.cacheableResponse;
 
-const CACHE_VERSION = '6.1.5';
-const BUILD_DATE = '2026-08-01';
+const CACHE_VERSION = '7.0.18';
+const BUILD_DATE = '2026-09-02';
 const CACHE_NAME = `koltseg-v${CACHE_VERSION}`;
 
 // version.json hálózati prioritás beállítása, hogy friss verziót kapjunk
