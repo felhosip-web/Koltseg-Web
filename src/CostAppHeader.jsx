@@ -6,7 +6,86 @@ import React from 'react';
  * settings access, data controls, and export/sync options.
  * @returns {JSX.Element} The header component with navigation and controls
  */
+import { useState } from 'react';
+
+/**
+ * Header component for the cost tracking application.
+ * Displays the app title, network status indicators, action buttons for creating items/months,
+ * settings access, data controls, and export/sync options.
+ * @returns {JSX.Element} The header component with navigation and controls
+ */
 export default function CostAppHeader() {
+    const [exportMenuOpen, setExportMenuOpen] = useState(false);
+
+    const handleDataControl = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setExportMenuOpen(!exportMenuOpen);
+    };
+
+    const handleExportExcel = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setExportMenuOpen(false);
+        window.app?.uiController?.exportController?.exportExcel?.();
+    };
+
+    const handleExportPdf = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setExportMenuOpen(false);
+        window.app?.uiController?.exportController?.exportPdf?.();
+    };
+
+    const handleExportJson = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setExportMenuOpen(false);
+        window.app?.uiController?.exportController?.exportJson?.();
+    };
+
+    const handleImportJson = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setExportMenuOpen(false);
+        window.app?.uiController?.exportController?.importJson?.();
+    };
+
+    const handleForceSync = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setExportMenuOpen(false);
+        window.app?.uiController?.openSyncModal?.();
+    };
+
+    const handleDbAudit = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setExportMenuOpen(false);
+        window.app?.uiController?.maintenanceController?.startDbAudit?.();
+    };
+
+    const handleRestoreBackup = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setExportMenuOpen(false);
+        window.app?.uiController?.maintenanceController?.restoreBackup?.();
+    };
+
+    const handleForceBackup = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setExportMenuOpen(false);
+        window.app?.uiController?.maintenanceController?.forceBackup?.();
+    };
+
+    const handleWipeDatabase = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setExportMenuOpen(false);
+        window.app?.uiController?.maintenanceController?.wipeDatabase?.();
+    };
+
     return (
         <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 border-b border-gray-100 pb-5">
             <div className="flex items-center gap-3">
@@ -68,7 +147,7 @@ export default function CostAppHeader() {
                         <i className="fas fa-sliders-h"></i>
                     </button>
 
-                    <button id="btnDataControl"
+                    <button id="btnDataControl" onClick={handleDataControl}
                         className="p-3 bg-amber-500 text-white rounded-2xl hover:bg-amber-600 transition w-11 h-11 flex items-center justify-center shadow-sm"
                         title="Adatbázis & Export">
                         <i className="fas fa-database"></i>
@@ -80,67 +159,67 @@ export default function CostAppHeader() {
                     </button>
 
                     <div id="exportMenu"
-                        className="hidden absolute right-[-2rem] sm:right-0 top-full mt-2 w-56 max-w-[calc(100vw-2rem)] bg-white border border-gray-200 rounded-xl shadow-xl z-50 py-1 text-sm overflow-y-auto max-h-[calc(100vh-10rem)]">
+                        className={`${exportMenuOpen ? '' : 'hidden'} absolute right-[-2rem] sm:right-0 top-full mt-2 w-56 max-w-[calc(100vw-2rem)] bg-white border border-gray-200 rounded-xl shadow-xl z-50 py-1 text-sm overflow-y-auto max-h-[calc(100vh-10rem)] text-left`}>
                         <div className="px-3 py-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider">Riportok
                         </div>
-                        <button id="btnExportExcel"
+                        <button id="btnExportExcel" onClick={handleExportExcel}
                             className="w-full text-left px-3 py-2.5 hover:bg-gray-50 flex items-center gap-2 text-gray-700">
                             <i className="fas fa-file-excel text-emerald-600"></i> Excel
                         </button>
-                        <button id="btnExportPdf"
+                        <button id="btnExportPdf" onClick={handleExportPdf}
                             className="w-full text-left px-3 py-2.5 hover:bg-gray-50 flex items-center gap-2 text-gray-700">
                             <i className="fas fa-file-pdf text-rose-600"></i> PDF
                         </button>
                         <div className="border-t border-gray-100 my-1"></div>
                         <div className="px-3 py-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider">Adatbázis
                         </div>
-                        <button id="btnExportJson"
+                        <button id="btnExportJson" onClick={handleExportJson}
                             className="w-full text-left px-3 py-2.5 hover:bg-gray-50 flex items-center gap-2 text-gray-700">
                             <i className="fas fa-save text-blue-500"></i> JSON mentés
                         </button>
-                        <button id="btnImportJson"
+                        <button id="btnImportJson" onClick={handleImportJson}
                             className="w-full text-left px-3 py-2.5 hover:bg-gray-50 flex items-center gap-2 text-gray-700">
                             <i className="fas fa-folder-open text-amber-500"></i> JSON betöltés
                         </button>
-                        <button id="btnDbAudit"
+                        <button id="btnDbAudit" onClick={handleDbAudit}
                             className="w-full text-left px-3 py-2.5 hover:bg-gray-50 flex items-center gap-2 text-gray-700">
                             <i className="fas fa-database text-amber-600"></i> IndexedDB Audit
                         </button>
                         <div className="border-t border-gray-100 my-1"></div>
-                        <button id="btnForceSync"
+                        <button id="btnForceSync" onClick={handleForceSync}
                             className="w-full text-left px-3 py-2.5 hover:bg-gray-50 flex items-center gap-2 text-indigo-600">
                             <i className="fas fa-arrows-rotate"></i> Szinkronizálás
                         </button>
                         <div className="border-t border-gray-100 my-1"></div>
                         <div className="px-3 py-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider">Backup</div>
-                        <button id="btnRestoreBackup"
+                        <button id="btnRestoreBackup" onClick={handleRestoreBackup}
                             className="w-full text-left px-3 py-2.5 hover:bg-gray-50 flex items-center gap-2 text-gray-700">
                             <i className="fas fa-undo-alt text-purple-500"></i> Visszaállítás backupból
                         </button>
-                        <button id="btnForceBackup"
+                        <button id="btnForceBackup" onClick={handleForceBackup}
                             className="w-full text-left px-3 py-2.5 hover:bg-gray-50 flex items-center gap-2 text-gray-700">
                             <i className="fas fa-database text-blue-500"></i> Manuális backup mentés
                         </button>
                         <div className="border-t border-gray-100 my-1"></div>
-                        <button id="btnWipeDatabase"
+                        <button id="btnWipeDatabase" onClick={handleWipeDatabase}
                             className="w-full text-left px-3 py-2.5 hover:bg-red-50 flex items-center gap-2 text-red-600 font-semibold">
                             <i className="fas fa-trash-can"></i> Adatbázis törlése
                         </button>
                     </div>
                 </div>
 
-                <div id="syncQueueContainer" className="relative inline-block ml-2 cursor-pointer group"
-                    title="Függőben lévő szinkronizációs műveletek">
-                    <i className="fas fa-cloud-upload-alt text-gray-400 text-lg hover:text-amber-500 transition"></i>
+                <button type="button" id="syncQueueContainer" className="relative inline-block ml-2 cursor-pointer group bg-transparent border-none p-1 hover:bg-gray-50 rounded transition-colors"
+                    title="Függőben lévő szinkronizációs műveletek" aria-label="Szinkronizációs várólista" onClick={() => window.app?.uiController?._handleQueueClick?.()}>
+                    <i className="fas fa-cloud-upload-alt text-gray-400 text-lg group-hover:text-amber-500 transition"></i>
                     <span id="syncQueueBadge"
                         className="absolute -top-1 -right-1 bg-amber-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center hidden">0</span>
 
                     <div
-                        className="sync-queue-tooltip hidden group-hover:block absolute right-0 top-full mt-2 bg-white rounded-2xl shadow-2xl p-4 min-w-[220px] z-50 border border-gray-100">
+                        className="sync-queue-tooltip hidden group-hover:block absolute right-0 top-full mt-2 bg-white rounded-2xl shadow-2xl p-4 min-w-[220px] z-50 border border-gray-100 text-left">
                         <div className="text-xs font-bold text-gray-700 mb-2">🔄 Függő műveletek</div>
                         <div id="tooltipContent" className="text-xs text-gray-500">Nincs adat</div>
                     </div>
-                </div>
+                </button>
 
                 <div
                     className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 rounded-2xl border border-gray-200 text-sm font-medium">

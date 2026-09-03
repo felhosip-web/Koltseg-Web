@@ -45,10 +45,73 @@ function updateVersion(type = 'patch') {
         }
     }
     
-    fs.writeFileSync(VERSION_FILE, JSON.stringify(data, null, 2));
+    // Frissítjük a service-worker.js-ben a CACHE_VERSION és BUILD_DATE értékeket
+    const SW_FILE = path.join(path.dirname(new URL(import.meta.url).pathname), '..', 'service-worker.js');
+    if (!fs.existsSync(SW_FILE)) {
+        throw new Error('service-worker.js nem található!');
+    }
+
+    const originalSwContent = fs.readFileSync(SW_FILE, 'utf8');
+    const cacheVersionPattern = /const CACHE_VERSION = '[^']+';/;
+    const buildDatePattern = /const BUILD_DATE = '[^']+';/;
+
+    if (!cacheVersionPattern.test(originalSwContent) || !buildDatePattern.test(originalSwContent)) {
+        throw new Error('A CACHE_VERSION vagy BUILD_DATE értéke nem található a service-worker.js fájlban.');
+    }
+
+    const versionContent = JSON.stringify(data, null, 2);
+    const swContent = originalSwContent
+        .replace(cacheVersionPattern, `const CACHE_VERSION = '${newVersion}';`)
+        .replace(buildDatePattern, `const BUILD_DATE = '${data.build.slice(0, 10)}';`);
+    const transactionId = `${process.pid}-${Date.now()}`;
+    const versionTempFile = `${VERSION_FILE}.${transactionId}.tmp`;
+    const swTempFile = `${SW_FILE}.${transactionId}.tmp`;
+    const versionBackupFile = `${VERSION_FILE}.${transactionId}.bak`;
+    const swBackupFile = `${SW_FILE}.${transactionId}.bak`;
+    let versionReplaced = false;
+    let preserveVersionBackup = false;
+
+    try {
+        fs.writeFileSync(versionTempFile, versionContent);
+        fs.writeFileSync(swTempFile, swContent);
+        fs.copyFileSync(VERSION_FILE, versionBackupFile);
+        fs.copyFileSync(SW_FILE, swBackupFile);
+
+        fs.renameSync(versionTempFile, VERSION_FILE);
+        versionReplaced = true;
+        fs.renameSync(swTempFile, SW_FILE);
+    } catch (error) {
+        if (versionReplaced) {
+            try {
+                fs.renameSync(versionBackupFile, VERSION_FILE);
+            } catch (rollbackError) {
+                preserveVersionBackup = true;
+                throw new AggregateError(
+                    [error, rollbackError],
+                    `A verziófájlok frissítése és visszaállítása is sikertelen. A mentés itt található: ${versionBackupFile}`
+                );
+            }
+        }
+        throw error;
+    } finally {
+        const filesToRemove = [versionTempFile, swTempFile, swBackupFile];
+        if (!preserveVersionBackup) filesToRemove.push(versionBackupFile);
+
+        for (const file of filesToRemove) {
+            try {
+                fs.unlinkSync(file);
+            } catch (cleanupError) {
+                if (cleanupError.code !== 'ENOENT') {
+                    console.warn(`⚠️ Ideiglenes fájl nem törölhető: ${file}`);
+                }
+            }
+        }
+    }
+
     console.log(`✅ Verzió frissítve: ${newVersion}`);
     console.log(`📅 Build: ${data.build}`);
-    
+    console.log(`✅ service-worker.js frissítve (CACHE_VERSION: ${newVersion})`);
+
     // Git tag létrehozás (opcionális)
     if (process.argv.includes('--tag')) {
         try {
