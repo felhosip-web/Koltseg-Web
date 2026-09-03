@@ -842,7 +842,7 @@ export class ServiceDevManager {
     }
 
     _refreshUI() {
-        this.app.renderDashboard?.();
+        this.app.refreshAllTabs?.();
         this.app.renderer?.renderTable?.();
         this.app.remindersRenderer?.renderList?.();
         this.app.workLogRenderer?.render?.();
@@ -1132,7 +1132,7 @@ export class ServiceDevManager {
             this.app.renderer.renderTable();
             const renderTime = ((performance.now() - renderStart)).toFixed(1);
             const dashStart = performance.now();
-            this.app.renderDashboard();
+            this.app.refreshAllTabs?.();
             const dashTime = ((performance.now() - dashStart)).toFixed(1);
             const memory = performance.memory ? (performance.memory.usedJSHeapSize / 1024 / 1024).toFixed(1) + ' MB' : 'N/A';
             resultEl.innerHTML = `

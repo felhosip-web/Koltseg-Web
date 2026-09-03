@@ -102,7 +102,7 @@ export class DataMaintenanceController {
             this.app.remindersRenderer?.renderList?.();
             this.app.incomingRenderer?.render?.();
             this.app.renderStats?.();
-            this.app.renderDashboard?.();
+            this.app.refreshAllTabs?.();
 
             this.app.hmiNotif.showToast('🗑️ Minden helyi adat törölve!', 'error');
             this.app.renderer.updateFooterStatus('Adatbázis kiürítve', false);
