@@ -1,6 +1,7 @@
 import { generateUUID } from './uuid-utils.js';
 // js/db-audit.js - IndexedDB Audit & Maintenance Tool (v4.0)
 import { parseCellKey, buildCellKey } from './utils/cell-key-utils.js';
+import { SecurityManager } from './oop-core.js';
 
 export class DatabaseAudit {
     /**
@@ -359,7 +360,7 @@ export class DatabaseAudit {
 
         // Test 2: Séma validáció
         try {
-            const { SecurityManager } = await import('./oop-core.js');
+
             const validEntry = { cellKey: '1_2026-07', amount: 1500 };
             const invalidEntry = { cellKey: '1_2026-07', amount: NaN };
             const validItem = { name: 'Teszt Kategória' };

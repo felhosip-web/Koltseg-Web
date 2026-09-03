@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
+import { useAppStore } from '../../store/useAppStore.js';
 
 export default function ChartsTab() {
     const [stats, setStats] = useState(null);
@@ -23,23 +24,22 @@ export default function ChartsTab() {
         fuelPrice: null
     });
 
-    useEffect(() => {
-        const loadData = () => {
-            if (!window.app || typeof window.app.getAppSnapshot !== 'function') {
-                return;
-            }
+    const snapshot = useAppStore();
 
-            const snapshot = window.app.getAppSnapshot();
-            const entries = snapshot.entries.filter(e => !e.isStorno);
-            const items = snapshot.items;
-            const incomings = snapshot.incomings.filter(e => !e.isStorno);
+    useEffect(() => {
+        if (!snapshot || !snapshot.isLoaded) return;
+
+        const loadData = () => {
+            const entries = (snapshot.entries || []).filter(e => !e.isStorno);
+            const items = snapshot.items || [];
+            const incomings = (snapshot.incomings || []).filter(e => !e.isStorno);
             const eurRate = snapshot.eurRate || 400;
-            const months = snapshot.months;
+            const months = snapshot.months || [];
 
             // Fuel mod
             let fuelLogs = [];
             let fuelEnabled = false;
-            if (window.app.moduleManager && typeof window.app.moduleManager.modules?.get === 'function') {
+            if (window.app && window.app.moduleManager && typeof window.app.moduleManager.modules?.get === 'function') {
                 const fuelMod = window.app.moduleManager.modules.get('plugin_fuel_log') || window.app.moduleManager.modules.get('plugin_fuel');
                 if (fuelMod && fuelMod.enabled !== false) fuelEnabled = true;
                 if (!fuelMod) fuelEnabled = true; // ha nincs modul, feltételezzük, hogy lehetnek adatok
@@ -47,11 +47,8 @@ export default function ChartsTab() {
                 fuelEnabled = true;
             }
 
-            if (fuelEnabled) {
-                const raw = localStorage.getItem('plugin_fuel_logs');
-                if (raw) {
-                    try { fuelLogs = JSON.parse(raw); } catch(e){}
-                }
+            if (fuelEnabled && Array.isArray(snapshot.fuelLogs)) {
+                fuelLogs = snapshot.fuelLogs;
             }
 
             setStats({
@@ -64,21 +61,8 @@ export default function ChartsTab() {
             });
         };
 
-        const handleAppUpdate = () => {
-            loadData();
-        };
-
-        if (window.app && window.app.isBooted) {
-             loadData();
-        }
-
-        if (window.app && typeof window.app.subscribeAppData === 'function') {
-            return window.app.subscribeAppData(handleAppUpdate);
-        } else {
-            window.addEventListener('app-data-updated', handleAppUpdate);
-            return () => window.removeEventListener('app-data-updated', handleAppUpdate);
-        }
-    }, []);
+        loadData();
+    }, [snapshot]);
 
     useEffect(() => {
         // Render charts

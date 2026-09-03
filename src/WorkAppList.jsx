@@ -1,30 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 
+import { useAppStore } from './store/useAppStore.js';
+
 export default function WorkAppList() {
     const listRef = useRef(null);
-    const [snapshot, setSnapshot] = useState(null);
-
-    useEffect(() => {
-        const handleDataUpdate = () => {
-            if (window.app && typeof window.app.getAppSnapshot === 'function') {
-                setSnapshot(window.app.getAppSnapshot());
-            }
-        };
-
-        handleDataUpdate();
-
-        let unsubscribe = null;
-        if (window.app && typeof window.app.subscribeAppData === 'function') {
-            unsubscribe = window.app.subscribeAppData(handleDataUpdate);
-        } else {
-            window.addEventListener('app-data-updated', handleDataUpdate);
-            unsubscribe = () => window.removeEventListener('app-data-updated', handleDataUpdate);
-        }
-
-        return () => {
-            if (unsubscribe) unsubscribe();
-        };
-    }, []);
+    const snapshot = useAppStore();
 
     const works = snapshot?.works || [];
 

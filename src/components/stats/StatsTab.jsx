@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useAppStore } from '../../store/useAppStore.js';
 
 /**
  * Statistics tab component displaying detailed financial analytics.
@@ -10,18 +11,16 @@ export default function StatsTab() {
     const [stats, setStats] = useState(null);
     const [showDetails, setShowDetails] = useState(false);
 
+    const snapshot = useAppStore();
+
     useEffect(() => {
+        if (!snapshot || !snapshot.isLoaded) return;
+
         const loadData = () => {
-            if (!window.app || typeof window.app.getAppSnapshot !== 'function') {
-                return;
-            }
-
-            const snapshot = window.app.getAppSnapshot();
-
-            const entries = snapshot.entries.filter(e => !e.isStorno);
-            const items = snapshot.items;
-            const months = snapshot.months;
-            const incomings = snapshot.incomings.filter(e => !e.isStorno);
+            const entries = (snapshot.entries || []).filter(e => !e.isStorno);
+            const items = snapshot.items || [];
+            const months = snapshot.months || [];
+            const incomings = (snapshot.incomings || []).filter(e => !e.isStorno);
             const eurRate = snapshot.eurRate || 400;
 
             // === KIADÁS STATISZTIKA ===
@@ -103,21 +102,8 @@ export default function StatsTab() {
             });
         };
 
-        const handleUpdate = () => {
-            loadData();
-        };
-
-        if (window.app && window.app.isBooted) {
-             loadData();
-        }
-
-        if (window.app && typeof window.app.subscribeAppData === 'function') {
-            return window.app.subscribeAppData(handleUpdate);
-        } else {
-            window.addEventListener('app-data-updated', handleUpdate);
-            return () => window.removeEventListener('app-data-updated', handleUpdate);
-        }
-    }, []);
+        loadData();
+    }, [snapshot]);
 
     if (!stats) return <div className="p-4 text-gray-500">Adatok betöltése...</div>;
 

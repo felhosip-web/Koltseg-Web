@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../../../js/db.js';
+import { useAppStore } from '../../store/useAppStore.js';
 
 export default function TimeTrackerTab() {
+    const snapshot = useAppStore();
     const [projects, setProjects] = useState([]);
     const [activeTimer, setActiveTimer] = useState(null);
     const [todayEntries, setTodayEntries] = useState([]);
@@ -19,72 +21,64 @@ export default function TimeTrackerTab() {
     const [selectedProjectId, setSelectedProjectId] = useState('');
     const [taskName, setTaskName] = useState('');
 
-    const loadData = async () => {
-        if (!window.app) return;
-        const snapshot = window.app.getAppSnapshot();
+    useEffect(() => {
+        if (!snapshot || !snapshot.isLoaded) return;
+        
         if (snapshot.timeTracker) {
             setProjects(snapshot.timeTracker.projects || []);
             setActiveTimer(snapshot.timeTracker.activeTimer || null);
         }
 
-        if (window.dayjs && window.app.isBooted) {
-            try {
-                const today = window.dayjs().format('YYYY-MM-DD');
-                const entries = await db.timeEntries.where('date').equals(today).toArray();
+        const loadDbData = async () => {
+            if (snapshot.dayjs) {
+                try {
+                    const today = snapshot.dayjs().format('YYYY-MM-DD');
+                    const entries = await db.timeEntries.where('date').equals(today).toArray();
 
-                let todayMinutes = 0;
-                let todayEarnings = 0;
-                entries.forEach(e => {
-                    todayMinutes += e.durationMin;
-                    todayEarnings += e.earnings;
-                });
+                    let todayMinutes = 0;
+                    let todayEarnings = 0;
+                    entries.forEach(e => {
+                        todayMinutes += e.durationMin;
+                        todayEarnings += e.earnings;
+                    });
 
-                const startOfWeek = window.dayjs().startOf('week').format('YYYY-MM-DD');
-                const endOfWeek = window.dayjs().endOf('week').format('YYYY-MM-DD');
-                const weekEntries = await db.timeEntries.where('date').between(startOfWeek, endOfWeek, true, true).toArray();
-                let weekMinutes = 0;
-                let weekEarnings = 0;
-                weekEntries.forEach(e => {
-                    weekMinutes += e.durationMin;
-                    weekEarnings += e.earnings;
-                });
+                    const startOfWeek = snapshot.dayjs().startOf('week').format('YYYY-MM-DD');
+                    const endOfWeek = snapshot.dayjs().endOf('week').format('YYYY-MM-DD');
+                    const weekEntries = await db.timeEntries.where('date').between(startOfWeek, endOfWeek, true, true).toArray();
+                    let weekMinutes = 0;
+                    let weekEarnings = 0;
+                    weekEntries.forEach(e => {
+                        weekMinutes += e.durationMin;
+                        weekEarnings += e.earnings;
+                    });
 
-                const startOfMonth = window.dayjs().startOf('month').format('YYYY-MM-DD');
-                const endOfMonth = window.dayjs().endOf('month').format('YYYY-MM-DD');
-                const monthEntries = await db.timeEntries.where('date').between(startOfMonth, endOfMonth, true, true).toArray();
-                let monthMinutes = 0;
-                let monthEarnings = 0;
-                monthEntries.forEach(e => {
-                    monthMinutes += e.durationMin;
-                    monthEarnings += e.earnings;
-                });
+                    const startOfMonth = snapshot.dayjs().startOf('month').format('YYYY-MM-DD');
+                    const endOfMonth = snapshot.dayjs().endOf('month').format('YYYY-MM-DD');
+                    const monthEntries = await db.timeEntries.where('date').between(startOfMonth, endOfMonth, true, true).toArray();
+                    let monthMinutes = 0;
+                    let monthEarnings = 0;
+                    monthEntries.forEach(e => {
+                        monthMinutes += e.durationMin;
+                        monthEarnings += e.earnings;
+                    });
 
-                setTodayEntries(entries);
-                setStats({
-                    todayMinutes,
-                    todayEarnings,
-                    weekMinutes,
-                    weekEarnings,
-                    monthMinutes,
-                    monthEarnings
-                });
-            } catch(e) {
-                console.warn('Error loading time tracker DB entries in React', e);
+                    setTodayEntries(entries);
+                    setStats({
+                        todayMinutes,
+                        todayEarnings,
+                        weekMinutes,
+                        weekEarnings,
+                        monthMinutes,
+                        monthEarnings
+                    });
+                } catch(e) {
+                    console.warn('Error loading time tracker DB entries in React', e);
+                }
             }
-        }
-    };
-
-    useEffect(() => {
-        loadData();
-        const listener = () => loadData();
-        window.addEventListener('app-data-updated', listener);
-
-        // Ensure data is loaded right away if boot is done, and also manually trigger update
-        if (window.app && window.app.isBooted) {
-             loadData();
-        }
-        return () => window.removeEventListener('app-data-updated', listener);
-    }, []);
+        };
+        
+        loadDbData();
+    }, [snapshot]);
 
     useEffect(() => {
         let interval;

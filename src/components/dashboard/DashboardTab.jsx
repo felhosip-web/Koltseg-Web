@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { db } from '../../../js/db.js';
 import { NameDays } from '../../../js/utils/namedays.js';
+import { useAppStore } from '../../store/useAppStore.js';
 
 // A minimal port of the dashboard rendering logic using React state
 
@@ -20,19 +21,18 @@ export default function DashboardTab() {
     const [greeting, setGreeting] = useState('');
     const [currentDateStr, setCurrentDateStr] = useState('');
 
-    useEffect(() => {
-        const loadData = () => {
-            if (!window.app || typeof window.app.getAppSnapshot !== 'function') {
-                return;
-            }
+    const snapshot = useAppStore();
 
-            const snapshot = window.app.getAppSnapshot();
+    useEffect(() => {
+        if (!snapshot || !snapshot.isLoaded) return;
+
+        const loadData = () => {
             const { dayjs } = snapshot;
 
-            const entries = snapshot.entries.filter(e => !e.isStorno);
-            const items = snapshot.items;
-            const months = snapshot.months;
-            const incomings = snapshot.incomings.filter(e => !e.isStorno);
+            const entries = (snapshot.entries || []).filter(e => !e.isStorno);
+            const items = snapshot.items || [];
+            const months = snapshot.months || [];
+            const incomings = (snapshot.incomings || []).filter(e => !e.isStorno);
             const eurRate = snapshot.eurRate || 400;
 
             // KIADÁSOK
@@ -148,7 +148,6 @@ export default function DashboardTab() {
             const notes = snapshot.notes;
             let calendarEvents = snapshot.calendarEvents;
             const shoppingItems = snapshot.shoppingItems;
-            const kmEntries = snapshot.fuelLogs;
 
             const urgentItems = [];
             const todayStrISO = now.toISOString ? now.toISOString().split('T')[0] : todayStr;
@@ -199,22 +198,8 @@ export default function DashboardTab() {
             });
         };
 
-        const handleUpdate = () => {
-            loadData();
-        };
-
-        // Initial load
-        if (window.app && window.app.isBooted) {
-             loadData();
-        }
-
-        if (window.app && typeof window.app.subscribeAppData === 'function') {
-            return window.app.subscribeAppData(handleUpdate);
-        } else {
-            window.addEventListener('app-data-updated', handleUpdate);
-            return () => window.removeEventListener('app-data-updated', handleUpdate);
-        }
-    }, []);
+        loadData();
+    }, [snapshot]);
 
     useEffect(() => {
         // Fetch weather

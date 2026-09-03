@@ -1,34 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { CategoryIcons } from '../../../js/category-icons.js';
+import { useAppStore } from '../../store/useAppStore.js';
 
 export default function MainTable() {
-    const [snapshot, setSnapshot] = useState(null);
+    const snapshot = useAppStore();
     const [loadedMonths, setLoadedMonths] = useState(15);
     const wrapperRef = useRef(null);
-
-    useEffect(() => {
-        if (!window.app) return;
-
-        const handleDataUpdate = () => {
-            if (window.app && typeof window.app.getAppSnapshot === 'function') {
-                setSnapshot(window.app.getAppSnapshot());
-            }
-        };
-
-        handleDataUpdate();
-
-        let unsubscribe = null;
-        if (window.app && typeof window.app.subscribeAppData === 'function') {
-             unsubscribe = window.app.subscribeAppData(handleDataUpdate);
-        } else {
-             window.addEventListener('app-data-updated', handleDataUpdate);
-             unsubscribe = () => window.removeEventListener('app-data-updated', handleDataUpdate);
-        }
-
-        return () => {
-            if (unsubscribe) unsubscribe();
-        };
-    }, []);
 
     const handleScroll = useCallback(() => {
         if (!wrapperRef.current || !snapshot) return;

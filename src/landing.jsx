@@ -4,21 +4,15 @@ import WorkEditorModal from './components/WorkEditorModal.jsx'
 import RemindersTab from './components/reminders/RemindersTab.jsx'
 import React from 'react'
 import ReactDOM from 'react-dom/client'
+import StoreSync from './components/StoreSync.jsx'
 import LandingApp from './LandingApp.jsx'
-import CostAppHeader from './CostAppHeader.jsx'
-import CostAppTabs from './CostAppTabs.jsx'
-import CostAppFooter from './CostAppFooter.jsx'
+import CostAppLayout from './CostAppLayout.jsx'
 import SettingsPanel from './components/SettingsPanel.jsx'
-import DashboardTab from './components/dashboard/DashboardTab.jsx'
-import StatsTab from './components/stats/StatsTab.jsx'
-import './index.css'
-import MainTable from './components/table/MainTable.jsx'
+import CellEditorModal from './components/CellEditorModal.jsx'
 import WorkAppHeader from './WorkAppHeader.jsx'
 import WorkAppList from './WorkAppList.jsx'
-import CellEditorModal from './components/CellEditorModal.jsx'
 import AiEntryModal from './components/AiEntryModal.jsx'
-import TimeTrackerTab from './components/time-tracker/TimeTrackerTab.jsx'
-import ChartsTab from './components/charts/ChartsTab.jsx'
+import './index.css'
 
 const landingRoot = document.getElementById('appLandingScreenRoot');
 if (landingRoot) {
@@ -29,38 +23,17 @@ if (landingRoot) {
     )
 }
 
-const timeTrackerRoot = document.getElementById('costAppTimeTrackerRoot');
-if (timeTrackerRoot) {
-    ReactDOM.createRoot(timeTrackerRoot).render(
-      <React.StrictMode>
-        <TimeTrackerTab />
-      </React.StrictMode>,
-    )
-}
+// Mount headless StoreSync bridge
+const storeSyncContainer = document.createElement('div');
+storeSyncContainer.id = 'storeSyncRoot';
+document.body.appendChild(storeSyncContainer);
+ReactDOM.createRoot(storeSyncContainer).render(<StoreSync />);
 
-const chartsRoot = document.getElementById('costAppChartsRoot');
-if (chartsRoot) {
-    ReactDOM.createRoot(chartsRoot).render(
+const costAppReactRoot = document.getElementById('costAppReactRoot');
+if (costAppReactRoot) {
+    ReactDOM.createRoot(costAppReactRoot).render(
       <React.StrictMode>
-        <ChartsTab />
-      </React.StrictMode>,
-    )
-}
-
-const dashboardRoot = document.getElementById('costAppDashboardRoot');
-if (dashboardRoot) {
-    ReactDOM.createRoot(dashboardRoot).render(
-      <React.StrictMode>
-        <DashboardTab />
-      </React.StrictMode>,
-    )
-}
-
-const statsRoot = document.getElementById('costAppStatsRoot');
-if (statsRoot) {
-    ReactDOM.createRoot(statsRoot).render(
-      <React.StrictMode>
-        <StatsTab />
+        <CostAppLayout />
       </React.StrictMode>,
     )
 }
@@ -79,45 +52,6 @@ if (cellEditorRoot) {
     ReactDOM.createRoot(cellEditorRoot).render(
       <React.StrictMode>
         <CellEditorModal />
-      </React.StrictMode>,
-    )
-}
-
-const headerRoot = document.getElementById('costAppHeaderRoot');
-if (headerRoot) {
-    ReactDOM.createRoot(headerRoot).render(
-      <React.StrictMode>
-        <CostAppHeader />
-      </React.StrictMode>,
-    )
-}
-
-const tabsRoot = document.getElementById('costAppTabsRoot');
-if (tabsRoot) {
-    ReactDOM.createRoot(tabsRoot).render(
-      <React.StrictMode>
-        <CostAppTabs />
-      </React.StrictMode>,
-    )
-}
-
-const footerRoot = document.getElementById('costAppFooterRoot');
-if (footerRoot) {
-    ReactDOM.createRoot(footerRoot).render(
-      <React.StrictMode>
-        <CostAppFooter />
-      </React.StrictMode>,
-    )
-}
-
-
-
-
-const tableRoot = document.getElementById('costAppTableRoot');
-if (tableRoot) {
-    ReactDOM.createRoot(tableRoot).render(
-      <React.StrictMode>
-        <MainTable />
       </React.StrictMode>,
     )
 }
@@ -149,32 +83,7 @@ if (aiModalRoot) {
     )
 }
 
-const remindersRoot = document.getElementById('costAppRemindersRoot');
-if (remindersRoot) {
-    ReactDOM.createRoot(remindersRoot).render(
-      <React.StrictMode>
-        <RemindersTab />
-      </React.StrictMode>,
-    )
-}
 
-const workAppEditorRoot = document.getElementById('workAppEditorRoot');
-if (workAppEditorRoot) {
-    ReactDOM.createRoot(workAppEditorRoot).render(
-      <React.StrictMode>
-        <WorkEditorModal />
-      </React.StrictMode>,
-    )
-}
-
-const incomingRoot = document.getElementById('costAppIncomingRoot');
-if (incomingRoot) {
-    ReactDOM.createRoot(incomingRoot).render(
-      <React.StrictMode>
-        <IncomingTab />
-      </React.StrictMode>,
-    )
-}
 
 const hmiInputRoot = document.getElementById('costAppHmiInputRoot');
 if (hmiInputRoot) {

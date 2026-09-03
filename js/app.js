@@ -13,7 +13,6 @@ import { SyncService } from './sync-service.js';
 import { UIModalController } from './ui-modal-controller.js';
 import { UIController } from './ui-controller.js';
 import { AiModalController } from './ai-modal-controller.js';
-import { ChartsRenderer } from './oop-charts.js';
 import { RemindersRenderer, RemindersApp } from './oop-reminders.js';
 import { StorageManager } from './storage-manager.js';
 import { setGlobalDb } from './store.js';
@@ -25,7 +24,6 @@ import { PluginStorage } from './plugin-storage.js';
 import { OfflineHandler } from './offline-handler.js';
 import { getVersionManager } from './version-manager.js';
 import { MESSAGES, formatMessage } from './messages.js';
-import { VirtualTableRenderer } from './virtual-table-renderer.js';
 import { DatabaseAudit } from './db-audit.js';
 import { SingletonLock } from './singleton-lock.js';
 import { DataSyncController } from './data-sync-controller.js';
@@ -33,7 +31,6 @@ import { DataExportController } from './data-export-controller.js';
 import { DataMaintenanceController } from './data-maintenance-controller.js';
 import { ServiceDevManager } from './service-dev-manager.js';
 import { setupDebugConsole, initDebugPanel } from './debug-panel.js';
-import { IncomingRenderer } from './incoming-renderer.js';
 import { LogManager } from './log-manager.js';
 import { SecurityGuard } from './security-guard.js';
 import { WorkLogManager, WorkLogRenderer } from './work-log.js';
@@ -41,6 +38,8 @@ import { GoogleDriveBackup } from './gdrive-backup.js';
 import { ModalManager } from './modal-manager.js';
 import { ModuleManager } from './module-manager.js';
 import { TimeTrackerModule } from './modules/time-tracker/time-tracker.js';
+import { parseCellKey } from './utils/cell-key-utils.js';
+import { SyncManager } from './sync-manager.js';
 
 // ================================================================
 // === APP OSZTÁLY ===
@@ -89,12 +88,9 @@ class App {
         this.templates = new TemplateManager(this.db, this.syncService);
         this.reminderManager = new ReminderManager(this.db, this.syncService);
 
-        // === 7. UI RENDEREREK ===
-        this.renderer = new VirtualTableRenderer(this);
         this.modalManager = new ModalManager(this);
         this.uiController = new UIController(this);
         this.aiModal = new AiModalController(this);
-        this.chartsRenderer = new ChartsRenderer(this);
         this.remindersRenderer = new RemindersRenderer(this, this.hmiNotif);
         this.remindersApp = new RemindersApp();
 
@@ -112,7 +108,6 @@ class App {
 
         // === 9. BEJÖVŐ UTALÁSOK ===
         this.incomingManager = new IncomingManager(this.db, this.syncService);
-        this.incomingRenderer = new IncomingRenderer(this);
 
         // === 9.5. MUNKA NYILVÁNTARTÁS ===
         this.workLogManager = new WorkLogManager(this.db, this.syncService);
@@ -141,21 +136,6 @@ class App {
         this._offlineHandler = null;
         this._dashboardChart = null;
 
-        // === 13. TAB ÁLLAPOTGÉP ===
-
-        this.tabStateMachine = {
-            dashboard: () => {
-                window.dispatchEvent(new Event('app-data-updated'));
-            },
-            table: () => this.renderer.renderTable(),
-            charts: () => this.chartsRenderer.renderAll(this.currentFilter),
-            time: () => this.timeTracker.renderTab(),
-            reminders: () => this.remindersRenderer.renderList(),
-            incoming: () => this.incomingRenderer.render(),
-            stats: () => {
-                window.dispatchEvent(new Event('app-data-updated'));
-            }
-        };
     }
 
     // ================================================================
@@ -164,7 +144,7 @@ class App {
 
     async _initSyncManager() {
         try {
-            const { SyncManager } = await import('./sync-manager.js');
+        // const { SyncManager } = await import('./sync-manager.js');
             this.syncManager = new SyncManager(this);
         } catch (e) {
             console.log('[APP] SyncManager nem szükséges (csak kompatibilitás)');
@@ -339,7 +319,7 @@ class App {
             console.error('[APP] ❌ Indítási hiba:', error);
             this.hmiNotif.showToast('Rendszerindítási hiba!', 'error');
             try {
-                this.renderer.renderTable();
+
             } catch (e) {
                 console.error('[APP] UI fallback hiba:', e);
             }
@@ -583,89 +563,7 @@ class App {
 // 3. RÉSZ: Tab kezelés, Dashboard render
 // ================================================================
 
-    // ================================================================
-    // === TAB KEZELÉS (6 TAB) ===
-    // ================================================================
-
-    switchTab(tab) {
-        if (!tab) return;
-        switch (tab) {
-            case 'time':
-            case 'time-tracker':
-                if (!this.tabStateMachine['time']) {
-                    this.tabStateMachine['time'] = () => this.timeTracker.renderTab();
-                    this.tabStateMachine['time-tracker'] = () => this.timeTracker.renderTab();
-                }
-                break;
-        }
-        if (!this.tabStateMachine[tab] && !this.tabStateMachine[tab.replace('tab-', '')]) {
-            console.warn(`[APP] Ismeretlen tab: ${tab}`);
-            return;
-        }
-
-        const oldTab = this.activeTab;
-        this.activeTab = tab;
-
-        // Pane-ek elrejtése
-        document.querySelectorAll('.tab-pane, .view').forEach(p => p.classList.add('hidden'));
-
-        // Aktív pane megjelenítése
-        const pane = document.getElementById(`tab-${tab}`) || document.getElementById(`${tab}-view`);
-        if (pane) pane.classList.remove('hidden');
-
-        // Renderer hívása
-        if (this.tabStateMachine[tab]) {
-            this.tabStateMachine[tab]();
-        }
-
-        // Modul hook esemény kiváltása
-        if (this.moduleManager) {
-            this.moduleManager.triggerHook('onTabChange', { newTab: tab, oldTab });
-        }
-    }
-
-    showView(view) {
-        this.switchTab(view);
-    }
-
-    _initTabs() {
-        const tabButtons = document.querySelectorAll('.tab-btn');
-        console.log('[APP] _initTabs() — found tab buttons:', tabButtons.length);
-
-        tabButtons.forEach(btn => {
-            btn.addEventListener('click', () => {
-                const tab = btn.dataset.tab;
-
-                // Gombstílusok
-                tabButtons.forEach(b => {
-                    b.classList.remove('bg-blue-600', 'text-white', 'shadow-md');
-                    b.classList.add('bg-gray-100', 'text-gray-600');
-                });
-                btn.classList.remove('bg-gray-100', 'text-gray-600');
-                btn.classList.add('bg-blue-600', 'text-white', 'shadow-md');
-
-                this.switchTab(tab);
-            });
-        });
-
-        // Alapértelmezett tab
-        const defaultBtn = document.querySelector('[data-tab="dashboard"]');
-        if (defaultBtn) {
-            console.log('[APP] _initTabs() — activating default dashboard tab');
-            defaultBtn.click();
-        } else {
-            console.log('[APP] _initTabs() — dashboard button missing, falling back to table tab');
-            document.querySelector('[data-tab="table"]')?.click();
-        }
-    }
-
-    _cleanupTabs() {
-        document.querySelectorAll('.tab-btn').forEach(btn => {
-            const newBtn = btn.cloneNode(true);
-            btn.parentNode?.replaceChild(newBtn, btn);
-        });
-        console.log('[APP] Tab event listeners takarítva');
-    }
+    
 
     updateReminderStatus() {
         // Minimal fallback for reminder LED if needed, otherwise handled by React
@@ -756,9 +654,7 @@ destroy() {
         if (this.remindersRenderer && typeof this.remindersRenderer.destroy === 'function') {
             this.remindersRenderer.destroy();
         }
-        if (this.renderer && typeof this.renderer.destroy === 'function') {
-            this.renderer.destroy();
-        }
+
         if (this.backgroundTasks && typeof this.backgroundTasks.destroy === 'function') {
             this.backgroundTasks.destroy();
         }
@@ -814,12 +710,7 @@ async reload() {
         
         await Promise.all(loadPromises);
 
-        // UI frissítések – csak akkor hívjuk, ha a rendererek léteznek
-        if (this.renderer && typeof this.renderer.renderTable === 'function') {
-            this.renderer.renderTable();
-        } else if (this.renderer && typeof this.renderer.render === 'function') {
-            this.renderer.render();
-        }
+        // UI frissítések (React kezeli)
         
         if (this.remindersRenderer && typeof this.remindersRenderer.renderList === 'function') {
             this.remindersRenderer.renderList();
@@ -864,13 +755,7 @@ refreshAllTabs() {
     }
 
     // 2. Táblázat (VirtualTableRenderer)
-    if (this.renderer) {
-        if (typeof this.renderer.renderTable === 'function') {
-            this.renderer.renderTable();
-        } else if (typeof this.renderer.render === 'function') {
-            this.renderer.render();
-        }
-    }
+
 
     // 3. Kimutatások (Charts)
     if (this.chartsRenderer && typeof this.chartsRenderer.renderAll === 'function') {
@@ -1091,7 +976,7 @@ async function initApp() {
         let badCellKeys = 0;
         let missingExplicitFields = 0;
 
-        const { parseCellKey } = await import('./utils/cell-key-utils.js');
+
 
         entries.forEach(e => {
             if (!e.itemId || !e.month) missingExplicitFields++;
