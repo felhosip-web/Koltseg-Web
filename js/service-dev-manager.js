@@ -843,12 +843,9 @@ export class ServiceDevManager {
 
     _refreshUI() {
         this.app.refreshAllTabs?.();
-        this.app.renderer?.renderTable?.();
-        this.app.remindersRenderer?.renderList?.();
         this.app.workLogRenderer?.render?.();
         this.app.renderStats?.();
         this.app.updateReminderStatus?.();
-        if (this.app.incomingRenderer) this.app.incomingRenderer.render();
     }
 
     _triggerUnlock(method) {
@@ -1131,15 +1128,15 @@ export class ServiceDevManager {
             const renderStart = performance.now();
             this.app.renderer.renderTable();
             const renderTime = ((performance.now() - renderStart)).toFixed(1);
-            const dashStart = performance.now();
+            const allTabsRefreshStart = performance.now();
             this.app.refreshAllTabs?.();
-            const dashTime = ((performance.now() - dashStart)).toFixed(1);
+            const allTabsRefreshTime = ((performance.now() - allTabsRefreshStart)).toFixed(1);
             const memory = performance.memory ? (performance.memory.usedJSHeapSize / 1024 / 1024).toFixed(1) + ' MB' : 'N/A';
             resultEl.innerHTML = `
                 <div class="bg-gray-50 p-2 rounded-lg text-[9px] grid grid-cols-3 gap-1">
                     <div>📊 Generálás: <span class="font-bold">${genTime}s</span></div>
                     <div>📋 Render: <span class="font-bold">${renderTime}ms</span></div>
-                    <div>📈 Dashboard: <span class="font-bold">${dashTime}ms</span></div>
+                    <div>📈 Minden tab frissítése: <span class="font-bold">${allTabsRefreshTime}ms</span></div>
                     <div>💾 Memória: <span class="font-bold">${memory}</span></div>
                     <div>📝 Bejegyzések: <span class="font-bold">${generated}</span></div>
                     <div>🏷️ Kategóriák: <span class="font-bold">${this.app.items.items.length}</span></div>
@@ -1153,7 +1150,6 @@ export class ServiceDevManager {
             this._addLog('success', `Teljesítmény teszt: ${generated} bejegyzés, ${genTime}s`);
             this._showToast(`✅ Teszt kész: ${generated} bejegyzés (${genTime}s)`, 'success');
             this._updateInfo();
-            this._refreshUI();
         } catch (e) {
             resultEl.innerHTML = `<div class="text-red-500">❌ Hiba: ${e.message}</div>`;
             this._addLog('error', `Teljesítmény teszt hiba: ${e.message}`);

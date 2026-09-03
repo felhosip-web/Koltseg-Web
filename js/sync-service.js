@@ -937,18 +937,10 @@ export class SyncService {
                 app.workLogManager?.load?.() || Promise.resolve()
             ]);
 
-            app.renderer?.renderTable?.();
             app.workLogRenderer?.render?.();
             app.renderer?.renderSummary?.();
-            app.remindersRenderer?.renderList?.();
-            app.incomingRenderer?.render?.();
             app.renderStats?.();
             app.refreshAllTabs?.();
-
-            // Ha a charts tab aktív, frissítsük
-            if (app.activeTab === 'charts' && app.chartsRenderer) {
-                app.chartsRenderer.renderAll(app.currentFilter);
-            }
 
             // Ha a statisztika tab aktív, frissítsük
             if (app.activeTab === 'stats') {
