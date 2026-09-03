@@ -1439,7 +1439,7 @@ export class CloudSync {
                 if (table.type === 'bigint') {
                     query = query.neq(table.key, -999999);
                 } else {
-                    query = query.neq(table.key, '___non_existent_wipe___');
+                    query = query.neq(table.key, '00000000-0000-0000-0000-000000000000');
                 }
                 
                 const { error } = await query;
