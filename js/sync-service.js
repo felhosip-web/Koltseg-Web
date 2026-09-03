@@ -943,7 +943,7 @@ export class SyncService {
             app.remindersRenderer?.renderList?.();
             app.incomingRenderer?.render?.();
             app.renderStats?.();
-            app.renderDashboard?.();
+            app.refreshAllTabs?.();
 
             // Ha a charts tab aktív, frissítsük
             if (app.activeTab === 'charts' && app.chartsRenderer) {

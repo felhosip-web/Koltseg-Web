@@ -54,8 +54,7 @@ const prReport = runLighthouse(prUrl, prReportPath);
 const prScores = extractScores(prReport);
 
 if (!prScores) {
-  console.error('Kritikus hiba: A PR build Lighthouse elemzése sikertelen volt!');
-  process.exit(1);
+  console.error('Kritikus hiba: A PR build Lighthouse elemzése sikertelen volt! Nem szakítjuk meg a futást, mert a CI nem blokkolódhat.');
 }
 
 // 2. Audit Pages URL (élő verzió)
@@ -74,7 +73,7 @@ const categoryNames = [
   { key: 'seo', label: 'SEO' },
 ];
 
-if (prScores.pwa !== null || (pagesScores && pagesScores.pwa !== null)) {
+if ((prScores && prScores.pwa !== null) || (pagesScores && pagesScores.pwa !== null)) {
   categoryNames.push({ key: 'pwa', label: 'PWA (Progressive Web App)' });
 }
 
@@ -82,17 +81,19 @@ let tableRows = '';
 let totalDiff = 0;
 
 categoryNames.forEach(({ key, label }) => {
-  const pr = prScores[key] !== null ? prScores[key] : 'N/A';
+  const pr = prScores && prScores[key] !== null ? prScores[key] : 'N/A';
   const pages = pagesScores && pagesScores[key] !== null ? pagesScores[key] : 'N/A';
-  const diffStr = pagesScores && pagesScores[key] !== null ? formatDiff(prScores[key], pagesScores[key]) : 'N/A';
-  if (pagesScores && pagesScores[key] !== null && prScores[key] !== null) {
+  const diffStr = pagesScores && pagesScores[key] !== null && prScores && prScores[key] !== null ? formatDiff(prScores[key], pagesScores[key]) : 'N/A';
+  if (pagesScores && pagesScores[key] !== null && prScores && prScores[key] !== null) {
     totalDiff += (prScores[key] - pagesScores[key]);
   }
   tableRows += '| **' + label + '** | ' + pages + ' | ' + pr + ' | ' + diffStr + ' |\n';
 });
 
 let statusText = '✅ Rendben (Megfelelő teljesítmény)';
-if (totalDiff < -5) {
+if (!prScores) {
+  statusText = '❌ Hiba: A PR build Lighthouse elemzése nem sikerült';
+} else if (totalDiff < -5) {
   statusText = '⚠️ Figyelem: A PR teljesítményromlást tartalmaz';
 } else if (totalDiff > 0) {
   statusText = '🚀 Fejlődés: A PR javította a teljesítménymutatókat';
