@@ -97,7 +97,10 @@ export class DataMaintenanceController {
                 this.app.workLogManager?.load?.()
             ]);
 
+            this.app.renderer.renderTable();
             this.app.workLogRenderer?.render?.();
+            this.app.remindersRenderer?.renderList?.();
+            this.app.incomingRenderer?.render?.();
             this.app.renderStats?.();
             this.app.refreshAllTabs?.();
 
