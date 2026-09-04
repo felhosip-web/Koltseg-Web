@@ -197,7 +197,9 @@ class App {
         }
         this.updateReminderStatus?.();
 
-        this.tabStateMachine[this.activeTab]?.();
+        if (this.tabStateMachine && this.tabStateMachine[this.activeTab]) {
+            this.tabStateMachine[this.activeTab]();
+        }
 
         if (this.syncManager?.hasPendingChanges?.() && navigator.onLine) {
             this.syncManager.processPendingChanges?.().catch(() => {});
@@ -310,7 +312,9 @@ class App {
 
             // Dashboard alapértelmezett render
             setTimeout(() => {
-                this.tabStateMachine.dashboard();
+                if (this.tabStateMachine && this.tabStateMachine.dashboard) {
+                    this.tabStateMachine.dashboard();
+                }
             }, 100);
 
             console.log('[APP] ✅ Alkalmazás sikeresen elindult!');
@@ -723,7 +727,9 @@ async reload() {
         }
         
         if (this.activeTab === 'dashboard') {
-            this.tabStateMachine.dashboard();
+            if (this.tabStateMachine && this.tabStateMachine.dashboard) {
+                this.tabStateMachine.dashboard();
+            }
         }
 
         if (this.activeTab === 'charts' && this.chartsRenderer && typeof this.chartsRenderer.renderAll === 'function') {
@@ -751,7 +757,9 @@ refreshAllTabs() {
 
     // 1. Dashboard
     if (this.activeTab === 'dashboard') {
-        this.tabStateMachine.dashboard();
+        if (this.tabStateMachine && this.tabStateMachine.dashboard) {
+            this.tabStateMachine.dashboard();
+        }
     }
 
     // 2. Táblázat (VirtualTableRenderer)

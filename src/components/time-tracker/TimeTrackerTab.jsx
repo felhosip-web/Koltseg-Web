@@ -20,6 +20,13 @@ export default function TimeTrackerTab() {
     const [projectsOpen, setProjectsOpen] = useState(false);
     const [selectedProjectId, setSelectedProjectId] = useState('');
     const [taskName, setTaskName] = useState('');
+    const [isDesktop, setIsDesktop] = useState(true);
+
+    useEffect(() => {
+        if (window.app && typeof window.app.isDesktop === 'function') {
+            setIsDesktop(window.app.isDesktop());
+        }
+    }, []);
 
     useEffect(() => {
         if (!snapshot || !snapshot.isLoaded) return;
@@ -289,7 +296,7 @@ export default function TimeTrackerTab() {
                                                 <div className="font-bold text-gray-400">— Ft</div>
                                             )}
                                         </div>
-                                        <button onClick={(ev) => handleDeleteEntry(ev, e.id)} className="text-gray-400 hover:text-rose-500 transition btn-delete-entry hidden group-hover:block" data-id={e.id} title="Törlés"><i className="fas fa-trash"></i></button>
+                                        <button onClick={(ev) => handleDeleteEntry(ev, e.id)} className={`text-gray-400 hover:text-rose-500 transition btn-delete-entry ${isDesktop ? 'hidden group-hover:block' : 'block'}`} data-id={e.id} title="Törlés"><i className="fas fa-trash"></i></button>
                                     </div>
                                 </div>
                             );
@@ -323,7 +330,7 @@ export default function TimeTrackerTab() {
                                         <div className="font-mono text-gray-600 bg-gray-100 px-2 py-1 rounded text-xs font-bold">
                                             {p.hourlyRate ? `${p.hourlyRate.toLocaleString('hu-HU')} Ft/óra` : 'Nincs óradíj'}
                                         </div>
-                                        <button onClick={(e) => handleDeleteProject(e, p.id)} className="text-gray-400 hover:text-rose-500 transition hidden group-hover:block btn-delete-project" data-id={p.id} title="Törlés"><i className="fas fa-trash"></i></button>
+                                        <button onClick={(e) => handleDeleteProject(e, p.id)} className={`text-gray-400 hover:text-rose-500 transition btn-delete-project ${isDesktop ? 'hidden group-hover:block' : 'block'}`} data-id={p.id} title="Törlés"><i className="fas fa-trash"></i></button>
                                     </div>
                                 </div>
                             ))
