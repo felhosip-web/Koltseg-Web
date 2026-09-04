@@ -134,18 +134,22 @@ export class BootManager {
      */
     async _initUI() {
         this.app.uiController.bindStaticEvents();
-        this.app._initTabs();
         
         if (this.app.remindersApp) {
             await this.app.remindersApp.boot(this.app);
         }
         
-        this.app.renderer.renderTable();
+        if (this.app.renderer && typeof this.app.renderer.renderTable === 'function') {
+            this.app.renderer.renderTable();
+        }
         window.dispatchEvent(new Event('app-data-updated'));
-        this.app.updateReminderStatus();
+
+        if (this.app.updateReminderStatus && typeof this.app.updateReminderStatus === 'function') {
+            this.app.updateReminderStatus();
+        }
         
         // Initial Work Log rendering
-        if (this.app.workLogRenderer) {
+        if (this.app.workLogRenderer && typeof this.app.workLogRenderer.render === 'function') {
             await this.app.workLogRenderer.render();
         }
 

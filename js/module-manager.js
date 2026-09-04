@@ -347,7 +347,10 @@ export class ModuleManager {
         });
 
         // Hozzáadjuk az App tab state machine-jéhez is!
-        if (this.app && this.app.tabStateMachine) {
+        if (this.app) {
+            if (!this.app.tabStateMachine) {
+                this.app.tabStateMachine = {};
+            }
             this.app.tabStateMachine[tabId] = () => {
                 if (typeof config.render === 'function') {
                     config.render(this.app);
