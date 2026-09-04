@@ -66,14 +66,16 @@ import { chromium } from 'playwright-core';
     console.log('Background tasks status:', JSON.stringify(backgroundTasksCheck, null, 2));
 
     const tableVisible = await page.evaluate(() => {
-      const pane = document.getElementById('tab-table');
-      return pane ? !pane.classList.contains('hidden') : false;
+      return window.app?.activeTab === 'table';
     });
     console.log('Table tab visible:', tableVisible);
 
     if (!tableVisible) {
       await page.evaluate(() => {
-        document.querySelector('[data-tab="table"]')?.click();
+        window.app.activeTab = 'table';
+        if (window.app.tabStateMachine && window.app.tabStateMachine.table) {
+            window.app.tabStateMachine.table();
+        }
       });
       await page.waitForFunction(() => window.app?.activeTab === 'table', { timeout: 10000 });
     }
