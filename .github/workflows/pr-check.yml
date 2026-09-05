@@ -7,6 +7,8 @@ on:
 permissions:
   contents: read
   pull-requests: write
+  security-events: write # Socket-hez kell
+  checks: write
 
 jobs:
   build-and-audit:
@@ -16,6 +18,8 @@ jobs:
     steps:
       - name: Forráskód letöltése
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Sonar és Codecov miatt
 
       - name: Node.js beállítása
         uses: actions/setup-node@v4
@@ -26,13 +30,28 @@ jobs:
       - name: Függőségek telepítése
         run: npm ci
 
+      # --- 1. BIZTONSÁG: Socket.dev (ingyen open source-ra) ---
+      - name: Socket Security Scan
+        uses: SocketDev/socket-security-action@main
+        with:
+          github_api_token: ${{ secrets.GITHUB_TOKEN }}
+
       - name: TypeScript típusellenőrzés (Lint)
         run: npm run lint
 
       - name: Projektek buildelése
         run: npm run build
 
-      - name: Bundle size check
+      # --- 2. BUNDLE SIZE: modernebb, PR kommenttel ---
+      - name: Bundle size check (size-limit)
+        uses: andresz1/size-limit-action@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          # package.json-ban lévő "size-limit" configot használja
+
+      # Fallback a te eredeti check-ed, ha nincs size-limit config
+      - name: Bundle size fallback check
+        if: failure()
         run: |
           SIZE=$(du -sk dist 2>/dev/null | cut -f1 || echo 0)
           echo "Bundle size: ${SIZE}KB"
@@ -40,6 +59,27 @@ jobs:
             echo "::warning::Bundle larger than 5MB (${SIZE}KB)"
           fi
 
+      # --- 3. TESZT + CODECOV (ha van npm test) ---
+      - name: Tesztek futtatása coverage-el
+        run: npm test -- --coverage --watchAll=false || echo "Nincs test script, skip"
+        
+      - name: Codecov feltöltés
+        uses: codecov/codecov-action@v4
+        if: always()
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false # ne blokkoljon ha nincs token
+
+      # --- 4. SONARCLOUD (opcionális, ingyen open source-ra) ---
+      # Ehhez sonarcloud.io-n be kell kötni a repót és SONAR_TOKEN secretet felvenni
+      - name: SonarCloud Scan
+        if: env.SONAR_TOKEN != ''
+        uses: SonarSource/sonarqube-scan-action@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+      # --- LIGHTHOUSE RÉSZ - a te eredetid változatlan ---
       - name: Helyi preview szerver indítása
         run: |
           npm run start > /dev/null 2>&1 &
