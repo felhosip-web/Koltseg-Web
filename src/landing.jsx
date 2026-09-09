@@ -56,6 +56,15 @@ if (cellEditorRoot) {
     )
 }
 
+const workAppEditorRoot = document.getElementById('workAppEditorRoot');
+if (workAppEditorRoot) {
+    ReactDOM.createRoot(workAppEditorRoot).render(
+      <React.StrictMode>
+        <WorkEditorModal />
+      </React.StrictMode>,
+    )
+}
+
 const workAppHeaderRoot = document.getElementById('workAppHeaderRoot');
 if (workAppHeaderRoot) {
     ReactDOM.createRoot(workAppHeaderRoot).render(
