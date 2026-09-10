@@ -1128,7 +1128,7 @@ export class UIController {
             details.innerHTML = html;
             
             // Szinkronizáció engedélyezése
-            executeBtn.disabled = false;
+            executeBtn.disabled = (total === 0);
             executeBtn.dataset.mode = 'pull';
             document.getElementById('syncLed').className = 'w-3 h-3 rounded-full bg-blue-500 animate-pulse';
             statusText.textContent = `${total} elem letöltése a felhőből`;
@@ -1187,7 +1187,7 @@ export class UIController {
             details.innerHTML = html;
             
             // Szinkronizáció engedélyezése
-            executeBtn.disabled = false;
+            executeBtn.disabled = (total === 0);
             executeBtn.dataset.mode = 'push';
             document.getElementById('syncLed').className = 'w-3 h-3 rounded-full bg-emerald-500 animate-pulse';
             statusText.textContent = `${total} elem feltöltése a felhőbe`;
@@ -1248,7 +1248,7 @@ export class UIController {
             }
             
             // UI frissítése
-            this.app.renderer.renderTable();
+            this.app.refreshAllTabs?.();
             this.app.renderStats?.();
             this.app.remindersRenderer?.renderList?.();
             

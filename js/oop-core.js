@@ -1368,7 +1368,7 @@ export class CloudSync {
      * Pull minden táblából
      */
     async pullAll() {
-        const tables = ['items', 'months', 'entries', 'templates', 'reminders', 'incomings', 'incoming_senders'];
+        const tables = ['items', 'months', 'entries', 'templates', 'reminders', 'incomings', 'incoming_senders', 'works'];
         const result = {};
 
         this.tablesMissing = false;
@@ -1429,6 +1429,7 @@ export class CloudSync {
             { name: 'reminders', key: 'id', type: 'text' },
             { name: 'incomings', key: 'id', type: 'text' },
             { name: 'incoming_senders', key: 'id', type: 'text' },
+            { name: 'works', key: 'id', type: 'text' },
             { name: 'deleted_records', key: 'id', type: 'text' }
         ];
 
