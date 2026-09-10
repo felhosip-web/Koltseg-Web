@@ -4,7 +4,7 @@
 export class SyncManager {
     constructor(app) {
         this.app = app;
-        this.tables = ['items', 'months', 'entries', 'templates', 'reminders', 'incomings', 'incoming_senders'];
+        this.tables = ['items', 'months', 'entries', 'templates', 'reminders', 'incomings', 'incoming_senders', 'works'];
         // Használjuk a meglévő SyncService-t
         this.service = app.syncService;
         
