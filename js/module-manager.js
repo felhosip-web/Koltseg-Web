@@ -667,7 +667,7 @@ export class ModuleManager {
         };
         `;
 
-        const fxModuleScriptV11 = `
+        const fxModuleScriptV12 = `
         return {
             id: 'plugin_fx_calculator',
             name: 'EUR / HUF Árfolyam Kalkulátor',
@@ -691,20 +691,27 @@ export class ModuleManager {
                                 <h3 class="text-base font-bold text-gray-800 flex items-center gap-2">
                                     <i class="fas fa-coins text-emerald-500"></i> Valuta & Árfolyam Kalkulátor
                                 </h3>
-                                <p class="text-xs text-gray-500">Dinamikus Bővítmény Modul - Aktuális EUR árfolyam: <strong>\${rate} HUF</strong> - <span class="text-emerald-600 font-bold">v1.1.0</span></p>
+                                <p class="text-xs text-gray-500">Dinamikus Bővítmény Modul - Aktuális EUR árfolyam: <strong>\${rate} HUF</strong> - <span class="text-emerald-600 font-bold">v1.2.0</span></p>
                             </div>
                             <span class="px-2.5 py-1 bg-emerald-50 text-emerald-700 text-[10px] font-bold rounded-full uppercase border border-emerald-200">
                                 Aktív Modul
                             </span>
                         </div>
+                        <div class="mb-4">
+                            <label class="block text-xs font-bold text-gray-600 mb-1" for="fxDirectionSelect">Átváltás iránya:</label>
+                            <select id="fxDirectionSelect" class="w-full p-2.5 border rounded-lg text-sm font-bold text-gray-800 bg-white">
+                                <option value="eur-huf">EUR → HUF</option>
+                                <option value="huf-eur">HUF → EUR</option>
+                            </select>
+                        </div>
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 my-4">
                             <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
-                                <label class="block text-xs font-bold text-gray-600 mb-1">EUR Összeg:</label>
-                                <input type="number" id="fxEurInput" value="100" class="w-full p-2.5 border rounded-lg text-sm font-bold text-gray-800">
+                                <label id="fxAmountLabel" class="block text-xs font-bold text-gray-600 mb-1" for="fxAmountInput">EUR Összeg:</label>
+                                <input type="number" id="fxAmountInput" value="100" class="w-full p-2.5 border rounded-lg text-sm font-bold text-gray-800">
                             </div>
                             <div class="bg-emerald-50/50 p-4 rounded-xl border border-emerald-200">
-                                <label class="block text-xs font-bold text-emerald-800 mb-1">Eredmény (HUF):</label>
-                                <div id="fxHufResult" class="text-2xl font-black text-emerald-600 font-mono">\${(100 * rate).toLocaleString('hu-HU')} Ft</div>
+                                <label id="fxResultLabel" class="block text-xs font-bold text-emerald-800 mb-1">Eredmény (HUF):</label>
+                                <div id="fxResult" class="text-2xl font-black text-emerald-600 font-mono">\${(100 * rate).toLocaleString('hu-HU')} Ft</div>
                             </div>
                         </div>
                         <div class="mt-2 flex gap-1.5 flex-wrap">
@@ -714,16 +721,30 @@ export class ModuleManager {
                             <button type="button" data-preset="250" class="px-2.5 py-1 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-700 font-medium transition active:scale-95">250 €</button>
                         </div>
                     \`;
-                    const input = document.getElementById('fxEurInput');
-                    const res = document.getElementById('fxHufResult');
+                    const direction = document.getElementById('fxDirectionSelect');
+                    const input = document.getElementById('fxAmountInput');
+                    const amountLabel = document.getElementById('fxAmountLabel');
+                    const resultLabel = document.getElementById('fxResultLabel');
+                    const res = document.getElementById('fxResult');
                     
                     const updateVal = () => {
-                        const eur = parseFloat(input.value) || 0;
-                        res.textContent = (eur * rate).toLocaleString('hu-HU') + ' Ft';
+                        const amount = parseFloat(input.value) || 0;
+                        const isEurToHuf = direction.value === 'eur-huf';
+                        amountLabel.textContent = isEurToHuf ? 'EUR Összeg:' : 'HUF Összeg:';
+                        resultLabel.textContent = isEurToHuf ? 'Eredmény (HUF):' : 'Eredmény (EUR):';
+                        res.textContent = isEurToHuf
+                            ? (amount * rate).toLocaleString('hu-HU', { maximumFractionDigits: 0 }) + ' Ft'
+                            : (amount / rate).toLocaleString('hu-HU', { maximumFractionDigits: 2 }) + ' €';
+
+                        view.querySelectorAll('[data-preset]').forEach(btn => {
+                            btn.textContent = btn.getAttribute('data-preset') + (isEurToHuf ? ' €' : ' Ft');
+                        });
                     };
 
-                    if (input && res) {
+                    if (direction && input && amountLabel && resultLabel && res) {
                         input.addEventListener('input', updateVal);
+                        direction.addEventListener('change', updateVal);
+                        updateVal();
                     }
 
                     view.querySelectorAll('[data-preset]').forEach(btn => {
@@ -740,7 +761,7 @@ export class ModuleManager {
         `;
 
         if (id === 'plugin_quick_notes') return notesModuleScriptV12;
-        if (id === 'plugin_fx_calculator') return fxModuleScriptV11;
+        if (id === 'plugin_fx_calculator') return fxModuleScriptV12;
         if (id === 'plugin_shopping_list') return shoppingListModuleScript;
         
         // Dynamic built-ins upgrade mapping
