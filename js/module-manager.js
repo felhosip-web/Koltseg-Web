@@ -514,8 +514,8 @@ export class ModuleManager {
                 {
                     id: 'plugin_fx_calculator',
                     name: 'EUR / HUF Árfolyam Kalkulátor',
-                    version: '1.1.0',
-                    changelog: ['MNB élő árfolyam támogatása', 'Mentett egyéni előzmények', 'Reszponzív mobilnézet']
+                    version: '1.2.0',
+                    changelog: ['EUR -> HUF és HUF -> EUR irány választás', 'MNB élő árfolyam támogatása', 'Mentett egyéni előzmények', 'Reszponzív mobilnézet']
                 },
                 {
                     id: 'plugin_calculator',
@@ -671,10 +671,10 @@ export class ModuleManager {
         return {
             id: 'plugin_fx_calculator',
             name: 'EUR / HUF Árfolyam Kalkulátor',
-            version: '1.1.0',
+            version: '1.2.0',
             category: 'finance',
             author: 'KöltségWeb Lab',
-            description: 'Gyors euró-forint átváltó és számoló modul',
+            description: 'Gyors euró-forint és forint-euró átváltó és számoló modul',
             icon: 'fas fa-coins text-emerald-500',
             hasTab: true,
             tabConfig: {

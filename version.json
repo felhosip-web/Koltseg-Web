@@ -1,8 +1,25 @@
 {
-  "version": "7.0.18",
+  "version": "7.0.20",
   "build": "2026-09-02T19:42:32.675Z",
   "release": "stable",
   "changelog": [
+    {
+      "version": "7.0.20",
+      "date": "2026-09-10T11:59:36.157Z",
+      "changes": [
+        "✨ ÚJ: EUR / HUF Kalkulátor modul frissítve v1.2.0-ra",
+        "✨ ÚJ: Kétirányú átváltási lehetőség hozzáadása (EUR -> HUF és HUF -> EUR) az árfolyam modulban"
+      ]
+    },
+    {
+      "version": "7.0.19",
+      "date": "2026-09-10T11:39:09.593Z",
+      "changes": [
+        "✨ ÚJ: Munka nyilvántartás kereső (név és dátum alapján)",
+        "✨ ÚJ: Munka nyilvántartás nézet módosító (Táblázatos vagy Kártyás nézet)",
+        "🔧 A beállítások automatikusan szinkronizálódnak a felhőbe"
+      ]
+    },
     {
       "version": "7.0.18",
       "date": "2026-09-03",
