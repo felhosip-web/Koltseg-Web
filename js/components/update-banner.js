@@ -5,14 +5,14 @@ export function showUpdateBanner(newVersion) {
 
     const banner = document.createElement('div');
     banner.id = 'pwa-update-banner';
-    banner.className = 'fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-indigo-600 text-white px-4 py-3 rounded-2xl shadow-2xl z-[999999] flex items-center gap-4 animate-slide-up whitespace-nowrap';
+    banner.className = 'fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-indigo-600 text-white px-4 py-3 rounded-2xl shadow-2xl z-[999999] flex flex-col sm:flex-row items-center gap-3 sm:gap-4 animate-slide-up w-[90%] sm:w-auto text-center';
 
     const text = document.createElement('span');
-    text.className = 'text-sm font-bold flex items-center gap-2';
+    text.className = 'text-sm font-bold flex items-center gap-2 justify-center leading-tight';
     text.innerHTML = `<i class="fas fa-sync-alt fa-spin"></i> Új verzió elérhető (${newVersion})`;
 
     const button = document.createElement('button');
-    button.className = 'bg-white text-indigo-600 hover:bg-indigo-50 px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition shadow-sm';
+    button.className = 'bg-white text-indigo-600 hover:bg-indigo-50 px-4 py-2 sm:px-3 sm:py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition shadow-sm w-full sm:w-auto mt-1 sm:mt-0';
     button.textContent = 'Frissítés';
     button.onclick = async () => {
         button.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
