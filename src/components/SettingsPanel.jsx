@@ -667,6 +667,7 @@ export default function SettingsPanel() {
                                             localStorage.setItem('work_view_mode', val);
                                             localStorage.setItem('settings_updated_at', new Date().toISOString());
                                             window.dispatchEvent(new Event('app-data-updated'));
+                                            window.dispatchEvent(new Event('work-view-updated'));
                                         }}
                                     >
                                         <option value="table">Táblázatos (Alapértelmezett)</option>
