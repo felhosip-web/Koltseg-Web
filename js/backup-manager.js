@@ -80,7 +80,7 @@ export class BackupManager {
             this.lastBackupTime = Date.now();
             
             if (this.app.renderer?.updateFooterStatus) {
-                this.app.renderer.updateFooterStatus(
+                this.app.renderer?.updateFooterStatus(
                     `💾 Auto-mentés: ${new Date().toLocaleTimeString('hu-HU')}`, 
                     false
                 );
@@ -96,7 +96,7 @@ export class BackupManager {
                     if (result && result.success) {
                         console.log('[BACKUP] Google Drive sikeres.');
                         if (this.app.renderer?.updateFooterStatus) {
-                            this.app.renderer.updateFooterStatus(`☁️ GDrive mentve: ${new Date().toLocaleTimeString('hu-HU')}`, false);
+                            this.app.renderer?.updateFooterStatus(`☁️ GDrive mentve: ${new Date().toLocaleTimeString('hu-HU')}`, false);
                         }
                     }
                 }).catch(err => {
@@ -133,7 +133,7 @@ export class BackupManager {
         
         try {
             if (this.app.renderer?.updateFooterStatus) {
-                this.app.renderer.updateFooterStatus('Backup visszaállítása...', true);
+                this.app.renderer?.updateFooterStatus('Backup visszaállítása...', true);
             }
             
             const dbRaw = this.app.db?.db || this.app.db?._db;
@@ -198,19 +198,18 @@ export class BackupManager {
             this.app.workLogRenderer?.render?.();
             this.app.remindersRenderer?.renderList?.();
             this.app.incomingRenderer?.render?.();
-            this.app.renderStats?.();
             this.app.refreshAllTabs?.();
             
             this.app.hmiNotif.showToast('✅ Backup sikeresen visszaállítva!', 'success');
             if (this.app.renderer?.updateFooterStatus) {
-                this.app.renderer.updateFooterStatus('Backup restore kész', false);
+                this.app.renderer?.updateFooterStatus('Backup restore kész', false);
             }
             
         } catch (err) {
             console.error('[RESTORE ERROR]', err);
             this.app.hmiNotif.showToast(`❌ Visszaállítási hiba: ${err.message}`, 'error');
             if (this.app.renderer?.updateFooterStatus) {
-                this.app.renderer.updateFooterStatus('Backup restore hiba!', true);
+                this.app.renderer?.updateFooterStatus('Backup restore hiba!', true);
             }
         }
     }

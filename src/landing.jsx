@@ -12,6 +12,7 @@ import CellEditorModal from './components/CellEditorModal.jsx'
 import WorkAppHeader from './WorkAppHeader.jsx'
 import WorkAppList from './WorkAppList.jsx'
 import AiEntryModal from './components/AiEntryModal.jsx'
+import CostAppFooter from './CostAppFooter.jsx'
 import './index.css'
 
 const landingRoot = document.getElementById('appLandingScreenRoot');
@@ -99,6 +100,15 @@ if (hmiInputRoot) {
     ReactDOM.createRoot(hmiInputRoot).render(
       <React.StrictMode>
         <HmiInputModal />
+      </React.StrictMode>,
+    )
+}
+
+const costAppFooterRoot = document.getElementById('costAppFooterRoot');
+if (costAppFooterRoot) {
+    ReactDOM.createRoot(costAppFooterRoot).render(
+      <React.StrictMode>
+        <CostAppFooter />
       </React.StrictMode>,
     )
 }

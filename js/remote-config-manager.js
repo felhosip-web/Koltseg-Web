@@ -119,7 +119,7 @@ export class RemoteConfigManager {
         // ========================================================
         if (this.app.renderer?.updateFooterStatus) {
             const status = useCloud ? '☁️ Felhő: aktív' : '☁️ Felhő: kikapcsolva';
-            this.app.renderer.updateFooterStatus(status, false);
+            this.app.renderer?.updateFooterStatus(status, false);
         }
         
         // Supabase státusz frissítés

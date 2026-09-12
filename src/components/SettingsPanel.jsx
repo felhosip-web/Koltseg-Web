@@ -246,7 +246,7 @@ export default function SettingsPanel() {
                         Felhő & Beállítások</span>
                     <div className="flex items-center gap-3">
                         <span id="dbVersionBadge"
-                            className="text-[10px] font-mono bg-indigo-50 text-indigo-600 px-2.5 py-1 rounded-md border border-indigo-100 font-bold app-version-label">v7.0.18</span>
+                            className="text-[10px] font-mono bg-indigo-50 text-indigo-600 px-2.5 py-1 rounded-md border border-indigo-100 font-bold app-version-label">v7.0.20</span>
                         <button type="button" id="btnCloseSettingsModal" onClick={(e) => handleClose(e)}
                             className="w-8 h-8 flex items-center justify-center bg-gray-100 hover:bg-gray-200 rounded-lg text-gray-500 transition"
                             title="Bezárás">
@@ -650,6 +650,36 @@ export default function SettingsPanel() {
                                 className="px-2.5 py-1 bg-slate-200 hover:bg-slate-300 text-slate-600 font-bold rounded-lg transition">Visszaállítás
                                 alapértelmezettre</button>
                         </div>
+
+                        {/* Work App View Mode */}
+                        <div className="bg-white p-5 rounded-xl border border-slate-100 shadow-sm flex flex-col justify-between mt-6">
+                            <div>
+                                <div className="flex items-center justify-between mb-3">
+                                    <span className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                                        <i className="fas fa-briefcase text-indigo-500"></i> Munka Nyilvántartás Nézet
+                                    </span>
+                                    <select
+                                        id="workAppViewModeSelect"
+                                        className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 focus:bg-white transition-all outline-none"
+                                        defaultValue={localStorage.getItem('work_view_mode') || 'table'}
+                                        onChange={(e) => {
+                                            const val = e.target.value;
+                                            localStorage.setItem('work_view_mode', val);
+                                            window.dispatchEvent(new Event('app-data-updated'));
+                                            window.dispatchEvent(new Event('work-view-updated'));
+                                            window.dispatchEvent(new Event('work-view-updated'));
+                                        }}
+                                    >
+                                        <option value="table">Táblázatos (Alapértelmezett)</option>
+                                        <option value="card">Kártyás</option>
+                                    </select>
+                                </div>
+                                <p className="text-[10px] text-slate-500 leading-normal max-w-sm">
+                                    Válaszd ki, hogyan jelenjenek meg a munkák a listában. Kis képernyőn a táblázat vízszintesen görgethető marad.
+                                </p>
+                            </div>
+                        </div>
+
                     </div>
                 </div>
 

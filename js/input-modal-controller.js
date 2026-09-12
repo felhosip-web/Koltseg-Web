@@ -58,7 +58,7 @@ export class InputModalController {
             await this.app.items.load();
 
             this.app.hmiNotif.showToast(`✅ "${val}" kategória létrehozva`, 'success');
-            this.app.renderer.renderTable();           // Táblázat frissítése
+            this.app.renderer?.renderTable?.();           // Táblázat frissítése
 
         } else if (this.modalType === 'month') {
             // === ÚJ HÓNAP ===
@@ -84,7 +84,7 @@ export class InputModalController {
             await this.app.months.load();
 
             this.app.hmiNotif.showToast(`✅ ${val} hónap megnyitva`, 'success');
-            this.app.renderer.renderTable();           // Táblázat frissítése
+            this.app.renderer?.renderTable?.();           // Táblázat frissítése
         } else {
             return false;
         }
@@ -99,7 +99,7 @@ export class InputModalController {
         try {
             await this.app.items.update(itemId, { name: newName });
             await this.app.items.load();
-            this.app.renderer.renderTable();
+            this.app.renderer?.renderTable?.();
             this.app.hmiNotif.showToast('Kategória átnevezve!', 'success');
             return true;
         } catch (err) {

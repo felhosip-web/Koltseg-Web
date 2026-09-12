@@ -580,6 +580,7 @@ export class SyncService {
                     ai_model: localStorage.getItem('ai_model') || 'gemini-3.5-flash',
                     default_eur_rate: localStorage.getItem('default_eur_rate') || '400',
                     use_live_eur: localStorage.getItem('use_live_eur') || 'true',
+                    work_view_mode: localStorage.getItem('work_view_mode') || 'table',
                     settings_updated_at: localStorage.getItem('settings_updated_at') || '1970-01-01T00:00:00.000Z'
                 };
                 
@@ -602,6 +603,7 @@ export class SyncService {
                         if (cloudSettings.ai_model !== undefined) localStorage.setItem('ai_model', cloudSettings.ai_model);
                         if (cloudSettings.default_eur_rate !== undefined) localStorage.setItem('default_eur_rate', String(cloudSettings.default_eur_rate));
                         if (cloudSettings.use_live_eur !== undefined) localStorage.setItem('use_live_eur', String(cloudSettings.use_live_eur));
+                        if (cloudSettings.work_view_mode !== undefined) localStorage.setItem('work_view_mode', cloudSettings.work_view_mode);
                         localStorage.setItem('settings_updated_at', cloudSettingsRow.updated_at);
                         
                         // Frissítjük az aktív konfigurációkat
@@ -942,7 +944,6 @@ export class SyncService {
             app.renderer?.renderSummary?.();
             app.remindersRenderer?.renderList?.();
             app.incomingRenderer?.render?.();
-            app.renderStats?.();
             app.refreshAllTabs?.();
 
             // Ha a charts tab aktív, frissítsük
@@ -952,7 +953,6 @@ export class SyncService {
 
             // Ha a statisztika tab aktív, frissítsük
             if (app.activeTab === 'stats') {
-                app.renderStats?.();
             }
 
             // Reminder státusz frissítése

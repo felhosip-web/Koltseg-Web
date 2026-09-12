@@ -186,7 +186,7 @@ class App {
             this.backgroundTasks.pause?.();
         }
         if (this.isDesktop()) {
-            if (this.chartsRenderer) this.chartsRenderer._destroyOldCharts?.();
+            this.chartsRenderer?._destroyOldCharts?.();
         }
     }
 
@@ -197,9 +197,7 @@ class App {
         }
         this.updateReminderStatus?.();
 
-        if (this.tabStateMachine && this.tabStateMachine[this.activeTab]) {
-            this.tabStateMachine[this.activeTab]();
-        }
+        this.tabStateMachine?.[this.activeTab]?.();
 
         if (this.syncManager?.hasPendingChanges?.() && navigator.onLine) {
             this.syncManager.processPendingChanges?.().catch(() => {});
@@ -312,9 +310,7 @@ class App {
 
             // Dashboard alapértelmezett render
             setTimeout(() => {
-                if (this.tabStateMachine && this.tabStateMachine.dashboard) {
-                    this.tabStateMachine.dashboard();
-                }
+                this.tabStateMachine?.dashboard?.();
             }, 100);
 
             console.log('[APP] ✅ Alkalmazás sikeresen elindult!');
@@ -652,12 +648,7 @@ destroy() {
         }
 
         // Rendererek takarítása – NE nullázzuk ki a managereket!
-        if (this.chartsRenderer && typeof this.chartsRenderer.destroy === 'function') {
-            this.chartsRenderer.destroy();
-        }
-        if (this.remindersRenderer && typeof this.remindersRenderer.destroy === 'function') {
-            this.remindersRenderer.destroy();
-        }
+        this.chartsRenderer?.destroy?.();
 
         if (this.backgroundTasks && typeof this.backgroundTasks.destroy === 'function') {
             this.backgroundTasks.destroy();
@@ -716,9 +707,7 @@ async reload() {
 
         // UI frissítések (React kezeli)
         
-        if (this.remindersRenderer && typeof this.remindersRenderer.renderList === 'function') {
-            this.remindersRenderer.renderList();
-        }
+        this.remindersRenderer?.renderList?.();
         
         window.dispatchEvent(new Event('app-data-updated'));
         
@@ -727,18 +716,12 @@ async reload() {
         }
         
         if (this.activeTab === 'dashboard') {
-            if (this.tabStateMachine && this.tabStateMachine.dashboard) {
-                this.tabStateMachine.dashboard();
-            }
-        }
+            this.tabStateMachine?.dashboard?.();
+    }
 
-        if (this.activeTab === 'charts' && this.chartsRenderer && typeof this.chartsRenderer.renderAll === 'function') {
-            this.chartsRenderer.renderAll(this.currentFilter);
-        }
+        if (this.activeTab === 'charts') { this.chartsRenderer?.renderAll?.(this.currentFilter); }
         
-        if (this.incomingRenderer && typeof this.incomingRenderer.render === 'function') {
-            this.incomingRenderer.render();
-        }
+        this.incomingRenderer?.render?.();
 
         this.hmiNotif.showToast('✅ Adatok frissítve!', 'success');
         console.log('[APP] ✅ Újratöltés kész');
@@ -757,28 +740,20 @@ refreshAllTabs() {
 
     // 1. Dashboard
     if (this.activeTab === 'dashboard') {
-        if (this.tabStateMachine && this.tabStateMachine.dashboard) {
-            this.tabStateMachine.dashboard();
-        }
+        this.tabStateMachine?.dashboard?.();
     }
 
     // 2. Táblázat (VirtualTableRenderer)
 
 
     // 3. Kimutatások (Charts)
-    if (this.chartsRenderer && typeof this.chartsRenderer.renderAll === 'function') {
-        this.chartsRenderer.renderAll(this.currentFilter || 'all');
-    }
+    this.chartsRenderer?.renderAll?.(this.currentFilter || 'all');
 
     // 4. Határidők
-    if (this.remindersRenderer && typeof this.remindersRenderer.renderList === 'function') {
-        this.remindersRenderer.renderList();
-    }
+    this.remindersRenderer?.renderList?.();
 
     // 5. Bejövő utalások
-    if (this.incomingRenderer && typeof this.incomingRenderer.render === 'function') {
-        this.incomingRenderer.render();
-    }
+    this.incomingRenderer?.render?.();
 
     // 6. Statisztika (React)
     window.dispatchEvent(new Event('app-data-updated'));

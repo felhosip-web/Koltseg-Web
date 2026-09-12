@@ -47,7 +47,7 @@ export class DataMaintenanceController {
         if (!secondConfirm) return;
 
         try {
-            this.app.renderer.updateFooterStatus('Adatbázis teljes törlése...', true);
+            this.app.renderer?.updateFooterStatus('Adatbázis teljes törlése...', true);
 
             const dbRaw = this.app.db.db || this.app.db._db;
             if (!dbRaw) throw new Error('Nincs adatbázis kapcsolat!');
@@ -97,27 +97,26 @@ export class DataMaintenanceController {
                 this.app.workLogManager?.load?.()
             ]);
 
-            this.app.renderer.renderTable();
+            this.app.renderer?.renderTable?.();
             this.app.workLogRenderer?.render?.();
             this.app.remindersRenderer?.renderList?.();
             this.app.incomingRenderer?.render?.();
-            this.app.renderStats?.();
             this.app.refreshAllTabs?.();
 
             this.app.hmiNotif.showToast('🗑️ Minden helyi adat törölve!', 'error');
-            this.app.renderer.updateFooterStatus('Adatbázis kiürítve', false);
+            this.app.renderer?.updateFooterStatus('Adatbázis kiürítve', false);
 
         } catch (err) {
             console.error('[WIPE DATABASE ERROR]', err);
             await this.app.hmiNotif.showInfo('❌ Törlési hiba', err.message || 'Ismeretlen hiba');
-            this.app.renderer.updateFooterStatus('Törlési hiba!', true);
+            this.app.renderer?.updateFooterStatus('Törlési hiba!', true);
         }
     }
 
     // ==================== MANUÁLIS BACKUP ====================
     async performManualBackup() {
         try {
-            this.app.renderer.updateFooterStatus('Manuális backup készítése...', false);
+            this.app.renderer?.updateFooterStatus('Manuális backup készítése...', false);
 
             const backupData = this._buildBackupData();
 
@@ -128,7 +127,7 @@ export class DataMaintenanceController {
             anchor.click();
 
             this.app.hmiNotif.showToast('✅ Manuális backup letöltve!', 'success');
-            this.app.renderer.updateFooterStatus('Backup kész', false);
+            this.app.renderer?.updateFooterStatus('Backup kész', false);
 
         } catch (err) {
             console.error('[MANUAL BACKUP ERROR]', err);
@@ -149,8 +148,8 @@ export class DataMaintenanceController {
     // ==================== CACHE TAKARÍTÁS ====================
     async clearCaches() {
         try {
-            if (this.app.renderer?.clearCache) this.app.renderer.clearCache();
-            if (this.app.chartsRenderer?.destroy) this.app.chartsRenderer.destroy();
+            if (this.app.renderer?.clearCache) this.app.renderer?.clearCache?.();
+            if (this.app.chartsRenderer?.destroy) this.app.chartsRenderer?.destroy?.();
             if (this.app.backgroundTasks?.destroy) this.app.backgroundTasks.destroy();
 
             this.app.hmiNotif.showToast('✅ Cache-ek takarítva', 'success');
