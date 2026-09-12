@@ -32,6 +32,32 @@ export class UIController {
     }
     
     // ========================================================
+    // === EUR LED & STATUS ===
+    // ========================================================
+    /**
+     * EUR árfolyam LED és státusz frissítése
+     * @param {string|number} rate - Az árfolyam értéke
+     * @param {string} mode - 'live' vagy 'fallback'
+     */
+    updateLed(rate, mode) {
+        const eurLed = document.getElementById('eurLed');
+        const eurStatusText = document.getElementById('eurStatusText');
+
+        if (!eurLed || !eurStatusText) return;
+
+        if (mode === 'live') {
+            eurLed.className = 'w-3 h-3 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]';
+            eurStatusText.innerHTML = `EUR: <strong>${rate} Ft</strong> <span class="text-[9px] uppercase tracking-wider text-emerald-600 ml-1">(Élő)</span>`;
+        } else {
+            eurLed.className = 'w-3 h-3 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.6)]';
+            eurStatusText.innerHTML = `EUR: <strong>${rate} Ft</strong> <span class="text-[9px] uppercase tracking-wider text-blue-600 ml-1">(Fix)</span>`;
+        }
+
+        // Dispatch event for React components that might need it
+        window.dispatchEvent(new CustomEvent('eur-rate-updated', { detail: { rate, mode } }));
+    }
+
+    // ========================================================
     // === ÚJ: SYNC QUEUE BADGE ===
     // ========================================================
     /**
@@ -616,11 +642,11 @@ export class UIController {
             // Ha kikapcsolták az online árfolyamot, akkor azonnal alkalmazzuk a mentett biztonsági árfolyamot
             if (!useLiveEur && this.app.config) {
                 this.app.config.eurRate = newRate;
-                this.app.renderer?.updateLed?.(newRate, 'fallback');
+                this.updateLed(newRate, 'fallback');
             } else if (this.app.config) {
                 // Egyébként kérjük le azonnal az online árfolyamot
                 await this.app.config.watchDogEur?.((rate, mode) => {
-                    this.app.renderer?.updateLed?.(rate, mode);
+                    this.updateLed(rate, mode);
                 });
             }
 
