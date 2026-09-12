@@ -97,9 +97,18 @@ function CategoryCell({ item }) {
     return (
         <td className="px-6 py-4 font-bold text-gray-900 bg-gray-50 border-r border-gray-100 md:sticky md:left-0 md:z-10 dblclick-row-purge cursor-pointer hover:bg-red-50 transition-colors min-w-[100px] w-[1%] whitespace-nowrap"
             data-itemid={item.id} data-itemname={item.name}
-            onDoubleClick={(e) => {
+            onDoubleClick={async (e) => {
                 if (e.target.closest('button')) return;
-                window.app?.uiController?.handleRowDeleteSequence(item.id, item.name);
+                if (window.app?.hmiNotif?.showCategoryActionsModal) {
+                    const action = await window.app.hmiNotif.showCategoryActionsModal(item.name);
+                    if (action === 'rename') {
+                        document.dispatchEvent(new CustomEvent('hmi-input-open', { detail: { type: 'rename', itemId: item.id, currentName: item.name } }));
+                    } else if (action === 'delete') {
+                        window.app?.uiController?.handleRowDeleteSequence(item.id, item.name);
+                    }
+                } else {
+                    window.app?.uiController?.handleRowDeleteSequence(item.id, item.name);
+                }
             }}
         >
             <div className="flex items-center gap-3">

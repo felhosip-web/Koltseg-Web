@@ -5,7 +5,41 @@ import React from 'react';
  * Shows a save status LED, last save timestamp, and version information with debug toggle button.
  * @returns {JSX.Element} The footer component
  */
+import { useState, useEffect } from 'react';
+
 export default function CostAppFooter() {
+    const [lastSave, setLastSave] = useState('Soha');
+
+    useEffect(() => {
+        const updateTime = () => {
+            if (window.app?.syncService?.lastSyncTime) {
+                const date = new Date(window.app.syncService.lastSyncTime);
+                setLastSave(date.toLocaleTimeString('hu-HU', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+            } else {
+                setLastSave('Soha');
+            }
+        };
+
+        // Initial check
+        updateTime();
+
+        // Listen for sync completion and queue changes
+        const handleSyncEvent = () => updateTime();
+
+        window.addEventListener('app-data-updated', handleSyncEvent);
+        let unsubscribeQueue = null;
+        if (window.app?.syncService?.onQueueChange) {
+            unsubscribeQueue = window.app.syncService.onQueueChange(handleSyncEvent);
+        }
+
+        return () => {
+            window.removeEventListener('app-data-updated', handleSyncEvent);
+            if (unsubscribeQueue) {
+                unsubscribeQueue();
+            }
+        };
+    }, []);
+
     return (
         <footer
             className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-4 py-2 text-xs text-gray-600 flex items-center justify-between z-40">
@@ -16,7 +50,7 @@ export default function CostAppFooter() {
                     Online</span>
             </div>
             <div className="font-mono text-[10px] text-gray-400">
-                Utolsó mentés: <span id="lastSaveTime">Soha</span>
+                Utolsó mentés: <span id="lastSaveTime">{lastSave}</span>
             </div>
             <div className="text-gray-400 relative p-1" id="debugToggleBtnContainer">
                 Költségnyilvántartó <span className="app-version-label">v7.0.20</span>
