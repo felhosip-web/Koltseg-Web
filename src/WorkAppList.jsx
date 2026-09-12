@@ -22,7 +22,9 @@ export default function WorkAppList() {
             setViewMode(localStorage.getItem('work_view_mode') || 'table');
         };
         window.addEventListener('app-data-updated', updateViewMode);
-        return () => window.removeEventListener('app-data-updated', updateViewMode);
+        window.addEventListener('storage', updateViewMode);
+        window.addEventListener('work-view-updated', updateViewMode);
+        return () => { window.removeEventListener('app-data-updated', updateViewMode); window.removeEventListener('storage', updateViewMode); window.removeEventListener('work-view-updated', updateViewMode); }
     }, []);
 
     const filteredWorks = works.filter(w => {

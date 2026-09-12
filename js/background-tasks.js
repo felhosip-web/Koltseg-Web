@@ -165,7 +165,7 @@ export class BackgroundTaskManager {
         const runFetch = async () => {
             if (!this.isActive) return;
             await this.app.config?.watchDogEur?.((rate, mode) => {
-                this.app.uiController?.updateLed?.(rate, mode);
+                this.app.renderer?.updateLed?.(rate, mode);
             });
         };
 
