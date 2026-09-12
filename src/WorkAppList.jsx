@@ -32,6 +32,11 @@ export default function WorkAppList() {
         const matchDate = !dateSearch || (w.date || '').includes(dateSearch);
         return matchName && matchDate;
     });
+    const hasActiveFilters = Boolean(nameSearch || dateSearch);
+    const emptyStateTitle = hasActiveFilters ? 'Nincs a szűrésnek megfelelő munka' : 'Nincsenek rögzített munkák';
+    const emptyStateGuidance = hasActiveFilters
+        ? 'Módosítsa vagy törölje a szűrési feltételeket!'
+        : 'Kattintson az "Új munka felvitele" gombra új tétel rögzítéséhez!';
 
     const handleRowClick = (id) => {
         if (window.app?.workLogRenderer?.openModal) {
@@ -105,8 +110,8 @@ export default function WorkAppList() {
                         <div className="col-span-full p-12 bg-white rounded-3xl shadow-xl border border-gray-100 text-center text-gray-400 italic">
                             <div className="flex flex-col items-center gap-2">
                                 <i className="fas fa-briefcase text-4xl text-gray-200 animate-pulse"></i>
-                                <span className="text-sm font-semibold text-gray-500">Nincsenek rögzített munkák</span>
-                                <span className="text-xs">Kattintson az "Új munka felvitele" gombra új tétel rögzítéséhez!</span>
+                                <span className="text-sm font-semibold text-gray-500">{emptyStateTitle}</span>
+                                <span className="text-xs">{emptyStateGuidance}</span>
                             </div>
                         </div>
                     ) : (
@@ -212,8 +217,8 @@ export default function WorkAppList() {
                                         <td colSpan="8" className="p-12 text-center text-gray-400 italic">
                                             <div className="flex flex-col items-center gap-2">
                                                 <i className="fas fa-briefcase text-4xl text-gray-200 animate-pulse"></i>
-                                                <span className="text-sm font-semibold text-gray-500">Nincsenek rögzített munkák</span>
-                                                <span className="text-xs">Kattintson az "Új munka felvitele" gombra új tétel rögzítéséhez!</span>
+                                                <span className="text-sm font-semibold text-gray-500">{emptyStateTitle}</span>
+                                                <span className="text-xs">{emptyStateGuidance}</span>
                                             </div>
                                         </td>
                                     </tr>

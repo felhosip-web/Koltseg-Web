@@ -17,15 +17,16 @@
     {
       "id": "plugin_fx_calculator",
       "name": "EUR / HUF Árfolyam Kalkulátor",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "changelog": [
-        "Már élő MNB árfolyam lekérdezés támogatása",
+        "EUR -> HUF és HUF -> EUR irány választás",
+        "MNB élő árfolyam támogatása",
         "Mentett egyéni átváltási előzmények",
-        "Reszponzívabb mobilnézet"
+        "Reszponzív mobilnézet"
       ],
       "category": "finance",
       "author": "KöltségWeb Lab",
-      "description": "Gyors euró-forint átváltó és számoló modul",
+      "description": "Gyors euró-forint és forint-euró átváltó és számoló modul",
       "icon": "fas fa-coins text-emerald-500"
     },
     {
