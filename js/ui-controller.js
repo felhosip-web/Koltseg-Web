@@ -586,7 +586,7 @@ export class UIController {
             this.app.renderer?.updateFooterStatus('Mentés elutasítva', true);
             return;
         }
-        this.app.renderer.updateFooterStatus('Beállítások mentése...', false);
+        this.app.renderer?.updateFooterStatus('Beállítások mentése...', false);
         console.log('[SETTINGS] _handleSettingsSave invoked');
         try {
             const newUrl = document.getElementById('supabaseUrlInput')?.value?.trim() || '';
@@ -631,12 +631,12 @@ export class UIController {
             localStorage.setItem('settings_updated_at', new Date().toISOString());
             this.app.hmiNotif?.showToast('Beállítások sikeresen rögzítve!', 'success');
             this.togglePanel('settingsPanel');
-            this.app.renderer.renderTable();
-            this.app.renderer.updateFooterStatus('Rendszer üzemkész - Árfolyam frissítve', false);
+            this.app.renderer?.renderTable?.();
+            this.app.renderer?.updateFooterStatus('Rendszer üzemkész - Árfolyam frissítve', false);
         } catch (err) {
             console.error('[SETTINGS SAVE ERR]', err);
             this.app.hmiNotif?.showToast('Hiba a mentés során!', 'error');
-            this.app.renderer.updateFooterStatus('MENTÉSI HIBA!', true);
+            this.app.renderer?.updateFooterStatus('MENTÉSI HIBA!', true);
         }
     }
 
@@ -863,13 +863,13 @@ export class UIController {
              });
         } catch (err) {
             console.error('[HMI PURGE ERROR] Modal hiba:', err);
-            this.app.renderer.updateFooterStatus('Hiba a megerősítő ablaknál', true);
+            this.app.renderer?.updateFooterStatus('Hiba a megerősítő ablaknál', true);
             return;
         }
 
         if (confirmed) {
             try {
-                this.app.renderer.updateFooterStatus('Tranzakciók törlése...', false);
+                this.app.renderer?.updateFooterStatus('Tranzakciók törlése...', false);
                 for (const entry of associatedEntries) {
                     await this.app.entries.deleteEntry(entry.id).catch(e => console.warn('Entry már törölve:', entry.id));
                 }
@@ -880,14 +880,14 @@ export class UIController {
 
                 window.dispatchEvent(new Event('app-data-updated'));
                 this.app.hmiNotif.showToast(`"${itemName}" sikeresen eltávolítva.`, 'success');
-                this.app.renderer.updateFooterStatus('Sikeres fizikai törlés', false);
+                this.app.renderer?.updateFooterStatus('Sikeres fizikai törlés', false);
             } catch (error) {
                 console.error('[HMI PURGE CRITICAL ERROR]', error);
                 this.app.hmiNotif.showToast('Hiba törlés közben.', 'error');
-                this.app.renderer.updateFooterStatus('Törlési hiba', true);
+                this.app.renderer?.updateFooterStatus('Törlési hiba', true);
             } finally {
-                if (typeof this.app.renderer.renderSummary === 'function') {
-                    this.app.renderer.renderSummary();
+                if (this.app.renderer && typeof this.app.renderer?.renderSummary === 'function') {
+                    this.app.renderer?.renderSummary?.();
                 }
             }
         }
@@ -909,7 +909,7 @@ export class UIController {
 
         if (confirmed) {
             try {
-                this.app.renderer.updateFooterStatus('Havi tranzakciók törlése...', false);
+                this.app.renderer?.updateFooterStatus('Havi tranzakciók törlése...', false);
                 for (const entry of associatedEntries) {
                     await this.app.entries.deleteEntry(entry.id).catch(e => console.warn('Entry már törölve:', entry.id));
                 }
@@ -920,11 +920,11 @@ export class UIController {
 
                 window.dispatchEvent(new Event('app-data-updated'));
                 this.app.hmiNotif.showToast(`"${month}" hónap sikeresen eltávolítva.`, 'success');
-                this.app.renderer.updateFooterStatus('Sikeres fizikai törlés', false);
+                this.app.renderer?.updateFooterStatus('Sikeres fizikai törlés', false);
             } catch (error) {
                 console.error('[HMI PURGE MONTH CRITICAL ERROR]', error);
                 this.app.hmiNotif.showToast('Hiba a hónap törlésekor.', 'error');
-                this.app.renderer.updateFooterStatus('Törlési hiba', true);
+                this.app.renderer?.updateFooterStatus('Törlési hiba', true);
             } finally {
                 if (typeof this.app.refreshAllTabs === 'function') {
                     this.app.refreshAllTabs();
