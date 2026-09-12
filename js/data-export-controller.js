@@ -292,7 +292,6 @@ export class DataExportController {
         this.app.workLogRenderer?.render?.();
         this.app.remindersRenderer?.renderList?.();
         this.app.incomingRenderer?.render?.();
-        this.app.renderStats?.();
         this.app.refreshAllTabs?.();
 
         this.app.hmiNotif.showToast('✅ Backup sikeresen visszaállítva!', 'success');

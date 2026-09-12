@@ -912,7 +912,7 @@ export class UIController {
                 this.app.hmiNotif.showToast('Hiba törlés közben.', 'error');
                 this.app.renderer?.updateFooterStatus('Törlési hiba', true);
             } finally {
-                if (this.app.renderer && typeof this.app.renderer?.renderSummary === 'function') {
+                if (typeof this.app.renderer?.renderSummary === 'function') {
                     this.app.renderer?.renderSummary?.();
                 }
             }
@@ -1004,7 +1004,7 @@ export class UIController {
                 if (repairRes.status === 'ok') {
                     this.app.hmiNotif?.showNotification?.('Sikeres gyógyítás!', repairRes.message, 'success');
                     this.app.renderer?.renderTable?.();
-                    if (this.app.incomingRenderer) this.app.incomingRenderer.render();
+                    if (this.app.incomingRenderer) this.app.incomingRenderer?.render?.();
                     
                     setTimeout(() => this._runAuditAndShow(), 1200);
                 } else {
@@ -1275,7 +1275,6 @@ export class UIController {
             
             // UI frissítése
             this.app.refreshAllTabs?.();
-            this.app.renderStats?.();
             this.app.remindersRenderer?.renderList?.();
             
             setTimeout(() => {

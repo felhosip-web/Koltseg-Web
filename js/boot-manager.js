@@ -52,7 +52,7 @@ export class BootManager {
     async _runBackgroundBootTasks() {
         console.log('[BOOT-BACKGROUND] Háttér adatbetöltés indítása...');
         try {
-            if (this.app.renderer && typeof this.app.renderer?.updateFooterStatus === 'function') {
+            if (typeof this.app.renderer?.updateFooterStatus === 'function') {
                 this.app.renderer?.updateFooterStatus('Adatok töltődnek...', true);
             }
 
@@ -60,21 +60,15 @@ export class BootManager {
 
             console.log('[BOOT-BACKGROUND] Adatok betöltve, UI frissítése...');
             // UI frissítése az adatok betöltése után
-            if (this.app.renderer && typeof this.app.renderer?.renderTable === "function") {
+            if (typeof this.app.renderer?.renderTable === "function") {
                 this.app.renderer?.renderTable?.();
             }
             window.dispatchEvent(new Event('app-data-updated'));
-            if (this.app.updateReminderStatus && typeof this.app.updateReminderStatus === 'function') {
-                this.app.updateReminderStatus();
-            }
-            if (this.app.workLogRenderer && typeof this.app.workLogRenderer.render === 'function') {
-                this.app.workLogRenderer.render();
-            }
-            if (this.app.tabStateMachine && this.app.activeTab && this.app.tabStateMachine[this.app.activeTab]) {
-                this.app.tabStateMachine[this.app.activeTab]();
-            }
+            this.app.updateReminderStatus?.();
+            this.app.workLogRenderer?.render?.();
+            this.app.tabStateMachine?.[this.app.activeTab]?.();
 
-            if (this.app.renderer && typeof this.app.renderer?.updateFooterStatus === 'function') {
+            if (typeof this.app.renderer?.updateFooterStatus === 'function') {
                 this.app.renderer?.updateFooterStatus('Adatok betöltve', false);
             }
 
@@ -85,12 +79,12 @@ export class BootManager {
                 await this._syncData();
                 await this._initBackup();
 
-                if (this.app.renderer && typeof this.app.renderer?.updateFooterStatus === 'function') {
+                if (typeof this.app.renderer?.updateFooterStatus === 'function') {
                     this.app.renderer?.updateFooterStatus('Minden rendszer üzemkész', false);
                 }
             } catch (serviceError) {
                 console.error('[BOOT-BACKGROUND] Hiba a háttérszolgáltatások (felhő/szinkron/backup) indításakor:', serviceError);
-                if (this.app.renderer && typeof this.app.renderer?.updateFooterStatus === 'function') {
+                if (typeof this.app.renderer?.updateFooterStatus === 'function') {
                     this.app.renderer?.updateFooterStatus('Háttérszolgáltatási hiba', false);
                 }
             }
@@ -98,7 +92,7 @@ export class BootManager {
         } catch (error) {
             console.error('[BOOT-BACKGROUND] Hiba a háttérbetöltés során:', error);
             this.app.hmiNotif?.showToast('Az adatok betöltése nem sikerült!', 'error');
-            if (this.app.renderer && typeof this.app.renderer?.updateFooterStatus === 'function') {
+            if (typeof this.app.renderer?.updateFooterStatus === 'function') {
                 this.app.renderer?.updateFooterStatus('Adatbetöltési hiba', false);
             }
         }
@@ -139,19 +133,15 @@ export class BootManager {
             await this.app.remindersApp.boot(this.app);
         }
         
-        if (this.app.renderer && typeof this.app.renderer?.renderTable === "function") {
+        if (typeof this.app.renderer?.renderTable === "function") {
             this.app.renderer?.renderTable?.();
         }
         window.dispatchEvent(new Event('app-data-updated'));
 
-        if (this.app.updateReminderStatus && typeof this.app.updateReminderStatus === 'function') {
-            this.app.updateReminderStatus();
-        }
+        this.app.updateReminderStatus?.();
         
         // Initial Work Log rendering
-        if (this.app.workLogRenderer && typeof this.app.workLogRenderer.render === 'function') {
-            await this.app.workLogRenderer.render();
-        }
+        this.app.workLogRenderer?.render?.();
 
         // Initialize Landing Page Module switcher
         this._initLandingPage();

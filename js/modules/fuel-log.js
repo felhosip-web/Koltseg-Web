@@ -428,10 +428,10 @@ return {
                                 app.refreshAllTabs();
                             } else if (typeof app.refreshUI === 'function') {
                                 await app.refreshUI();
-                            } else if (app.renderer && typeof app.renderer.renderTable === 'function') {
-                                app.renderer.renderTable();
-                            } else if (app.renderer && typeof app.renderer.render === 'function') {
-                                app.renderer.render();
+                            } else if (typeof app.renderer?.renderTable === 'function') {
+                                app.renderer?.renderTable?.();
+                            } else if (typeof app.renderer?.render === 'function') {
+                                app.renderer?.render?.();
                             }
 
                             if (existingEntries && existingEntries.length > 0) {

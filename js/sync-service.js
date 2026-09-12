@@ -944,7 +944,6 @@ export class SyncService {
             app.renderer?.renderSummary?.();
             app.remindersRenderer?.renderList?.();
             app.incomingRenderer?.render?.();
-            app.renderStats?.();
             app.refreshAllTabs?.();
 
             // Ha a charts tab aktív, frissítsük
@@ -954,7 +953,6 @@ export class SyncService {
 
             // Ha a statisztika tab aktív, frissítsük
             if (app.activeTab === 'stats') {
-                app.renderStats?.();
             }
 
             // Reminder státusz frissítése

@@ -310,7 +310,7 @@ export class RemindersApp {
             this._updateReminder();
         });
 
-        this.renderer.renderList();
+        this.renderer?.renderList?.();
         console.log('[REMINDERS] Reminders subsystem booted successfully.');
     }
 
@@ -346,8 +346,8 @@ export class RemindersApp {
         if (document.getElementById('reminderForm')) {
             document.getElementById('reminderForm').reset();
         }
-        if (this.renderer && this.renderer.renderList) {
-            this.renderer.renderList();
+        if (this.renderer && this.renderer?.renderList) {
+            this.renderer?.renderList?.();
         }
         this.app.updateReminderStatus?.();
         this.hmiNotif.showToast('Határidő rögzítve!', 'success');
@@ -391,8 +391,8 @@ export class RemindersApp {
         if (document.getElementById('editReminderModal')) {
             document.getElementById('editReminderModal').classList.add('hidden');
         }
-        if (this.renderer && this.renderer.renderList) {
-            this.renderer.renderList();
+        if (this.renderer && this.renderer?.renderList) {
+            this.renderer?.renderList?.();
         }
         this.app.updateReminderStatus?.();
         this.hmiNotif.showToast('Határidő frissítve!', 'success');
@@ -404,7 +404,7 @@ export class RemindersApp {
 
         // 1. Megjelölés teljesítettnek
         await this.app.reminderManager.markAsCompleted(id);
-        if (this.renderer && this.renderer.renderList) this.renderer.renderList();
+        if (this.renderer && this.renderer?.renderList) this.renderer?.renderList?.();
         this.app.updateReminderStatus?.();
 
         // 2. Intelligens Költség-rögzítés felajánlása
@@ -481,7 +481,7 @@ export class RemindersApp {
 
         if (confirmed) {
             await this.app.reminderManager.delete(id);
-            if (this.renderer && this.renderer.renderList) this.renderer.renderList();
+            if (this.renderer && this.renderer?.renderList) this.renderer?.renderList?.();
             this.app.updateReminderStatus?.();
         }
     }

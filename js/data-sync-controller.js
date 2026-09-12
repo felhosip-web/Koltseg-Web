@@ -130,7 +130,6 @@ _getUserFriendlyError(err) {
         try {
             await Promise.allSettled([
                 this.app.refreshAllTabs?.(),
-                this.app.renderStats?.(),
                 this.app.remindersRenderer?.renderList?.(),
                 this.app.updateReminderStatus?.()
             ]);

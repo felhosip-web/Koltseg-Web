@@ -101,7 +101,6 @@ export class DataMaintenanceController {
             this.app.workLogRenderer?.render?.();
             this.app.remindersRenderer?.renderList?.();
             this.app.incomingRenderer?.render?.();
-            this.app.renderStats?.();
             this.app.refreshAllTabs?.();
 
             this.app.hmiNotif.showToast('🗑️ Minden helyi adat törölve!', 'error');
@@ -149,8 +148,8 @@ export class DataMaintenanceController {
     // ==================== CACHE TAKARÍTÁS ====================
     async clearCaches() {
         try {
-            if (this.app.renderer?.clearCache) this.app.renderer.clearCache();
-            if (this.app.chartsRenderer?.destroy) this.app.chartsRenderer.destroy();
+            if (this.app.renderer?.clearCache) this.app.renderer?.clearCache?.();
+            if (this.app.chartsRenderer?.destroy) this.app.chartsRenderer?.destroy?.();
             if (this.app.backgroundTasks?.destroy) this.app.backgroundTasks.destroy();
 
             this.app.hmiNotif.showToast('✅ Cache-ek takarítva', 'success');

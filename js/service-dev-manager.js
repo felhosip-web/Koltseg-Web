@@ -843,12 +843,10 @@ export class ServiceDevManager {
 
     _refreshUI() {
         this.app.refreshAllTabs?.();
-        this.app.renderer?.renderTable?.();
         this.app.remindersRenderer?.renderList?.();
         this.app.workLogRenderer?.render?.();
-        this.app.renderStats?.();
         this.app.updateReminderStatus?.();
-        if (this.app.incomingRenderer) this.app.incomingRenderer.render();
+        if (this.app.incomingRenderer) this.app.incomingRenderer?.render?.();
     }
 
     _triggerUnlock(method) {
@@ -1129,7 +1127,6 @@ export class ServiceDevManager {
 
             const genTime = (genDuration / 1000).toFixed(2);
             const renderStart = performance.now();
-            this.app.renderer?.renderTable?.();
             const renderTime = ((performance.now() - renderStart)).toFixed(1);
             const dashStart = performance.now();
             this.app.refreshAllTabs?.();
