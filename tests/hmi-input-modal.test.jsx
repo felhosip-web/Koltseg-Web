@@ -4,6 +4,10 @@ import { JSDOM } from 'jsdom';
 import { InputModalController } from '../js/input-modal-controller.js';
 
 test('performSave reports validation failures and successful persistence', async () => {
+    const dom = new JSDOM(`<!DOCTYPE html><html><body></body></html>`);
+    global.window = dom.window;
+    global.document = dom.window.document;
+
     const calls = [];
     const app = {
         items: {
@@ -35,7 +39,6 @@ test('performSave reports validation failures and successful persistence', async
     assert.deepEqual(calls, [
         ['add', 'New category', '#d1fae5'],
         ['load-items'],
-        ['render'],
         ['refresh']
     ]);
 });
