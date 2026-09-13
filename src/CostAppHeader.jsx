@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 
 /**
  * Header component for the cost tracking application.
@@ -6,7 +6,6 @@ import React from 'react';
  * settings access, data controls, and export/sync options.
  * @returns {JSX.Element} The header component with navigation and controls
  */
-import { useState } from 'react';
 
 /**
  * Header component for the cost tracking application.
@@ -85,6 +84,26 @@ export default function CostAppHeader() {
         setExportMenuOpen(false);
         window.app?.uiController?.maintenanceController?.wipeDatabase?.();
     };
+
+    const [queueStatus, setQueueStatus] = useState(null);
+
+    useEffect(() => {
+        let unsubscribeQueue = null;
+        if (window.app?.syncService?.onQueueChange) {
+            unsubscribeQueue = window.app.syncService.onQueueChange((status) => {
+                setQueueStatus(status);
+            });
+        } else {
+            // initial check if it's there but listener is missing
+            if(window.app?.syncService) setQueueStatus(window.app.syncService.getQueueStatus());
+        }
+
+        return () => {
+            if (unsubscribeQueue) {
+                unsubscribeQueue();
+            }
+        };
+    }, []);
 
     return (
         <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 border-b border-gray-100 pb-5">
@@ -217,7 +236,42 @@ export default function CostAppHeader() {
                     <div
                         className="sync-queue-tooltip hidden group-hover:block absolute right-0 top-full mt-2 bg-white rounded-2xl shadow-2xl p-4 min-w-[220px] z-50 border border-gray-100 text-left">
                         <div className="text-xs font-bold text-gray-700 mb-2">🔄 Függő műveletek</div>
-                        <div id="tooltipContent" className="text-xs text-gray-500">Nincs adat</div>
+                        <div id="tooltipContent" className="text-xs text-gray-500">
+                            {!queueStatus || queueStatus.total === 0 ? (
+                                <span className="text-gray-400">Nincs függőben lévő művelet</span>
+                            ) : (
+                                <>
+                                    <div className="flex justify-between text-gray-700 font-medium mb-1">
+                                        <span>Összesen:</span>
+                                        <span>{queueStatus.total}</span>
+                                    </div>
+                                    {queueStatus.pending > 0 && (
+                                        <div className="flex justify-between text-amber-600">
+                                            <span>⏳ Függőben:</span>
+                                            <span>{queueStatus.pending}</span>
+                                        </div>
+                                    )}
+                                    {queueStatus.processing > 0 && (
+                                        <div className="flex justify-between text-blue-600">
+                                            <span>🔄 Folyamatban:</span>
+                                            <span>{queueStatus.processing}</span>
+                                        </div>
+                                    )}
+                                    {queueStatus.failed > 0 && (
+                                        <div className="flex justify-between text-red-600">
+                                            <span>❌ Sikertelen:</span>
+                                            <span>{queueStatus.failed}</span>
+                                        </div>
+                                    )}
+                                    {queueStatus.done > 0 && (
+                                        <div className="flex justify-between text-emerald-600">
+                                            <span>✅ Kész (törlésre vár):</span>
+                                            <span>{queueStatus.done}</span>
+                                        </div>
+                                    )}
+                                </>
+                            )}
+                        </div>
                     </div>
                 </button>
 

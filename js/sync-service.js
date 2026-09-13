@@ -97,6 +97,17 @@ export class SyncService {
         if (this.isMuted) {
             return null;
         }
+
+        // Prevent adding completely invalid data to queue
+        if (operation !== 'delete' && (!data || typeof data !== 'object')) {
+            if (table === 'months' && typeof data === 'string') {
+                data = { month: data, updated_at: new Date().toISOString() };
+            } else {
+                console.error(`[SYNC] Megszakítva: Érvénytelen adat a queue-hoz (${table}):`, data);
+                return null;
+            }
+        }
+
         const keyValue = data[customKey] || data.id;
         const existingIndex = keyValue ? this._syncQueue.findIndex(i => i.table === table && (i.data[customKey] === keyValue || i.data.id === keyValue)) : -1;
         if (existingIndex !== -1) {
@@ -345,6 +356,17 @@ export class SyncService {
             console.log(`[SYNC] Muted, skipping push/queue for table: ${storeName}`);
             return;
         }
+
+        // Auto-fix invalid data BEFORE any operation
+        if (!isDelete && (!data || typeof data !== 'object')) {
+            if (storeName === 'months' && typeof data === 'string') {
+                data = { month: data, updated_at: new Date().toISOString() };
+            } else {
+                console.error(`[SYNC] Megszakítva: Érvénytelen adat az upsert/push művelethez (${storeName}):`, data);
+                return;
+            }
+        }
+
         // Offline ellenőrzés
         if (!navigator.onLine) {
             console.log(`[SYNC] Offline, változtatás queue-ba: ${storeName}`);
