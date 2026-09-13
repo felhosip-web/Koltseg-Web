@@ -240,16 +240,11 @@ export class SyncManager {
     _getTableData(table, app) {
         if (!app) return [];
         try {
-            switch (table) {
-                case 'items': return app.items?.items || [];
-                case 'months': return app.months?.months || [];
-                case 'entries': return app.entries?.entries || [];
-                case 'templates': return app.templates?.templates || [];
-                case 'reminders': return app.reminderManager?.reminders || [];
-                case 'incomings': return app.incomingManager?.incomings || [];
-                case 'incoming_senders': return app.incomingManager?.senders || [];
-                default: return [];
+            // Delegate to the main sync service which handles table mappings and format normalization (e.g. mapping string arrays to objects)
+            if (this.service && typeof this.service._getLocalData === 'function') {
+                return this.service._getLocalData(table);
             }
+            return [];
         } catch (e) {
             console.warn(`[SyncManager] _getTableData hiba a ${table} táblánál:`, e);
             return [];

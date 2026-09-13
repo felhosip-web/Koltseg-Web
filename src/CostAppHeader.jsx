@@ -15,6 +15,30 @@ import React, { useState, useEffect } from 'react';
  */
 export default function CostAppHeader() {
     const [exportMenuOpen, setExportMenuOpen] = useState(false);
+    const [showInstallBtn, setShowInstallBtn] = useState(false);
+
+    useEffect(() => {
+        // Fallback for case where event fired before React mounted
+        if (window.app?.pwaManager?.deferredInstallPrompt) {
+            setShowInstallBtn(true);
+        }
+
+        const handleInstallAvailable = () => setShowInstallBtn(true);
+        const handleInstalled = () => setShowInstallBtn(false);
+
+        window.addEventListener('pwa-install-available', handleInstallAvailable);
+        window.addEventListener('pwa-installed', handleInstalled);
+
+        return () => {
+            window.removeEventListener('pwa-install-available', handleInstallAvailable);
+            window.removeEventListener('pwa-installed', handleInstalled);
+        };
+    }, []);
+
+    const handleInstallClick = (e) => {
+        e.preventDefault();
+        window.app?.pwaManager?.promptInstall?.();
+    };
 
     const handleDataControl = (e) => {
         e.preventDefault();
@@ -173,7 +197,8 @@ export default function CostAppHeader() {
                     </button>
 
                     <button id="btnInstallApp"
-                        className="hidden px-4 py-2 bg-slate-900 text-white rounded-2xl text-sm font-bold flex items-center gap-2 hover:bg-slate-800 transition shadow-sm">
+                        onClick={handleInstallClick}
+                        className={`${showInstallBtn ? '' : 'hidden'} px-4 py-2 bg-slate-900 text-white rounded-2xl text-sm font-bold flex items-center gap-2 hover:bg-slate-800 transition shadow-sm`}>
                         <i className="fas fa-arrow-to-bottom"></i> Telepítés
                     </button>
 
