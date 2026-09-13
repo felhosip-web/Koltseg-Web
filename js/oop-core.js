@@ -466,7 +466,7 @@ export class Database {
         if (storeName !== 'deleted_records' && !isMuted) {
             try {
                 const deletedRecord = {
-                    id: `${storeName}_${key}`,
+                    id: generateUUID(),
                     record_id: String(key),
                     table_name: storeName,
                     deleted_at: new Date().toISOString(),
@@ -517,7 +517,7 @@ export class Database {
                 const isMuted = syncService?.isMuted || syncService?.service?.isMuted;
                 if (!isMuted) {
                     deletedStore.put({
-                        id: `items_${itemId}`,
+                        id: generateUUID(),
                         record_id: String(itemId),
                         table_name: 'items',
                         deleted_at: new Date().toISOString(),
@@ -539,7 +539,7 @@ export class Database {
                             // Tombstone rögzítése
                             if (!isMuted) {
                                 const deletedRecord = {
-                                    id: `entries_${entry.id}`,
+                                    id: generateUUID(),
                                     record_id: String(entry.id),
                                     table_name: 'entries',
                                     deleted_at: new Date().toISOString(),

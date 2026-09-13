@@ -2,6 +2,7 @@
 // Teljes implementáció push(), pull(), sync() metódusokkal
 
 import { CloudSync } from './oop-core.js';
+import { generateUUID, isValidUUID } from './uuid-utils.js';
 
 export class SyncService {
     /**
@@ -444,6 +445,51 @@ export class SyncService {
     }
 
     /**
+     * Hibás (prefixelt) tombstone rekordok azonosítóinak migrálása érvényes UUID-ra
+     */
+    async _migrateInvalidTombstones() {
+        try {
+            const app = this._getApp();
+            if (!app || !app.db) return;
+
+            const localDeletedRecords = await app.db.getAll('deleted_records');
+            if (!localDeletedRecords || localDeletedRecords.length === 0) return;
+
+            let migratedCount = 0;
+            for (const record of localDeletedRecords) {
+                // Ha az ID nem érvényes UUID (hanem pl. "items_xxxxx")
+                if (!isValidUUID(record.id)) {
+                    // Töröljük a régit
+                    if (typeof app.db._directDelete === 'function') {
+                        await app.db._directDelete('deleted_records', record.id);
+                    } else if (typeof app.db.delete === 'function') {
+                        await app.db.delete('deleted_records', record.id);
+                    }
+
+                    // Létrehozunk egy újat érvényes UUID-val
+                    const newRecord = {
+                        ...record,
+                        id: generateUUID()
+                    };
+
+                    if (typeof app.db.save === 'function') {
+                        await app.db.save('deleted_records', newRecord);
+                    } else if (typeof app.db.put === 'function') {
+                         await app.db.put('deleted_records', newRecord);
+                    }
+
+                    migratedCount++;
+                }
+            }
+            if (migratedCount > 0) {
+                console.log(`[SYNC] 🧹 Migráltunk ${migratedCount} db érvénytelen (prefixelt) tombstone azonosítót UUID-ra.`);
+            }
+        } catch (err) {
+            console.warn('[SYNC] Hiba a tombstone migráció során:', err);
+        }
+    }
+
+    /**
      * Teljes kétirányú szinkronizáció push + pull + merge
      * (módosítva: queue feldolgozással)
      */
@@ -478,6 +524,9 @@ export class SyncService {
         };
 
         try {
+            // === 1.5. HIBÁS TOMBSTONE-OK MIGRÁLÁSA ===
+            await this._migrateInvalidTombstones();
+
             // === 2. QUEUE FELDOLGOZÁS (prioritás) ===
             console.log('[SYNC] 📋 Queue feldolgozása...');
             const queueResult = await this.processQueue(true);
