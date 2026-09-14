@@ -112,35 +112,45 @@ export class PwaManager {
     }
 
     bindInstallPrompt() {
+        // Vanilla fallback & globális esemény a React-nek
         const installButton = document.getElementById('btnInstallApp');
         
         window.addEventListener('beforeinstallprompt', event => {
             event.preventDefault();
             this.deferredInstallPrompt = event;
-            installButton?.classList.remove('hidden');
+            if (installButton) installButton.classList.remove('hidden');
+            window.dispatchEvent(new CustomEvent('pwa-install-available'));
         });
 
         window.addEventListener('appinstalled', () => {
-            installButton?.classList.add('hidden');
+            if (installButton) installButton.classList.add('hidden');
             this.deferredInstallPrompt = null;
             this.app.hmiNotif.showToast('Az alkalmazás telepítése sikeres!', 'success');
+            window.dispatchEvent(new CustomEvent('pwa-installed'));
         });
 
-        installButton?.addEventListener('click', async () => {
-            if (!this.deferredInstallPrompt) return;
-            
-            this.deferredInstallPrompt.prompt();
-            const choiceResult = await this.deferredInstallPrompt.userChoice;
-            
-            if (choiceResult.outcome === 'accepted') {
-                this.app.hmiNotif.showToast('Telepítés elfogadva!', 'success');
-            } else {
-                this.app.hmiNotif.showToast('Telepítés elutasítva.', 'info');
-            }
-            
-            this.deferredInstallPrompt = null;
-            installButton.classList.add('hidden');
-        });
+        if (installButton) {
+            installButton.addEventListener('click', () => this.promptInstall());
+        }
+    }
+
+    async promptInstall() {
+        if (!this.deferredInstallPrompt) return;
+
+        this.deferredInstallPrompt.prompt();
+        const choiceResult = await this.deferredInstallPrompt.userChoice;
+
+        if (choiceResult.outcome === 'accepted') {
+            this.app.hmiNotif.showToast('Telepítés elfogadva!', 'success');
+        } else {
+            this.app.hmiNotif.showToast('Telepítés elutasítva.', 'info');
+        }
+
+        this.deferredInstallPrompt = null;
+
+        const installButton = document.getElementById('btnInstallApp');
+        if (installButton) installButton.classList.add('hidden');
+        window.dispatchEvent(new CustomEvent('pwa-installed'));
     }
 
     async checkForUpdate() {

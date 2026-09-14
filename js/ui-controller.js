@@ -1121,125 +1121,61 @@ export class UIController {
         details.innerHTML = '<p class="text-gray-400 italic">Kattints a "Letöltés" vagy "Feltöltés" gombra az adatok ellenőrzéséhez.</p>';
     }
     
-    // Pull adatok ellenőrzése
-    pullBtn.onclick = async () => {
+
+    const renderDiffViewer = async (mode) => {
+        const controls = document.getElementById('syncControlsContainer');
+        const diffRoot = document.getElementById('syncDiffViewerRoot');
+        const footer = document.getElementById('syncModalFooter');
+        
         pullBtn.disabled = true;
-        pullBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Ellenőrzés...';
-        details.innerHTML = '<p class="text-gray-400 italic">Adatok lekérése...</p>';
-        
-        try {
-            const stats = await this.app.syncManager.getPullStats();
-            const total = Object.values(stats).reduce((sum, v) => sum + v, 0);
-            
-            // Statisztika megjelenítése
-            const pullStatsEl = document.getElementById('pullStats');
-            if (pullStatsEl) {
-                pullStatsEl.innerHTML = `
-                    <span class="font-bold text-blue-600">${total}</span> elem a felhőben
-                    <div class="text-[9px] text-gray-400 mt-0.5">
-                        ${Object.entries(stats).map(([table, count]) => `${table}: ${count}`).join(' | ')}
-                    </div>
-                `;
-            }
-            
-            // Részletes lista
-            let html = '<div class="space-y-1">';
-            html += `<div class="font-bold text-blue-600">⬇️ Letöltendő adatok:</div>`;
-            for (const [table, count] of Object.entries(stats)) {
-                if (count > 0) {
-                    html += `<div class="flex justify-between text-gray-700"><span>${table}</span><span class="font-bold">${count}</span></div>`;
-                }
-            }
-            html += '</div>';
-            details.innerHTML = html;
-            
-            // Szinkronizáció engedélyezése
-            executeBtn.disabled = (total === 0);
-            executeBtn.dataset.mode = 'pull';
-            document.getElementById('syncLed').className = 'w-3 h-3 rounded-full bg-blue-500 animate-pulse';
-            statusText.textContent = `${total} elem letöltése a felhőből`;
-            
-            // Függő változtatások ellenőrzése
-            this._checkPendingChanges();
-            
-        } catch (e) {
-            console.error(e);
-            details.innerHTML = '<p class="text-red-500">Hiba történt az adatok lekérése során.</p>';
-        } finally {
-            pullBtn.disabled = false;
-            pullBtn.innerHTML = `
-                <div class="flex items-center gap-3">
-                    <i class="fas fa-cloud-download-alt text-blue-600 text-xl"></i>
-                    <div>
-                        <h4 class="font-bold text-gray-800">Letöltés (Pull)</h4>
-                        <p class="text-xs text-gray-500">Adatok lekérése a felhőből</p>
-                    </div>
-                </div>
-                <div id="pullStats" class="mt-2 text-xs text-gray-600">${document.getElementById('pullStats')?.innerHTML || '<span class="text-gray-400 italic">Kattints az ellenőrzéshez</span>'}</div>
-            `;
-        }
-    };
-    
-    // Push adatok ellenőrzése
-    pushBtn.onclick = async () => {
         pushBtn.disabled = true;
-        pushBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Ellenőrzés...';
-        details.innerHTML = '<p class="text-gray-400 italic">Helyi adatok ellenőrzése...</p>';
         
         try {
-            const stats = await this.app.syncManager.getPushStats();
-            const total = Object.values(stats).reduce((sum, v) => sum + v, 0);
+            statusText.textContent = 'Adatok letöltése az összehasonlításhoz...';
+            details.innerHTML = '<p class="text-gray-400 italic">Kis türelmet...</p>';
             
-            // Statisztika megjelenítése
-            const pushStatsEl = document.getElementById('pushStats');
-            if (pushStatsEl) {
-                pushStatsEl.innerHTML = `
-                    <span class="font-bold text-emerald-600">${total}</span> elem helyben
-                    <div class="text-[9px] text-gray-400 mt-0.5">
-                        ${Object.entries(stats).map(([table, count]) => `${table}: ${count}`).join(' | ')}
-                    </div>
-                `;
+            const diffData = await this.app.syncManager.getDiffData(mode);
+            
+            if (controls) controls.classList.add('hidden');
+            if (footer) footer.classList.add('hidden');
+            if (diffRoot) diffRoot.classList.remove('hidden');
+            
+            if (window.renderSyncDiffViewer) {
+                window.renderSyncDiffViewer({
+                    diffData,
+                    mode,
+                    onCancel: () => {
+                        if (window.unmountSyncDiffViewer) window.unmountSyncDiffViewer();
+                        if (controls) controls.classList.remove('hidden');
+                        if (footer) footer.classList.remove('hidden');
+                        if (diffRoot) diffRoot.classList.add('hidden');
+                        pullBtn.disabled = false;
+                        pushBtn.disabled = false;
+                        statusText.textContent = 'Kattints a "Letöltés" vagy "Feltöltés" gombra az adatok ellenőrzéséhez.';
+                    },
+                    onConfirm: async (selectedMode) => {
+                        if (window.unmountSyncDiffViewer) window.unmountSyncDiffViewer();
+                        if (controls) controls.classList.remove('hidden');
+                        if (footer) footer.classList.remove('hidden');
+                        if (diffRoot) diffRoot.classList.add('hidden');
+
+                        executeBtn.disabled = false;
+                        executeBtn.dataset.mode = selectedMode;
+                        executeBtn.click();
+                    }
+                });
             }
-            
-            // Részletes lista
-            let html = '<div class="space-y-1">';
-            html += `<div class="font-bold text-emerald-600">⬆️ Feltöltendő adatok:</div>`;
-            for (const [table, count] of Object.entries(stats)) {
-                if (count > 0) {
-                    html += `<div class="flex justify-between text-gray-700"><span>${table}</span><span class="font-bold">${count}</span></div>`;
-                }
-            }
-            html += '</div>';
-            details.innerHTML = html;
-            
-            // Szinkronizáció engedélyezése
-            executeBtn.disabled = (total === 0);
-            executeBtn.dataset.mode = 'push';
-            document.getElementById('syncLed').className = 'w-3 h-3 rounded-full bg-emerald-500 animate-pulse';
-            statusText.textContent = `${total} elem feltöltése a felhőbe`;
-            
-            // Függő változtatások ellenőrzése
-            this._checkPendingChanges();
-            
         } catch (e) {
-            console.error(e);
-            details.innerHTML = '<p class="text-red-500">Hiba történt a helyi adatok ellenőrzése során.</p>';
-        } finally {
+            console.error('Diff error:', e);
+            statusText.textContent = 'Hiba történt az eltérések ellenőrzésekor.';
+            pullBtn.disabled = false;
             pushBtn.disabled = false;
-            pushBtn.innerHTML = `
-                <div class="flex items-center gap-3">
-                    <i class="fas fa-cloud-upload-alt text-emerald-600 text-xl"></i>
-                    <div>
-                        <h4 class="font-bold text-gray-800">Feltöltés (Push)</h4>
-                        <p class="text-xs text-gray-500">Helyi adatok feltöltése a felhőbe</p>
-                    </div>
-                </div>
-                <div id="pushStats" class="mt-2 text-xs text-gray-600">${document.getElementById('pushStats')?.innerHTML || '<span class="text-gray-400 italic">Kattints az ellenőrzéshez</span>'}</div>
-            `;
         }
     };
-    
-    // Szinkronizáció végrehajtása
+
+    pullBtn.onclick = () => renderDiffViewer('pull');
+    pushBtn.onclick = () => renderDiffViewer('push');
+
     executeBtn.onclick = async () => {
         const mode = executeBtn.dataset.mode;
         if (!mode) return;

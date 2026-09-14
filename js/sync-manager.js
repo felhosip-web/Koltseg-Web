@@ -26,6 +26,81 @@ export class SyncManager {
     }
 
     /**
+     * Kiszámítja az eltéréseket a helyi és a felhő adatok között.
+     * Visszaad egy objektumot táblánként a diff-ekkel.
+     */
+    async getDiffData(mode = 'pull') {
+        if (!this.service || !this.service.cloud || !navigator.onLine) {
+            throw new Error('Felhő kapcsolat nem elérhető.');
+        }
+
+        const diffResult = {};
+
+        for (const table of this.tables) {
+            // 1. Felhő adatok lekérése (vagy push esetén is kell az összehasonlításhoz, de mi letöltjük)
+            let cloudData = [];
+            try {
+                if (typeof this.service.cloud.select === 'function') {
+                    cloudData = await this.service.cloud.select(table);
+                } else if (typeof this.service.pullOnly === 'function') {
+                    cloudData = await this.service.pullOnly(table);
+                }
+            } catch (err) {
+                console.warn(`[SyncManager] Nem sikerült lekérni a(z) ${table} adatait a felhőből:`, err);
+                continue;
+            }
+
+            // 2. Helyi adatok lekérése
+            let localData = [];
+            try {
+                if (typeof this.service._getLocalData === 'function') {
+                    localData = await this.service._getLocalData(table);
+                } else {
+                    localData = await this.app.db.getAll(table) || [];
+                }
+            } catch (err) {
+                console.warn(`[SyncManager] Nem sikerült lekérni a(z) ${table} helyi adatait:`, err);
+                continue;
+            }
+
+            // 3. Összehasonlítás
+            const cloudMap = new Map(cloudData.map(item => [item.id, item]));
+            const localMap = new Map(localData.map(item => [item.id, item]));
+            const diffs = [];
+
+            // Keresés a felhő adatok között
+            for (const [id, cloudItem] of cloudMap) {
+                const localItem = localMap.get(id);
+                if (!localItem) {
+                    diffs.push({ type: 'cloud_only', cloud: cloudItem, local: null });
+                } else {
+                    const cUpdate = new Date(cloudItem.updated_at || 0).getTime();
+                    const lUpdate = new Date(localItem.updated_at || 0).getTime();
+
+                    if (Math.abs(cUpdate - lUpdate) > 1000) { // 1 mp tolerancia
+                        diffs.push({ type: 'modified', cloud: cloudItem, local: localItem, cUpdate, lUpdate });
+                    }
+                }
+            }
+
+            // Keresés a csak helyi adatok között
+            for (const [id, localItem] of localMap) {
+                if (!cloudMap.has(id)) {
+                    diffs.push({ type: 'local_only', cloud: null, local: localItem });
+                }
+            }
+
+            diffResult[table] = {
+                cloud: cloudData,
+                local: localData,
+                diffs: diffs
+            };
+        }
+
+        return diffResult;
+    }
+
+    /**
      * Csak pull (delegálás + helyi mentés és UI frissítés)
      */
     async executePull() {
@@ -240,16 +315,11 @@ export class SyncManager {
     _getTableData(table, app) {
         if (!app) return [];
         try {
-            switch (table) {
-                case 'items': return app.items?.items || [];
-                case 'months': return app.months?.months || [];
-                case 'entries': return app.entries?.entries || [];
-                case 'templates': return app.templates?.templates || [];
-                case 'reminders': return app.reminderManager?.reminders || [];
-                case 'incomings': return app.incomingManager?.incomings || [];
-                case 'incoming_senders': return app.incomingManager?.senders || [];
-                default: return [];
+            // Delegate to the main sync service which handles table mappings and format normalization (e.g. mapping string arrays to objects)
+            if (this.service && typeof this.service._getLocalData === 'function') {
+                return this.service._getLocalData(table);
             }
+            return [];
         } catch (e) {
             console.warn(`[SyncManager] _getTableData hiba a ${table} táblánál:`, e);
             return [];
