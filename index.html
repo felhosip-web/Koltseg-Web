@@ -432,42 +432,38 @@
                         <span id="syncStatusText" class="text-gray-600 font-medium">Készen áll a szinkronizációra</span>
                     </div>
 
-                    <!-- Kétirányú szinkronizáció -->
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                        <button id="btnPullData"
-                            class="p-4 bg-blue-50 hover:bg-blue-100 border-2 border-blue-200 rounded-2xl transition text-left">
-                            <div class="flex items-center gap-3">
-                                <i class="fas fa-cloud-download-alt text-blue-600 text-xl"></i>
-                                <div>
-                                    <h4 class="font-bold text-gray-800">Letöltés (Pull)</h4>
-                                    <p class="text-xs text-gray-500">Adatok lekérése a felhőből</p>
-                                </div>
+                    <!-- Ellenőrzés -->
+                    <div class="mb-4 flex justify-center">
+                        <button id="btnCheckSync"
+                            class="p-4 bg-blue-50 hover:bg-blue-100 border-2 border-blue-200 rounded-2xl transition text-center w-full flex items-center justify-center gap-3">
+                            <i class="fas fa-search text-blue-600 text-xl"></i>
+                            <div>
+                                <h4 class="font-bold text-gray-800">Különbségek Ellenőrzése</h4>
+                                <p class="text-xs text-gray-500">Helyi és felhő adatok összehasonlítása</p>
                             </div>
-                            <div id="pullStats" class="mt-2 text-xs text-gray-600">Ellenőrzés...</div>
-                        </button>
-
-                        <button id="btnPushData"
-                            class="p-4 bg-emerald-50 hover:bg-emerald-100 border-2 border-emerald-200 rounded-2xl transition text-left">
-                            <div class="flex items-center gap-3">
-                                <i class="fas fa-cloud-upload-alt text-emerald-600 text-xl"></i>
-                                <div>
-                                    <h4 class="font-bold text-gray-800">Feltöltés (Push)</h4>
-                                    <p class="text-xs text-gray-500">Helyi adatok feltöltése a felhőbe</p>
-                                </div>
-                            </div>
-                            <div id="pushStats" class="mt-2 text-xs text-gray-600">Ellenőrzés...</div>
                         </button>
                     </div>
 
-                    <!-- Részletes lista -->
-                    <div class="border-t border-gray-200 pt-4">
-                        <h4 class="text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">
-                            <i class="fas fa-list-ul text-gray-400"></i> Részletes változások
-                        </h4>
-                        <div id="syncDetails"
-                            class="bg-gray-50 rounded-xl p-3 max-h-[150px] overflow-y-auto text-xs font-mono">
-                            <p class="text-gray-400 italic">Kattints a "Letöltés" vagy "Feltöltés" gombra az adatok
-                                ellenőrzéséhez.</p>
+                    <!-- Két paneles diff nézet -->
+                    <div id="syncDiffContainer" class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 hidden">
+                        <!-- Helyi panel -->
+                        <div class="border border-emerald-200 rounded-xl overflow-hidden flex flex-col">
+                            <div class="bg-emerald-100 p-2 text-center text-emerald-800 font-bold text-sm border-b border-emerald-200">
+                                <i class="fas fa-laptop"></i> Helyi Adatok (Új/Módosított)
+                            </div>
+                            <div id="localDiffList" class="p-3 bg-emerald-50 overflow-y-auto max-h-[250px] text-xs flex-1 space-y-1">
+                                <!-- Elemek -->
+                            </div>
+                        </div>
+
+                        <!-- Felhő panel -->
+                        <div class="border border-blue-200 rounded-xl overflow-hidden flex flex-col">
+                            <div class="bg-blue-100 p-2 text-center text-blue-800 font-bold text-sm border-b border-blue-200">
+                                <i class="fas fa-cloud"></i> Felhő Adatok (Új/Módosított)
+                            </div>
+                            <div id="cloudDiffList" class="p-3 bg-blue-50 overflow-y-auto max-h-[250px] text-xs flex-1 space-y-1">
+                                <!-- Elemek -->
+                            </div>
                         </div>
                     </div>
 
