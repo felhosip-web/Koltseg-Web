@@ -1039,35 +1039,40 @@ export class UIController {
             return;
         }
 
-        const pullBtn = document.getElementById('btnPullData');
-        const pushBtn = document.getElementById('btnPushData');
+                const checkBtn = document.getElementById('btnCheckSync');
         const executeBtn = document.getElementById('btnExecuteSync');
         const statusText = document.getElementById('syncStatusText');
-        const details = document.getElementById('syncDetails');
+        const diffContainer = document.getElementById('syncDiffContainer');
+        const localDiffList = document.getElementById('localDiffList');
+        const cloudDiffList = document.getElementById('cloudDiffList');
         
         // Modal megnyitása
         modal.classList.remove('hidden');
     
     // Állapot visszaállítása
-    statusText.textContent = 'Kattints a "Letöltés" vagy "Feltöltés" gombra az adatok ellenőrzéséhez.';
+    statusText.textContent = 'Kattints az "Ellenőrzés" gombra a különbségek lekéréséhez.';
     document.getElementById('syncLed').className = 'w-3 h-3 rounded-full bg-gray-400';
     executeBtn.disabled = true;
+    diffContainer.classList.add('hidden');
 
-    // Kezdeti állapotok beállítása, hogy ne "Ellenőrzés..." legyen látható üresen
-    const pStats = document.getElementById('pullStats');
-    if (pStats) {
-        pStats.innerHTML = '<span class="text-gray-400 italic">Kattints az ellenőrzéshez</span>';
-    }
-    const puStats = document.getElementById('pushStats');
-    if (puStats) {
-        puStats.innerHTML = '<span class="text-gray-400 italic">Kattints az ellenőrzéshez</span>';
+    if (checkBtn) {
+        checkBtn.innerHTML = `
+            <i class="fas fa-search text-blue-600 text-xl"></i>
+            <div>
+                <h4 class="font-bold text-gray-800">Különbségek Ellenőrzése</h4>
+                <p class="text-xs text-gray-500">Helyi és felhő adatok összehasonlítása</p>
+            </div>
+        `;
+        checkBtn.disabled = false;
     }
 
     // Ha nincsenek táblák a Supabase-ben, jelezzük kiemelten
     if (this.app.syncService?.cloud?.tablesMissing) {
         statusText.textContent = '⚠️ HIÁNYZÓ TÁBLÁK A SUPABASE-BEN!';
         document.getElementById('syncLed').className = 'w-3 h-3 rounded-full bg-red-500 animate-pulse';
-        details.innerHTML = `
+        diffContainer.classList.remove('hidden');
+        localDiffList.innerHTML = '';
+        cloudDiffList.innerHTML = `
             <div class="p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 space-y-2">
                 <p class="font-bold text-xs flex items-center gap-1">
                     <i class="fas fa-exclamation-triangle"></i> A Supabase táblák nem találhatók!
@@ -1117,110 +1122,138 @@ export class UIController {
                 };
             }
         }, 50);
-    } else {
-        details.innerHTML = '<p class="text-gray-400 italic">Kattints a "Letöltés" vagy "Feltöltés" gombra az adatok ellenőrzéséhez.</p>';
     }
     
+    // Check gomb eseménykezelője
+    if (checkBtn) {
+        checkBtn.onclick = async () => {
+            checkBtn.disabled = true;
+            checkBtn.innerHTML = '<i class="fas fa-spinner fa-spin text-blue-600 text-xl"></i><div><h4 class="font-bold text-gray-800">Ellenőrzés folyamatban...</h4></div>';
+            statusText.textContent = 'Adatok letöltése és összehasonlítása...';
+            document.getElementById('syncLed').className = 'w-3 h-3 rounded-full bg-blue-500 animate-pulse';
+            
+            try {
+                if (typeof this.app.syncManager.getSyncDiff !== 'function') {
+                    throw new Error("getSyncDiff függvény nem található");
+                }
+                const diffs = await this.app.syncManager.getSyncDiff();
 
-    const renderDiffViewer = async (mode) => {
-        const controls = document.getElementById('syncControlsContainer');
-        const diffRoot = document.getElementById('syncDiffViewerRoot');
-        const footer = document.getElementById('syncModalFooter');
-        
-        pullBtn.disabled = true;
-        pushBtn.disabled = true;
-        
-        try {
-            statusText.textContent = 'Adatok letöltése az összehasonlításhoz...';
-            details.innerHTML = '<p class="text-gray-400 italic">Kis türelmet...</p>';
-            
-            const diffData = await this.app.syncManager.getDiffData(mode);
-            
-            if (controls) controls.classList.add('hidden');
-            if (footer) footer.classList.add('hidden');
-            if (diffRoot) diffRoot.classList.remove('hidden');
-            
-            if (window.renderSyncDiffViewer) {
-                window.renderSyncDiffViewer({
-                    diffData,
-                    mode,
-                    onCancel: () => {
-                        if (window.unmountSyncDiffViewer) window.unmountSyncDiffViewer();
-                        if (controls) controls.classList.remove('hidden');
-                        if (footer) footer.classList.remove('hidden');
-                        if (diffRoot) diffRoot.classList.add('hidden');
-                        pullBtn.disabled = false;
-                        pushBtn.disabled = false;
-                        statusText.textContent = 'Kattints a "Letöltés" vagy "Feltöltés" gombra az adatok ellenőrzéséhez.';
-                    },
-                    onConfirm: async (selectedMode) => {
-                        if (window.unmountSyncDiffViewer) window.unmountSyncDiffViewer();
-                        if (controls) controls.classList.remove('hidden');
-                        if (footer) footer.classList.remove('hidden');
-                        if (diffRoot) diffRoot.classList.add('hidden');
+                const escapeHtml = (unsafe) => {
+                    return (unsafe || '').toString()
+                         .replace(/&/g, "&amp;")
+                         .replace(/</g, "&lt;")
+                         .replace(/>/g, "&gt;")
+                         .replace(/"/g, "&quot;")
+                         .replace(/'/g, "&#039;");
+                };
 
-                        executeBtn.disabled = false;
-                        executeBtn.dataset.mode = selectedMode;
-                        executeBtn.click();
-                    }
-                });
+                // Diff konténer megjelenítése
+                diffContainer.classList.remove('hidden');
+
+                // Helyi változások listázása
+                if (diffs.local && diffs.local.length > 0) {
+                    localDiffList.innerHTML = diffs.local.map(d =>
+                        `<div class="flex justify-between items-center bg-white p-2 rounded border border-emerald-100 shadow-sm">
+                            <div class="truncate mr-2"><span class="font-bold text-emerald-700">${d.table}</span>: ${escapeHtml(d.label)}</div>
+                            <span class="px-1.5 py-0.5 rounded text-[9px] font-bold ${d.type === 'new' ? 'bg-emerald-100 text-emerald-800' : (d.type === 'deleted' ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800')}">
+                                ${d.type === 'new' ? 'ÚJ' : (d.type === 'deleted' ? 'TÖRLÉS' : 'MOD')}
+                            </span>
+                        </div>`
+                    ).join('');
+                } else {
+                    localDiffList.innerHTML = '<div class="text-center text-gray-400 italic p-4">Nincs új/módosított helyi adat</div>';
+                }
+
+                // Felhő változások listázása
+                if (diffs.cloud && diffs.cloud.length > 0) {
+                    cloudDiffList.innerHTML = diffs.cloud.map(d =>
+                        `<div class="flex justify-between items-center bg-white p-2 rounded border border-blue-100 shadow-sm">
+                            <div class="truncate mr-2"><span class="font-bold text-blue-700">${d.table}</span>: ${escapeHtml(d.label)}</div>
+                            <span class="px-1.5 py-0.5 rounded text-[9px] font-bold ${d.type === 'new' ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800'}">
+                                ${d.type === 'new' ? 'ÚJ' : 'MOD'}
+                            </span>
+                        </div>`
+                    ).join('');
+                } else {
+                    cloudDiffList.innerHTML = '<div class="text-center text-gray-400 italic p-4">Nincs új/módosított felhő adat</div>';
+                }
+
+                const totalDiffs = (diffs.local?.length || 0) + (diffs.cloud?.length || 0);
+
+                // Szinkronizáció engedélyezése, ha van különbség
+                executeBtn.disabled = (totalDiffs === 0);
+                executeBtn.dataset.mode = 'sync'; // Automatikus full sync
+
+                if (totalDiffs > 0) {
+                    document.getElementById('syncLed').className = 'w-3 h-3 rounded-full bg-amber-500';
+                    statusText.textContent = `${totalDiffs} eltérés található. Szinkronizálható.`;
+                } else {
+                    document.getElementById('syncLed').className = 'w-3 h-3 rounded-full bg-emerald-500';
+                    statusText.textContent = 'Minden adat szinkronban van!';
+                }
+
+                // Függő változtatások (offline queue) ellenőrzése
+                this._checkPendingChanges();
+
+            } catch (e) {
+                console.error(e);
+                statusText.textContent = 'Hiba az ellenőrzés során.';
+                document.getElementById('syncLed').className = 'w-3 h-3 rounded-full bg-red-500';
+            } finally {
+                checkBtn.disabled = false;
+                checkBtn.innerHTML = `
+                    <i class="fas fa-search text-blue-600 text-xl"></i>
+                    <div>
+                        <h4 class="font-bold text-gray-800">Különbségek Ellenőrzése</h4>
+                        <p class="text-xs text-gray-500">Újraellenőrzés</p>
+                    </div>
+                `;
             }
-        } catch (e) {
-            console.error('Diff error:', e);
-            statusText.textContent = 'Hiba történt az eltérések ellenőrzésekor.';
-            pullBtn.disabled = false;
-            pushBtn.disabled = false;
-        }
-    };
-
-    pullBtn.onclick = () => renderDiffViewer('pull');
-    pushBtn.onclick = () => renderDiffViewer('push');
-
+        };
+    }
+    
+    // Szinkronizáció végrehajtása
     executeBtn.onclick = async () => {
-        const mode = executeBtn.dataset.mode;
-        if (!mode) return;
-        
         executeBtn.disabled = true;
         executeBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Folyamatban...';
         
-        if (mode === 'pull') {
-            statusText.textContent = 'Adatok letöltése...';
-        } else if (mode === 'queue') {
-            statusText.textContent = 'Várólista feldolgozása...';
-        } else {
-            statusText.textContent = 'Adatok feltöltése...';
-        }
+        statusText.textContent = 'Automatikus szinkronizáció folyamatban...';
         document.getElementById('syncLed').className = 'w-3 h-3 rounded-full bg-amber-500 animate-pulse';
         
         try {
-            if (mode === 'pull') {
-                await this.app.syncManager.executePull();
-            } else if (mode === 'queue') {
-                const qResult = await this.app.syncManager.processQueue();
-                details.innerHTML = `<p class="text-emerald-600 font-bold">✅ Sikerült feldolgozni ${qResult.processed} műveletet.</p>${qResult.failed > 0 ? `<p class="text-red-500 font-bold">⚠️ ${qResult.failed} művelet sikertelen.</p>` : ''}`;
-            } else {
-                await this.app.syncManager.executePush();
+            // A teljes bidirekcionális szinkron hívása, ami a push és a pull merge-t is tartalmazza
+            const result = await this.app.syncManager.sync();
+
+            if (result && result.status === 'error') {
+                throw new Error(result.message);
             }
             
             // Sikeres befejezés
             document.getElementById('syncLed').className = 'w-3 h-3 rounded-full bg-emerald-500';
             statusText.textContent = '✅ Szinkronizáció sikeresen befejeződött!';
-            if (mode !== 'queue') {
-                details.innerHTML = '<p class="text-emerald-600 font-bold">✅ A művelet sikeresen végrehajtódott.</p>';
+
+            // Re-check diff to verify sync worked
+            if (checkBtn) {
+                 checkBtn.click();
             }
             
             // UI frissítése
-            this.app.refreshAllTabs?.();
-            this.app.remindersRenderer?.renderList?.();
+            if (typeof this.app.refreshAllTabs === 'function') {
+                this.app.refreshAllTabs();
+            }
+            if (this.app.remindersRenderer && typeof this.app.remindersRenderer.renderList === 'function') {
+                this.app.remindersRenderer.renderList();
+            }
             
             setTimeout(() => {
-                modal.classList.add('hidden');
+                const modal = document.getElementById('syncModal');
+                if (modal) modal.classList.add('hidden');
             }, 2000);
             
         } catch (e) {
             document.getElementById('syncLed').className = 'w-3 h-3 rounded-full bg-red-500';
             statusText.textContent = '❌ Hiba történt a szinkronizáció során!';
-            details.innerHTML = `<p class="text-red-500">${e.message || 'Ismeretlen hiba'}</p>`;
+            console.error(e);
             executeBtn.disabled = false;
             executeBtn.innerHTML = '<i class="fas fa-play"></i> Újrapróbálkozás';
         }

@@ -272,6 +272,123 @@ export class SyncManager {
         return stats;
     }
 
+
+    /**
+     * Szinkronizációs diff generálása (helyi és felhő eltérések lekérése)
+     */
+    async getSyncDiff() {
+        if (!this.service) return { local: [], cloud: [] };
+
+        const localDiff = [];
+        const cloudDiff = [];
+
+        try {
+            // 1. Felhő adatok lekérése (vagy timeout 4mp után)
+            let cloudData = {};
+            if (this.service.cloud && typeof this.service.cloud.pull === 'function') {
+                for (const table of this.tables) {
+                    try {
+                        const data = await Promise.race([
+                            this.service.cloud.pull(table),
+                            new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 4000))
+                        ]);
+                        cloudData[table] = data || [];
+                    } catch (e) {
+                        console.warn(`[SyncManager] getSyncDiff: Hiba a(z) ${table} lekérésekor:`, e);
+                        cloudData[table] = [];
+                    }
+                }
+            }
+
+            // 2. Helyi adatok összeszerelése
+            const app = this.app;
+            const localData = {};
+            for (const table of this.tables) {
+                // _getTableData is synchronous and returns an array from memory
+                localData[table] = this._getTableData(table, app) || [];
+            }
+
+            // Handle deleted records separately if it's not in this.tables
+            const localDeletedRecords = app.db ? await app.db.getAll('deleted_records') : [];
+            const deletedMap = {};
+            localDeletedRecords.forEach(r => {
+                if(r.table_name && r.record_id) {
+                    if(!deletedMap[r.table_name]) deletedMap[r.table_name] = [];
+                    deletedMap[r.table_name].push(String(r.record_id));
+                }
+            });
+
+            // 3. Összehasonlítás táblánként
+            for (const table of this.tables) {
+                const local = localData[table] || [];
+                const cloud = cloudData[table] || [];
+                const deletedIds = deletedMap[table] || [];
+                const keyField = table === 'months' ? 'month' : 'id';
+
+                // Kulcs alapú map-ek készítése
+                const localMap = {};
+                local.forEach(item => {
+                    if (item[keyField] !== undefined && item[keyField] !== null) {
+                        localMap[item[keyField]] = item;
+                    }
+                });
+
+                const cloudMap = {};
+                cloud.forEach(item => {
+                    if (item[keyField] !== undefined && item[keyField] !== null) {
+                        cloudMap[item[keyField]] = item;
+                    }
+                });
+
+                // Helyi változások (új vagy módosított) keresése
+                for (const key in localMap) {
+                    const localItem = localMap[key];
+                    const cloudItem = cloudMap[key];
+                    const label = localItem.name || localItem.item || localItem.comment || key;
+
+                    if (!cloudItem) {
+                        // Új rekord helyben
+                        localDiff.push({ table, key, label, type: 'new' });
+                    } else if (this.service._isRecordDifferent && this.service._isRecordDifferent(localItem, cloudItem)) {
+                        const localTime = new Date(localItem.updated_at || localItem.timestamp || 0);
+                        const cloudTime = new Date(cloudItem.updated_at || cloudItem.timestamp || 0);
+                        // Ha a helyi frissebb (vagy azonos idő), akkor az egy helyi változás ami megy fel
+                        if (localTime >= cloudTime) {
+                            localDiff.push({ table, key, label, type: 'modified' });
+                        }
+                    }
+                }
+
+                // Felhő változások (új vagy frissebb módosított) keresése
+                for (const key in cloudMap) {
+                    const cloudItem = cloudMap[key];
+                    const localItem = localMap[key];
+                    const label = cloudItem.name || cloudItem.item || cloudItem.comment || key;
+
+                    if (deletedIds.includes(String(key))) {
+                         // Szerepel a helyi deleted_records-ban, így ez egy törlés ami fel fog menni
+                         localDiff.push({ table, key, label, type: 'deleted' });
+                    } else if (!localItem) {
+                        // Új rekord a felhőben
+                        cloudDiff.push({ table, key, label, type: 'new' });
+                    } else if (this.service._isRecordDifferent && this.service._isRecordDifferent(localItem, cloudItem)) {
+                        const localTime = new Date(localItem.updated_at || localItem.timestamp || 0);
+                        const cloudTime = new Date(cloudItem.updated_at || cloudItem.timestamp || 0);
+                        // Ha a felhő frissebb
+                        if (cloudTime > localTime) {
+                            cloudDiff.push({ table, key, label, type: 'modified' });
+                        }
+                    }
+                }
+            }
+
+            return { local: localDiff, cloud: cloudDiff };
+        } catch (e) {
+            console.error('[SyncManager] getSyncDiff hiba:', e);
+            throw e;
+        }
+    }
+
     /**
      * Függő változtatások száma
      */
