@@ -16,7 +16,7 @@
     "@playwright/test": "^1.62.1",
     "@vitejs/plugin-react": "^5.0.4",
     "autoprefixer": "^10.5.4",
-    "dexie": "^4.4.5",
+    "dexie": "^4.4.6",
     "dotenv": "^17.2.3",
     "esbuild": "^0.28.2",
     "express": "^4.21.2",
