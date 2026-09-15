@@ -5,6 +5,7 @@ import RemindersTab from './components/reminders/RemindersTab.jsx'
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import StoreSync from './components/StoreSync.jsx'
+import { SyncDiffViewer } from './components/SyncDiffViewer.jsx'
 import LandingApp from './LandingApp.jsx'
 import CostAppLayout from './CostAppLayout.jsx'
 import SettingsPanel from './components/SettingsPanel.jsx'
@@ -22,6 +23,19 @@ if (landingRoot) {
         <LandingApp />
       </React.StrictMode>,
     )
+}
+
+// Ensure the SyncDiffViewer root exists in index.html as <div id="syncDiffViewerRoot"></div>
+const syncDiffViewerRoot = document.getElementById('syncDiffViewerRoot');
+if (syncDiffViewerRoot) {
+    // We will render this dynamically from vanilla JS using window.renderSyncDiffViewer
+    let root = ReactDOM.createRoot(syncDiffViewerRoot);
+    window.renderSyncDiffViewer = (props) => {
+        root.render(<React.StrictMode><SyncDiffViewer {...props} /></React.StrictMode>);
+    };
+    window.unmountSyncDiffViewer = () => {
+        root.render(null);
+    };
 }
 
 // Mount headless StoreSync bridge
