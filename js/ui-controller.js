@@ -230,13 +230,16 @@ export class UIController {
             this.app.hmiNotif?.showToast('Nincs függőben lévő művelet', 'info');
             return;
         }
+
+        this.openSyncModal();
         
         // Részletes lista megjelenítése a sync modalban
         const modal = document.getElementById('syncModal');
         if (modal) {
             // Frissítjük a részletes listát
-            const details = document.getElementById('syncDetails');
-            if (details) {
+            const pendingChangesContainer = document.getElementById('pendingChangesContainer');
+            const pendingChangesList = document.getElementById('pendingChangesList');
+            if (pendingChangesContainer && pendingChangesList) {
                 let html = '<div class="space-y-2">';
                 html += `<div class="font-bold text-amber-700 flex justify-between items-center pb-1 border-b border-gray-100">
                     <span>🕐 ${status.total} függő művelet</span>
@@ -284,10 +287,11 @@ export class UIController {
                 
                 html += `<div class="pt-2 text-xs text-gray-400">Kattints a "Queue feldolgozása" gombra a végrehajtáshoz.</div>`;
                 html += '</div>';
-                details.innerHTML = html;
+                pendingChangesList.innerHTML = html;
+                pendingChangesContainer.classList.remove('hidden');
 
                 // Eseménykezelők hozzáadása
-                const clearAllBtn = details.querySelector('#btnClearAllQueue');
+                const clearAllBtn = pendingChangesList.querySelector('#btnClearAllQueue');
                 if (clearAllBtn) {
                     clearAllBtn.addEventListener('click', async (e) => {
                         e.stopPropagation();
@@ -312,7 +316,7 @@ export class UIController {
                     });
                 }
 
-                details.querySelectorAll('.btn-delete-queue-item').forEach(btn => {
+                pendingChangesList.querySelectorAll('.btn-delete-queue-item').forEach(btn => {
                     btn.addEventListener('click', async (e) => {
                         e.stopPropagation();
                         const itemId = btn.getAttribute('data-id');
@@ -1053,6 +1057,7 @@ export class UIController {
     statusText.textContent = 'Kattints az "Ellenőrzés" gombra a különbségek lekéréséhez.';
     document.getElementById('syncLed').className = 'w-3 h-3 rounded-full bg-gray-400';
     executeBtn.disabled = true;
+    executeBtn.dataset.mode = 'sync';
     diffContainer.classList.add('hidden');
 
     if (checkBtn) {
@@ -1137,6 +1142,7 @@ export class UIController {
                     throw new Error("getSyncDiff függvény nem található");
                 }
                 const diffs = await this.app.syncManager.getSyncDiff();
+                const unavailableTables = diffs.unavailableTables || [];
 
                 const escapeHtml = (unsafe) => {
                     return (unsafe || '').toString()
@@ -1149,6 +1155,23 @@ export class UIController {
 
                 // Diff konténer megjelenítése
                 diffContainer.classList.remove('hidden');
+
+                if (unavailableTables.length > 0) {
+                    const tableNames = unavailableTables.map(escapeHtml).join(', ');
+                    localDiffList.innerHTML = '<div class="text-center text-gray-400 italic p-4">Az összehasonlítás nem fejeződött be</div>';
+                    cloudDiffList.innerHTML = `
+                        <div class="p-3 bg-red-50 border border-red-200 rounded-xl text-red-700">
+                            <p class="font-bold text-xs"><i class="fas fa-triangle-exclamation"></i> A felhőadatok nem érhetők el</p>
+                            <p class="mt-1 text-[10px]">Sikertelen táblák: ${tableNames}</p>
+                        </div>
+                    `;
+                    executeBtn.disabled = true;
+                    executeBtn.dataset.mode = 'sync';
+                    document.getElementById('syncLed').className = 'w-3 h-3 rounded-full bg-red-500';
+                    statusText.textContent = 'Hiba: a különbségek ellenőrzése nem fejeződött be. A szinkronizáció letiltva.';
+                    this._checkPendingChanges();
+                    return;
+                }
 
                 // Helyi változások listázása
                 if (diffs.local && diffs.local.length > 0) {
@@ -1221,11 +1244,12 @@ export class UIController {
         document.getElementById('syncLed').className = 'w-3 h-3 rounded-full bg-amber-500 animate-pulse';
         
         try {
-            // A teljes bidirekcionális szinkron hívása, ami a push és a pull merge-t is tartalmazza
-            const result = await this.app.syncManager.sync();
+            const result = executeBtn.dataset.mode === 'queue'
+                ? await this.app.syncManager.processQueue()
+                : await this.app.syncManager.sync();
 
             if (result && result.status === 'error') {
-                throw new Error(result.message);
+                throw new Error(result.message || 'A szinkronizáció sikertelen');
             }
             
             // Sikeres befejezés
