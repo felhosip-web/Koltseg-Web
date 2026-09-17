@@ -277,10 +277,11 @@ export class SyncManager {
      * Szinkronizációs diff generálása (helyi és felhő eltérések lekérése)
      */
     async getSyncDiff() {
-        if (!this.service) return { local: [], cloud: [] };
+        if (!this.service) return { local: [], cloud: [], unavailableTables: [] };
 
         const localDiff = [];
         const cloudDiff = [];
+        const unavailableTables = [];
 
         try {
             // 1. Felhő adatok lekérése (vagy timeout 4mp után)
@@ -295,7 +296,7 @@ export class SyncManager {
                         cloudData[table] = data || [];
                     } catch (e) {
                         console.warn(`[SyncManager] getSyncDiff: Hiba a(z) ${table} lekérésekor:`, e);
-                        cloudData[table] = [];
+                        unavailableTables.push(table);
                     }
                 }
             }
@@ -320,6 +321,8 @@ export class SyncManager {
 
             // 3. Összehasonlítás táblánként
             for (const table of this.tables) {
+                if (unavailableTables.includes(table)) continue;
+
                 const local = localData[table] || [];
                 const cloud = cloudData[table] || [];
                 const deletedIds = deletedMap[table] || [];
@@ -382,7 +385,7 @@ export class SyncManager {
                 }
             }
 
-            return { local: localDiff, cloud: cloudDiff };
+            return { local: localDiff, cloud: cloudDiff, unavailableTables };
         } catch (e) {
             console.error('[SyncManager] getSyncDiff hiba:', e);
             throw e;

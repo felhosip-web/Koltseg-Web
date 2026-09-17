@@ -1180,16 +1180,22 @@ export class UIController {
 
                 const totalDiffs = (diffs.local?.length || 0) + (diffs.cloud?.length || 0);
 
-                // Szinkronizáció engedélyezése, ha van különbség
-                executeBtn.disabled = (totalDiffs === 0);
-                executeBtn.dataset.mode = 'sync'; // Automatikus full sync
-
-                if (totalDiffs > 0) {
-                    document.getElementById('syncLed').className = 'w-3 h-3 rounded-full bg-amber-500';
-                    statusText.textContent = `${totalDiffs} eltérés található. Szinkronizálható.`;
+                if (diffs.unavailableTables && diffs.unavailableTables.length > 0) {
+                    executeBtn.disabled = true;
+                    document.getElementById('syncLed').className = 'w-3 h-3 rounded-full bg-red-500';
+                    statusText.textContent = `⚠️ Hálózati hiba! Nem sikerült lekérni a következő táblákat: ${diffs.unavailableTables.join(', ')}`;
                 } else {
-                    document.getElementById('syncLed').className = 'w-3 h-3 rounded-full bg-emerald-500';
-                    statusText.textContent = 'Minden adat szinkronban van!';
+                    // Szinkronizáció engedélyezése, ha van különbség
+                    executeBtn.disabled = (totalDiffs === 0);
+                    executeBtn.dataset.mode = 'sync'; // Automatikus full sync
+
+                    if (totalDiffs > 0) {
+                        document.getElementById('syncLed').className = 'w-3 h-3 rounded-full bg-amber-500';
+                        statusText.textContent = `${totalDiffs} eltérés található. Szinkronizálható.`;
+                    } else {
+                        document.getElementById('syncLed').className = 'w-3 h-3 rounded-full bg-emerald-500';
+                        statusText.textContent = 'Minden adat szinkronban van!';
+                    }
                 }
 
                 // Függő változtatások (offline queue) ellenőrzése
@@ -1232,11 +1238,6 @@ export class UIController {
             document.getElementById('syncLed').className = 'w-3 h-3 rounded-full bg-emerald-500';
             statusText.textContent = '✅ Szinkronizáció sikeresen befejeződött!';
 
-            // Re-check diff to verify sync worked
-            if (checkBtn) {
-                 checkBtn.click();
-            }
-            
             // UI frissítése
             if (typeof this.app.refreshAllTabs === 'function') {
                 this.app.refreshAllTabs();
@@ -1246,13 +1247,19 @@ export class UIController {
             }
             
             setTimeout(() => {
+                // Re-check diff to verify sync worked
+                if (checkBtn) {
+                     checkBtn.click();
+                }
+
                 const modal = document.getElementById('syncModal');
                 if (modal) modal.classList.add('hidden');
             }, 2000);
             
         } catch (e) {
             document.getElementById('syncLed').className = 'w-3 h-3 rounded-full bg-red-500';
-            statusText.textContent = '❌ Hiba történt a szinkronizáció során!';
+            statusText.textContent = e.message ? `❌ Hiba: ${e.message}` : '❌ Hiba történt a szinkronizáció során!';
+            this.app.hmiNotif?.showToast(e.message || 'Hiba történt a szinkronizáció során', 'error');
             console.error(e);
             executeBtn.disabled = false;
             executeBtn.innerHTML = '<i class="fas fa-play"></i> Újrapróbálkozás';
