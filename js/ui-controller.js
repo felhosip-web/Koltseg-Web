@@ -1031,6 +1031,12 @@ export class UIController {
     }
 
     // ====================== SYNC MODAL (TELJES EREDETI) ======================
+    /**
+     * Opens the synchronization modal and binds its comparison, execution, and close controls.
+     *
+     * Unavailable cloud tables prevent synchronization. Sync results update the modal, failures
+     * also raise a notification, and successful runs refresh the UI before closing after a delay.
+     */
     openSyncModal() {
         const modal = document.getElementById('syncModal');
         if (!modal) return;

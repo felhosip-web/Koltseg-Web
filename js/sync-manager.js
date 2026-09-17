@@ -274,7 +274,14 @@ export class SyncManager {
 
 
     /**
-     * Szinkronizációs diff generálása (helyi és felhő eltérések lekérése)
+     * Compares local and cloud records for each configured table.
+     *
+     * Tables whose cloud data cannot be fetched are omitted from the comparison
+     * and listed in `unavailableTables`.
+     *
+     * @returns {Promise<{local: Object[], cloud: Object[], unavailableTables: string[]}>}
+     * Differences grouped by source, plus the names of tables that could not be fetched.
+     * @throws {Error} If preparing or comparing the available data fails.
      */
     async getSyncDiff() {
         if (!this.service) return { local: [], cloud: [], unavailableTables: [] };
