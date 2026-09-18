@@ -162,11 +162,36 @@ export function showSyncDiffModal(diffs) {
   closeBtn.addEventListener('click', closeModal);
   cancelBtn.addEventListener('click', closeModal);
 
-  executeBtn.addEventListener('click', () => {
-    closeModal();
-    // Itt hívjuk meg a tényleges szinkronizációt
+  executeBtn.addEventListener('click', async () => {
+    executeBtn.disabled = true;
+    executeBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Szinkronizálás...';
+
     if (window.app && window.app.dataSyncController) {
-      window.app.dataSyncController.forceSync();
+      try {
+        await window.app.dataSyncController.forceSync();
+
+        executeBtn.innerHTML = '<i class="fas fa-check mr-2"></i> Kész!';
+        executeBtn.classList.replace('bg-blue-600', 'bg-emerald-600');
+        executeBtn.classList.replace('hover:bg-blue-700', 'hover:bg-emerald-700');
+
+        setTimeout(() => {
+          closeModal();
+
+          // Re-check diff to verify sync worked, just like old UI did
+          const checkBtn = document.getElementById('btnCheckSync');
+          if (checkBtn) {
+            checkBtn.click();
+          }
+        }, 1500);
+      } catch (err) {
+        // forceSync handles showing toast/info, just reset button
+        executeBtn.disabled = false;
+        executeBtn.innerHTML = '<i class="fas fa-sync-alt mr-2"></i> Újrapróbálkozás';
+        executeBtn.classList.replace('bg-blue-600', 'bg-red-600');
+        executeBtn.classList.replace('hover:bg-blue-700', 'hover:bg-red-700');
+      }
+    } else {
+      closeModal();
     }
   });
 
