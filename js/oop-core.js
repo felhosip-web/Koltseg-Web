@@ -1152,7 +1152,9 @@ export class CloudSync {
                 }
                 
                 if (err.code === '42P01' || (err.message && (err.message.includes('relation') || err.message.includes('does not exist')))) {
-                    this.tablesMissing = true;
+                    if (['items', 'months', 'entries', 'templates', 'reminders', 'incomings', 'incoming_senders', 'works', 'deleted_records', 'app_settings'].includes(storeName)) {
+                        this.tablesMissing = true;
+                    }
                 }
                 throw err;
             }
@@ -1184,14 +1186,18 @@ export class CloudSync {
 
             if (error) {
                 if (error.code === '42P01') {
-                    this.tablesMissing = true;
+                    if (['items', 'months', 'entries', 'templates', 'reminders', 'incomings', 'incoming_senders', 'works', 'deleted_records', 'app_settings'].includes(storeName)) {
+                        this.tablesMissing = true;
+                    }
                 }
                 throw error;
             }
             console.log(`[CLOUD] ${storeName} egyedi törlés sikeres (${customKey}: ${keyValue})`);
         } catch (err) {
             if (err.code === '42P01' || (err.message && (err.message.includes('relation') || err.message.includes('does not exist')))) {
-                this.tablesMissing = true;
+                if (['items', 'months', 'entries', 'templates', 'reminders', 'incomings', 'incoming_senders', 'works', 'deleted_records', 'app_settings'].includes(storeName)) {
+                    this.tablesMissing = true;
+                }
             }
             throw err;
         }
@@ -1348,7 +1354,9 @@ export class CloudSync {
 
             if (error) {
                 if (error.code === '42P01') {
-                    this.tablesMissing = true;
+                    if (['items', 'months', 'entries', 'templates', 'reminders', 'incomings', 'incoming_senders', 'works', 'deleted_records', 'app_settings'].includes(storeName)) {
+                        this.tablesMissing = true;
+                    }
                 }
                 throw error;
             }
@@ -1358,7 +1366,9 @@ export class CloudSync {
         } catch (err) {
             console.warn(`[CLOUD] Pull error from ${storeName}:`, err.message);
             if (err.code === '42P01' || (err.message && (err.message.includes('relation') || err.message.includes('does not exist')))) {
-                this.tablesMissing = true;
+                if (['items', 'months', 'entries', 'templates', 'reminders', 'incomings', 'incoming_senders', 'works', 'deleted_records', 'app_settings'].includes(storeName)) {
+                    this.tablesMissing = true;
+                }
             }
             return [];
         }
