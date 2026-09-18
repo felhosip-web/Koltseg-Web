@@ -65,8 +65,13 @@ export class DataSyncController {
                 );
             }
             
-            this.app.hmiNotif.showToast(`✅ Szinkronizáció sikeres! (${syncTime})`, 'success');
-            this.app.renderer?.updateFooterStatus(`✅ Szinkronizálva: ${syncTime}`);
+            if (result && result.errors && result.errors.length > 0) {
+                this.app.hmiNotif.showToast(`⚠️ Részleges szinkronizáció (${result.errors.length} hiba)`, 'warning');
+                this.app.renderer?.updateFooterStatus(`⚠️ Szinkronizálva (hibákkal): ${syncTime}`);
+            } else {
+                this.app.hmiNotif.showToast(`✅ Szinkronizáció sikeres! (${syncTime})`, 'success');
+                this.app.renderer?.updateFooterStatus(`✅ Szinkronizálva: ${syncTime}`);
+            }
 
             console.log('[SYNC] Sikeres szinkronizáció', result);
             return result;

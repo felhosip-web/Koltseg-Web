@@ -1128,13 +1128,19 @@ export class CloudSync {
                 console.log(`[CLOUD] ${storeName} egyedi upsert sikeres`);
                 return;
             } catch (err) {
-                // 42703 is undefined_column in Postgres
-                const isColumnError = err.code === '42703' || 
-                                      (err.message && (err.message.toLowerCase().includes('column') && (err.message.toLowerCase().includes('does not exist') || err.message.toLowerCase().includes('not found'))));
+                // 42703 is undefined_column in Postgres, PGRST204 is PostgREST column not found
+                const isColumnError = err.code === '42703' || err.code === 'PGRST204' ||
+                                      (err.message && (err.message.toLowerCase().includes('column') && 
+                                      (err.message.toLowerCase().includes('does not exist') || 
+                                       err.message.toLowerCase().includes('not found') || 
+                                       err.message.toLowerCase().includes('could not find'))));
                 
                 if (isColumnError && attempts < maxAttempts - 1) {
                     let columnName = null;
-                    const match = err.message.match(/column "([^"]+)"/i) || err.message.match(/column ([a-zA-Z0-9_]+)/i);
+                    const match = err.message.match(/column "([^"]+)"/i) || 
+                                  err.message.match(/the '([^']+)' column/i) || 
+                                  err.message.match(/column '([^']+)'/i) || 
+                                  err.message.match(/column ([a-zA-Z0-9_]+)/i);
                     if (match) {
                         columnName = match[1];
                     } else {
