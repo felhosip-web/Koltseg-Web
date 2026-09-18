@@ -1,9 +1,7 @@
 // sync-diff-view.js
 // Kétpaneles modal a Local vs Cloud különbségek megjelenítésére.
 
-export function showSyncDiffModal(diffResult) {
-  const previouslyFocused = document.activeElement;
-
+export function showSyncDiffModal(diffs) {
   // A modal létrehozása
   const overlay = document.createElement('div');
   overlay.id = 'syncDiffOverlay';
@@ -13,25 +11,57 @@ export function showSyncDiffModal(diffResult) {
   modal.className = 'bg-white dark:bg-gray-800 rounded-xl shadow-xl w-11/12 max-w-5xl h-[80vh] flex flex-col overflow-hidden';
   modal.setAttribute('role', 'dialog');
   modal.setAttribute('aria-modal', 'true');
-  modal.setAttribute('aria-labelledby', 'syncDiffTitle');
-  modal.tabIndex = -1;
+  modal.setAttribute('aria-labelledby', 'syncDiffModalTitle');
 
   // Fejléc
   const header = document.createElement('div');
   header.className = 'flex justify-between items-center p-4 border-b dark:border-gray-700 bg-gray-50 dark:bg-gray-900';
   header.innerHTML = `
-    <h2 id="syncDiffTitle" class="text-xl font-bold dark:text-white"><i class="fas fa-exchange-alt mr-2"></i> Szinkronizációs Eltérések</h2>
+    <h2 id="syncDiffModalTitle" class="text-xl font-bold dark:text-white"><i class="fas fa-exchange-alt mr-2"></i> Szinkronizációs Eltérések</h2>
     <button id="closeSyncDiffBtn" aria-label="Bezárás" class="text-gray-500 hover:text-gray-700 dark:hover:text-white focus:outline-none">
       <i class="fas fa-times text-2xl"></i>
     </button>
   `;
   modal.appendChild(header);
 
+  // Group diffs by table
+  const groupedDiffs = {};
+
+  const processItem = (item, source) => {
+      const table = item.table;
+      if (!groupedDiffs[table]) {
+          groupedDiffs[table] = [];
+      }
+
+      // In getSyncDiff:
+      // item.type is 'new', 'deleted', 'modified'
+      // item.local and item.cloud might contain the actual data objects (if passed by getSyncDiff, otherwise we only have labels).
+      // Assuming getSyncDiff returns local and cloud objects if available, else we fall back to label.
+
+      // We map the getSyncDiff types ('new', 'deleted', 'modified')
+      // back to the logical types expected by the UI ('local_only', 'cloud_only', 'modified', 'deleted')
+
+      let logicalType = 'modified';
+      if (item.type === 'new' && source === 'local') logicalType = 'local_only';
+      if (item.type === 'new' && source === 'cloud') logicalType = 'cloud_only';
+      if (item.type === 'deleted') logicalType = 'deleted';
+
+      groupedDiffs[table].push({
+          type: logicalType,
+          local: item.local || (source === 'local' ? { name: item.label } : null),
+          cloud: item.cloud || (source === 'cloud' ? { name: item.label } : null),
+          label: item.label
+      });
+  };
+
+  (diffs.local || []).forEach(item => processItem(item, 'local'));
+  (diffs.cloud || []).forEach(item => processItem(item, 'cloud'));
+
+  const tables = Object.keys(groupedDiffs);
+
   // Navigáció a táblák között
   const tablesContainer = document.createElement('div');
   tablesContainer.className = 'p-3 flex gap-2 overflow-x-auto bg-gray-100 dark:bg-gray-800 border-b dark:border-gray-700 custom-scrollbar sdv-tables';
-
-  const tables = Object.keys(diffResult).filter(t => diffResult[t].diffs && diffResult[t].diffs.length > 0);
 
   if (tables.length === 0) {
     const emptyState = document.createElement('div');
@@ -41,13 +71,10 @@ export function showSyncDiffModal(diffResult) {
   } else {
     // Tartalom konténer a paneleknek
     const contentArea = document.createElement('div');
-    // Módosítva: a flex-col-t kivettük, és horizontálisan görgethetővé tettük keskeny képernyőn
-    // Ez biztosítja, hogy a két panel egymás mellett marad.
     contentArea.className = 'flex-1 p-4 flex gap-4 overflow-x-auto lg:overflow-x-hidden min-h-0 bg-gray-50 dark:bg-gray-900';
 
     // Local Panel
     const localPanel = document.createElement('div');
-    // Módosítva: a min-width biztosítja, hogy ne essenek össze mobilon
     localPanel.className = 'flex-1 flex flex-col bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-lg overflow-hidden min-w-[300px] shadow-sm';
     localPanel.innerHTML = `
       <div class="bg-blue-100 dark:bg-blue-900 p-2 font-bold text-blue-800 dark:text-blue-100 text-center border-b dark:border-blue-800 flex items-center justify-center">
@@ -58,7 +85,6 @@ export function showSyncDiffModal(diffResult) {
 
     // Cloud Panel
     const cloudPanel = document.createElement('div');
-    // Módosítva: a min-width biztosítja, hogy ne essenek össze mobilon
     cloudPanel.className = 'flex-1 flex flex-col bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-lg overflow-hidden min-w-[300px] shadow-sm';
     cloudPanel.innerHTML = `
       <div class="bg-purple-100 dark:bg-purple-900 p-2 font-bold text-purple-800 dark:text-purple-100 text-center border-b dark:border-purple-800 flex items-center justify-center">
@@ -74,7 +100,7 @@ export function showSyncDiffModal(diffResult) {
     tables.forEach((table, index) => {
       const tabBtn = document.createElement('button');
       tabBtn.className = `px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-colors focus:outline-none ${index === 0 ? 'bg-blue-500 text-white shadow' : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600 border dark:border-gray-600'}`;
-      tabBtn.textContent = `${table} (${diffResult[table].diffs.length})`;
+      tabBtn.textContent = `${table} (${groupedDiffs[table].length})`;
 
       tabBtn.onclick = () => {
         // Aktív fül stílusának frissítése
@@ -84,7 +110,7 @@ export function showSyncDiffModal(diffResult) {
         tabBtn.className = 'px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-colors focus:outline-none bg-blue-500 text-white shadow';
 
         // Tartalom renderelése az adott táblához
-        renderTableDiff(table, diffResult[table].diffs);
+        renderTableDiff(table, groupedDiffs[table]);
       };
 
       tablesContainer.appendChild(tabBtn);
@@ -94,7 +120,7 @@ export function showSyncDiffModal(diffResult) {
     modal.appendChild(contentArea);
 
     // Kezdeti renderelés (első tábla)
-    setTimeout(() => renderTableDiff(tables[0], diffResult[tables[0]].diffs), 0);
+    setTimeout(() => renderTableDiff(tables[0], groupedDiffs[tables[0]]), 0);
   }
 
   // Lábjegyzet (akció gombok)
@@ -118,67 +144,23 @@ export function showSyncDiffModal(diffResult) {
   const cancelBtn = document.getElementById('cancelSyncBtn');
   const executeBtn = document.getElementById('executeSyncBtn');
 
-  const focusableSelector = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
-  const isVisible = (element) => {
-    if (!element || typeof element.focus !== 'function') return false;
-
-    for (let current = element; current; current = current.parentElement) {
-      if (current.hidden || current.getAttribute('aria-hidden') === 'true' || current.classList.contains('hidden')) {
-        return false;
-      }
-
-      const computedStyle = window.getComputedStyle?.(current);
-      if (computedStyle?.display === 'none' || computedStyle?.visibility === 'hidden') return false;
-    }
-
-    return true;
-  };
-
   const closeModal = () => {
-    if (!overlay.isConnected) return;
-
-    document.removeEventListener('keydown', handleKeyDown);
-    overlay.remove();
-
-    const fallbackControl = Array.from(document.querySelectorAll(focusableSelector)).find(isVisible);
-    const focusTarget = isVisible(previouslyFocused) ? previouslyFocused : fallbackControl;
-    focusTarget?.focus();
+    document.removeEventListener('keydown', handleEscape);
+    document.body.removeChild(overlay);
   };
 
-  const handleKeyDown = (event) => {
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      closeModal();
-      return;
-    }
+  const handleEscape = (e) => {
+      if (e.key === 'Escape') closeModal();
+  }
+  document.addEventListener('keydown', handleEscape);
 
-    if (event.key !== 'Tab') return;
-
-    const focusableElements = Array.from(modal.querySelectorAll(focusableSelector)).filter(isVisible);
-    if (focusableElements.length === 0) {
-      event.preventDefault();
-      modal.focus();
-      return;
-    }
-
-    const firstElement = focusableElements[0];
-    const lastElement = focusableElements[focusableElements.length - 1];
-    if (!modal.contains(document.activeElement)) {
-      event.preventDefault();
-      firstElement.focus();
-    } else if (event.shiftKey && document.activeElement === firstElement) {
-      event.preventDefault();
-      lastElement.focus();
-    } else if (!event.shiftKey && document.activeElement === lastElement) {
-      event.preventDefault();
-      firstElement.focus();
-    }
-  };
+  // Set focus to modal for accessibility
+  setTimeout(() => {
+      closeBtn.focus();
+  }, 100);
 
   closeBtn.addEventListener('click', closeModal);
   cancelBtn.addEventListener('click', closeModal);
-  document.addEventListener('keydown', handleKeyDown);
-  closeBtn.focus();
 
   executeBtn.addEventListener('click', () => {
     closeModal();
@@ -197,114 +179,65 @@ export function showSyncDiffModal(diffResult) {
     cloudContainer.innerHTML = '';
 
     diffs.forEach(diff => {
-      // Formázott JSON megjelenítéshez
-      const formatData = (data) => {
-        if (!data) {
-          const empty = document.createElement('em');
-          empty.className = 'text-gray-400';
-          empty.textContent = 'Nincs adat';
-          return empty;
-        }
-
-        const fragment = document.createDocumentFragment();
-
-        // Próbáljuk a legfontosabb mezőket kiemelni
-        for (const key of ['name', 'title']) {
-          if (data[key]) {
-            const summary = document.createElement('div');
-            summary.className = 'font-bold mb-1';
-            summary.textContent = String(data[key]);
-            fragment.appendChild(summary);
-          }
-        }
-        if (data.amount) {
-          const amount = document.createElement('div');
-          amount.className = 'text-blue-600 dark:text-blue-400 mb-1';
-          amount.textContent = `${String(data.amount)} Ft`;
-          fragment.appendChild(amount);
-        }
-
-        const details = document.createElement('div');
-        details.className = 'flex flex-wrap';
-        Object.keys(data)
-          .filter(k => k !== 'id' && k !== 'name' && k !== 'title' && k !== 'amount' && typeof data[k] !== 'object')
-          .forEach(k => {
-            const detail = document.createElement('span');
-            detail.className = 'text-xs mr-2';
-
-            const label = document.createElement('span');
-            label.className = 'text-gray-500';
-            label.textContent = `${k}:`;
-
-            detail.append(label, ` ${String(data[k])}`);
-            details.appendChild(detail);
-          });
-        fragment.appendChild(details);
-
-        const id = data.id ? String(data.id) : '';
-        const idElement = document.createElement('div');
-        idElement.className = 'text-[10px] text-gray-400 mt-1 truncate';
-        idElement.title = id;
-        idElement.textContent = `ID: ${id ? `${id.substring(0, 8)}...` : 'N/A'}`;
-        fragment.appendChild(idElement);
-
-        return fragment;
+      // Formázott JSON megjelenítéshez biztonságos HTML escape-eléssel
+      const escapeHtml = (unsafe) => {
+        return (unsafe || '').toString()
+             .replace(/&/g, "&amp;")
+             .replace(/</g, "&lt;")
+             .replace(/>/g, "&gt;")
+             .replace(/"/g, "&quot;")
+             .replace(/'/g, "&#039;");
       };
 
-      const appendBadge = (item, text, colorClasses) => {
-        const row = document.createElement('div');
-        row.className = 'flex justify-between items-start mb-1';
+      const formatData = (data, fallbackLabel) => {
+        if (!data) return `<em class="text-gray-400">${escapeHtml(fallbackLabel) || 'Nincs adat'}</em>`;
+        // Próbáljuk a legfontosabb mezőket kiemelni
+        let summary = '';
+        if (data.name) summary += `<div class="font-bold mb-1">${escapeHtml(data.name)}</div>`;
+        if (data.title) summary += `<div class="font-bold mb-1">${escapeHtml(data.title)}</div>`;
+        if (data.amount) summary += `<div class="text-blue-600 dark:text-blue-400 mb-1">${escapeHtml(data.amount)} Ft</div>`;
 
-        const badge = document.createElement('span');
-        badge.className = `badge ${colorClasses} text-[10px] px-2 py-0.5 rounded font-bold uppercase tracking-wider`;
-        badge.textContent = text;
+        const details = Object.keys(data)
+          .filter(k => k !== 'id' && k !== 'name' && k !== 'title' && k !== 'amount' && typeof data[k] !== 'object')
+          .map(k => `<span class="text-xs mr-2"><span class="text-gray-500">${escapeHtml(k)}:</span> ${escapeHtml(data[k])}</span>`)
+          .join('');
 
-        row.appendChild(badge);
-        item.appendChild(row);
+        return summary + `<div class="flex flex-wrap">${details}</div>` + `<div class="text-[10px] text-gray-400 mt-1 mt-1 truncate" title="${escapeHtml(data.id || '')}">ID: ${data.id ? escapeHtml(data.id.substring(0,8))+'...' : 'N/A'}</div>`;
       };
 
       const localItem = document.createElement('div');
-      localItem.className = 'p-3 rounded border text-sm dark:text-gray-200 transition-colors duration-200 min-h-[80px]';
+      localItem.className = 'p-3 rounded border text-sm dark:text-gray-200 transition-colors duration-200 min-h-[80px] mb-2';
 
       const cloudItem = document.createElement('div');
-      cloudItem.className = 'p-3 rounded border text-sm dark:text-gray-200 transition-colors duration-200 min-h-[80px]';
+      cloudItem.className = 'p-3 rounded border text-sm dark:text-gray-200 transition-colors duration-200 min-h-[80px] mb-2';
 
       if (diff.type === 'local_only') {
         localItem.classList.add('bg-green-50', 'border-green-200', 'dark:bg-green-900/30', 'dark:border-green-800');
-        appendBadge(localItem, 'Új helyi', 'bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-100');
-        localItem.appendChild(formatData(diff.local));
+        localItem.innerHTML = `<div class="flex justify-between items-start mb-1"><span class="badge bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-100 text-[10px] px-2 py-0.5 rounded font-bold uppercase tracking-wider">Új helyi</span></div>${formatData(diff.local, diff.label)}`;
 
         cloudItem.classList.add('bg-gray-50', 'border-dashed', 'border-gray-300', 'dark:bg-gray-800/50', 'dark:border-gray-700', 'flex', 'items-center', 'justify-center', 'text-gray-400');
-        cloudItem.textContent = 'Hiányzik a felhőből';
+        cloudItem.innerHTML = 'Hiányzik a felhőből';
       }
       else if (diff.type === 'cloud_only') {
         localItem.classList.add('bg-gray-50', 'border-dashed', 'border-gray-300', 'dark:bg-gray-800/50', 'dark:border-gray-700', 'flex', 'items-center', 'justify-center', 'text-gray-400');
-        localItem.textContent = 'Hiányzik helyben';
+        localItem.innerHTML = 'Hiányzik helyben';
 
         cloudItem.classList.add('bg-blue-50', 'border-blue-200', 'dark:bg-blue-900/30', 'dark:border-blue-800');
-        appendBadge(cloudItem, 'Új felhő', 'bg-blue-100 text-blue-800 dark:bg-blue-800 dark:text-blue-100');
-        cloudItem.appendChild(formatData(diff.cloud));
+        cloudItem.innerHTML = `<div class="flex justify-between items-start mb-1"><span class="badge bg-blue-100 text-blue-800 dark:bg-blue-800 dark:text-blue-100 text-[10px] px-2 py-0.5 rounded font-bold uppercase tracking-wider">Új felhő</span></div>${formatData(diff.cloud, diff.label)}`;
       }
       else if (diff.type === 'modified') {
         localItem.classList.add('bg-yellow-50', 'border-yellow-200', 'dark:bg-yellow-900/30', 'dark:border-yellow-800');
-        appendBadge(localItem, 'Módosult', 'bg-yellow-100 text-yellow-800 dark:bg-yellow-800 dark:text-yellow-100');
-        localItem.appendChild(formatData(diff.local));
+        localItem.innerHTML = `<div class="flex justify-between items-start mb-1"><span class="badge bg-yellow-100 text-yellow-800 dark:bg-yellow-800 dark:text-yellow-100 text-[10px] px-2 py-0.5 rounded font-bold uppercase tracking-wider">Módosult</span></div>${formatData(diff.local, diff.label)}`;
 
         cloudItem.classList.add('bg-yellow-50', 'border-yellow-200', 'dark:bg-yellow-900/30', 'dark:border-yellow-800');
-        appendBadge(cloudItem, 'Módosult', 'bg-yellow-100 text-yellow-800 dark:bg-yellow-800 dark:text-yellow-100');
-        cloudItem.appendChild(formatData(diff.cloud));
+        cloudItem.innerHTML = `<div class="flex justify-between items-start mb-1"><span class="badge bg-yellow-100 text-yellow-800 dark:bg-yellow-800 dark:text-yellow-100 text-[10px] px-2 py-0.5 rounded font-bold uppercase tracking-wider">Módosult</span></div>${formatData(diff.cloud, diff.label)}`;
       }
       else if (diff.type === 'deleted') {
         localItem.classList.add('bg-red-50', 'border-red-200', 'dark:bg-red-900/30', 'dark:border-red-800');
-        appendBadge(localItem, 'Törlésre vár', 'bg-red-100 text-red-800 dark:bg-red-800 dark:text-red-100');
-        const deletionMessage = document.createElement('div');
-        deletionMessage.className = 'text-red-700 dark:text-red-200';
-        deletionMessage.textContent = 'Helyileg törölve';
-        localItem.appendChild(deletionMessage);
+        localItem.innerHTML = `<div class="flex justify-between items-start mb-1"><span class="badge bg-red-100 text-red-800 dark:bg-red-800 dark:text-red-100 text-[10px] px-2 py-0.5 rounded font-bold uppercase tracking-wider">Törlésre vár</span></div>${formatData(diff.local, diff.label)}`;
 
         cloudItem.classList.add('bg-red-50', 'border-red-200', 'dark:bg-red-900/30', 'dark:border-red-800');
-        appendBadge(cloudItem, 'Törlendő felhőadat', 'bg-red-100 text-red-800 dark:bg-red-800 dark:text-red-100');
-        cloudItem.appendChild(formatData(diff.cloud));
+        cloudItem.innerHTML = `<div class="flex justify-between items-start mb-1"><span class="badge bg-red-100 text-red-800 dark:bg-red-800 dark:text-red-100 text-[10px] px-2 py-0.5 rounded font-bold uppercase tracking-wider">Törlésre vár</span></div>${formatData(diff.cloud, diff.label)}`;
       }
 
       // Párok vizuális összekapcsolása hover esetén (opcionális extra)
@@ -338,8 +271,8 @@ export async function runAndShowSyncDiff(app, mode = 'pull') {
     // UI visszajelzés (pl. gomb letiltása / loading spinner mutatás - ezt hívó oldalon is lehet)
     app.hmiNotif?.showToast('Adatok letöltése és összehasonlítása...', 'info');
 
-    // Kérjük le a diff-et a syncManagertől
-    const diffResult = await app.syncManager.getDiffData(mode);
+    // Kérjük le a diff-et a syncManagertől (getSyncDiff már kezeli a deleted_records-t!)
+    const diffResult = await app.syncManager.getSyncDiff();
 
     // Jelenítsük meg a modalt
     showSyncDiffModal(diffResult);
