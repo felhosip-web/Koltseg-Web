@@ -96,10 +96,6 @@ const replaceBlock = `    // Check gomb eseménykezelője
             document.getElementById('syncLed').className = 'w-3 h-3 rounded-full bg-blue-500 animate-pulse';
 
             try {
-                // Ismert korlát: a getDiffData() diffs-klasszifikációja nem veszi figyelembe a deleted_records tombstone-okat
-                // (ellentétben a getSyncDiff()-fel), így egy törlésre váró helyi rekord "local_only"/újként jelenhet meg
-                // a kétpaneles nézetben ahelyett, hogy törlésre várva lenne jelölve.
-
                 // Modal elrejtése a nagy művelet előtt
                 modal.classList.add('hidden');
 
@@ -128,6 +124,24 @@ const replaceBlock = `    // Check gomb eseménykezelője
             }
         };
     }`;
+
+if (content.includes(replaceBlock)) {
+    process.exit(0);
+}
+
+if (!content.includes(searchBlock)) {
+    throw new Error('Az elvárt szinkron-ellenőrző eseménykezelő nem található a js/ui-controller.js fájlban.');
+}
+
+const importStatement = "import { runAndShowSyncDiff } from './sync-diff-view.js';";
+const importAnchor = "import { DataMaintenanceController } from './data-maintenance-controller.js';";
+
+if (!content.includes(importStatement)) {
+    if (!content.includes(importAnchor)) {
+        throw new Error('A sync diff import beszúrási pontja nem található a js/ui-controller.js fájlban.');
+    }
+    content = content.replace(importAnchor, `${importAnchor}\n${importStatement}`);
+}
 
 content = content.replace(searchBlock, replaceBlock);
 fs.writeFileSync('js/ui-controller.js', content, 'utf8');

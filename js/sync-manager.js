@@ -35,6 +35,17 @@ export class SyncManager {
         }
 
         const diffResult = {};
+        const localDeletedRecords = this.app.db ? await this.app.db.getAll('deleted_records') : [];
+        const deletedIdsByTable = new Map();
+
+        for (const record of localDeletedRecords || []) {
+            if (!record.table_name || record.record_id === undefined || record.record_id === null) continue;
+
+            if (!deletedIdsByTable.has(record.table_name)) {
+                deletedIdsByTable.set(record.table_name, new Set());
+            }
+            deletedIdsByTable.get(record.table_name).add(String(record.record_id));
+        }
 
         for (const table of this.tables) {
             // 1. Felhő adatok lekérése (vagy push esetén is kell az összehasonlításhoz, de mi letöltjük)
@@ -64,14 +75,18 @@ export class SyncManager {
             }
 
             // 3. Összehasonlítás
-            const cloudMap = new Map(cloudData.map(item => [item.id, item]));
-            const localMap = new Map(localData.map(item => [item.id, item]));
+            const keyField = table === 'months' ? 'month' : 'id';
+            const cloudMap = new Map(cloudData.map(item => [item[keyField], item]));
+            const localMap = new Map(localData.map(item => [item[keyField], item]));
+            const deletedIds = deletedIdsByTable.get(table) || new Set();
             const diffs = [];
 
             // Keresés a felhő adatok között
             for (const [id, cloudItem] of cloudMap) {
                 const localItem = localMap.get(id);
-                if (!localItem) {
+                if (deletedIds.has(String(id))) {
+                    diffs.push({ type: 'deleted', cloud: cloudItem, local: null });
+                } else if (!localItem) {
                     diffs.push({ type: 'cloud_only', cloud: cloudItem, local: null });
                 } else {
                     const cUpdate = new Date(cloudItem.updated_at || 0).getTime();
