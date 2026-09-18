@@ -902,22 +902,9 @@ export class SyncService {
                             resolvedValue: null
                         });
                     } else {
-                        const conflict = {
-                            table,
-                            key,
-                            label,
-                            localTime: localTime.toISOString(),
-                            cloudTime: cloudTime.toISOString(),
-                            resolvedBy: cloudTime > localTime ? 'cloud' : 'local',
-                            resolution: resLabel
-                        };
-                        if (this.currentSyncConflicts) {
-                            this.currentSyncConflicts.push(conflict);
-                        }
-
                         const app = this._getApp();
                         if (app?.logger) {
-                            app.logger.log('conflict', 'conflict', `Ütközés feloldva a(z) '${table}' táblában (${label}). Helyi: ${localTime.toLocaleTimeString('hu-HU')} vs Felhő: ${cloudTime.toLocaleTimeString('hu-HU')} -> ${resLabel}`);
+                            app.logger.log('sync', 'info', `Adat frissítve a(z) '${table}' táblában (${label}). Helyi: ${localTime.toLocaleTimeString('hu-HU')} vs Felhő: ${cloudTime.toLocaleTimeString('hu-HU')} -> ${resLabel}`);
                         }
                     }
                 }
