@@ -1,8 +1,17 @@
 {
-  "version": "7.0.21",
-  "build": "2026-09-13T11:46:29.012Z",
+  "version": "7.0.22",
+  "build": "2026-09-18T21:59:00.000Z",
   "release": "stable",
   "changelog": [
+    {
+      "version": "7.0.22",
+      "date": "2026-09-18T21:59:00.000Z",
+      "changes": [
+        "🔧 JAVÍTÁS: Supabase 'PGRST204' oszlophány jelző hibaüzenet (missing column) pontosabb felismerése és automatikus levágása",
+        "🔧 JAVÍTÁS: Rutinszerű (automatikus) szinkronizációs felülírások többé nem jelennek meg hamis ütközésként a UI-on",
+        "✨ ÚJ: UI visszajelzés (sárga figyelmeztetés) sikertelen Supabase feltöltések (push hibák) esetén"
+      ]
+    },
     {
       "version": "7.0.20",
       "date": "2026-09-10T11:59:36.157Z",
