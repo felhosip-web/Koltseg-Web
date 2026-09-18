@@ -166,9 +166,10 @@ export function showSyncDiffModal(diffs) {
     executeBtn.disabled = true;
     executeBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Szinkronizálás...';
 
-    if (window.app && window.app.dataSyncController) {
+    if (window.app && (window.app.dataSyncController || window.app.syncController)) {
       try {
-        await window.app.dataSyncController.forceSync();
+        const controller = window.app.dataSyncController || window.app.syncController;
+        await controller.forceSync();
 
         executeBtn.innerHTML = '<i class="fas fa-check mr-2"></i> Kész!';
         executeBtn.classList.replace('bg-blue-600', 'bg-emerald-600');
