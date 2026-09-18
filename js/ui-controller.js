@@ -1,5 +1,6 @@
 // js/ui-controller.js - Teljes, eredeti alapú verzió + új funkciók
 import { CellModalController } from './cell-modal-controller.js';
+import { runAndShowSyncDiff } from "./sync-diff-view.js";
 import { InputModalController } from './input-modal-controller.js';
 import { DataSyncController } from './data-sync-controller.js';
 import { DataExportController } from './data-export-controller.js';
@@ -1133,95 +1134,43 @@ export class UIController {
     // Check gomb eseménykezelője
     if (checkBtn) {
         checkBtn.onclick = async () => {
+            if (this.isCheckingSync) return;
+            this.isCheckingSync = true;
+
             checkBtn.disabled = true;
             checkBtn.innerHTML = '<i class="fas fa-spinner fa-spin text-blue-600 text-xl"></i><div><h4 class="font-bold text-gray-800">Ellenőrzés folyamatban...</h4></div>';
             statusText.textContent = 'Adatok letöltése és összehasonlítása...';
             document.getElementById('syncLed').className = 'w-3 h-3 rounded-full bg-blue-500 animate-pulse';
             
             try {
-                if (typeof this.app.syncManager.getSyncDiff !== 'function') {
-                    throw new Error("getSyncDiff függvény nem található");
-                }
-                const diffs = await this.app.syncManager.getSyncDiff();
+                // Szinkronizációs különbségek lekérése és megjelenítése a kétpaneles modalban.
 
-                const escapeHtml = (unsafe) => {
-                    return (unsafe || '').toString()
-                         .replace(/&/g, "&amp;")
-                         .replace(/</g, "&lt;")
-                         .replace(/>/g, "&gt;")
-                         .replace(/"/g, "&quot;")
-                         .replace(/'/g, "&#039;");
-                };
+                // Modal elrejtése a nagy művelet előtt
+                modal.classList.add('hidden');
 
-                // Diff konténer megjelenítése
-                diffContainer.classList.remove('hidden');
+                await runAndShowSyncDiff(this.app, 'pull');
 
-                // Helyi változások listázása
-                if (diffs.local && diffs.local.length > 0) {
-                    localDiffList.innerHTML = diffs.local.map(d =>
-                        `<div class="flex justify-between items-center bg-white p-2 rounded border border-emerald-100 shadow-sm">
-                            <div class="truncate mr-2"><span class="font-bold text-emerald-700">${d.table}</span>: ${escapeHtml(d.label)}</div>
-                            <span class="px-1.5 py-0.5 rounded text-[9px] font-bold ${d.type === 'new' ? 'bg-emerald-100 text-emerald-800' : (d.type === 'deleted' ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800')}">
-                                ${d.type === 'new' ? 'ÚJ' : (d.type === 'deleted' ? 'TÖRLÉS' : 'MOD')}
-                            </span>
-                        </div>`
-                    ).join('');
-                } else {
-                    localDiffList.innerHTML = '<div class="text-center text-gray-400 italic p-4">Nincs új/módosított helyi adat</div>';
-                }
+                statusText.textContent = 'Kattints az "Ellenőrzés" gombra a különbségek lekéréséhez.';
+                document.getElementById('syncLed').className = 'w-3 h-3 rounded-full bg-gray-400';
 
-                // Felhő változások listázása
-                if (diffs.cloud && diffs.cloud.length > 0) {
-                    cloudDiffList.innerHTML = diffs.cloud.map(d =>
-                        `<div class="flex justify-between items-center bg-white p-2 rounded border border-blue-100 shadow-sm">
-                            <div class="truncate mr-2"><span class="font-bold text-blue-700">${d.table}</span>: ${escapeHtml(d.label)}</div>
-                            <span class="px-1.5 py-0.5 rounded text-[9px] font-bold ${d.type === 'new' ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800'}">
-                                ${d.type === 'new' ? 'ÚJ' : 'MOD'}
-                            </span>
-                        </div>`
-                    ).join('');
-                } else {
-                    cloudDiffList.innerHTML = '<div class="text-center text-gray-400 italic p-4">Nincs új/módosított felhő adat</div>';
-                }
+            } catch (err) {
+                console.error('[SyncModal] Check diff hiba:', err);
 
-                const totalDiffs = (diffs.local?.length || 0) + (diffs.cloud?.length || 0);
-
-                if (diffs.unavailableTables && diffs.unavailableTables.length > 0) {
-                    executeBtn.disabled = true;
-                    document.getElementById('syncLed').className = 'w-3 h-3 rounded-full bg-red-500';
-                    statusText.textContent = `⚠️ Hálózati hiba! Nem sikerült lekérni a következő táblákat: ${diffs.unavailableTables.join(', ')}`;
-                } else {
-                    // Szinkronizáció engedélyezése, ha van különbség
-                    executeBtn.disabled = (totalDiffs === 0);
-                    executeBtn.dataset.mode = 'sync'; // Automatikus full sync
-
-                    if (totalDiffs > 0) {
-                        document.getElementById('syncLed').className = 'w-3 h-3 rounded-full bg-amber-500';
-                        statusText.textContent = `${totalDiffs} eltérés található. Szinkronizálható.`;
-                    } else {
-                        document.getElementById('syncLed').className = 'w-3 h-3 rounded-full bg-emerald-500';
-                        statusText.textContent = 'Minden adat szinkronban van!';
-                    }
-                }
-
-                // Függő változtatások (offline queue) ellenőrzése
-                this._checkPendingChanges();
-
-            } catch (e) {
-                console.error(e);
-                statusText.textContent = 'Hiba az ellenőrzés során.';
+                // Hiba esetén visszaállítjuk az eredeti modal láthatóságát
+                modal.classList.remove('hidden');
+                statusText.textContent = 'Hiba az ellenőrzés során: ' + err.message;
                 document.getElementById('syncLed').className = 'w-3 h-3 rounded-full bg-red-500';
             } finally {
+                this.isCheckingSync = false;
                 checkBtn.disabled = false;
                 checkBtn.innerHTML = `
                     <i class="fas fa-search text-blue-600 text-xl"></i>
                     <div>
-                        <h4 class="font-bold text-gray-800">Különbségek Ellenőrzése</h4>
-                        <p class="text-xs text-gray-500">Újraellenőrzés</p>
+                        <h4 class="font-bold text-gray-800">Újraellenőrzés</h4>
+                        <p class="text-xs text-gray-500">Kattints a frissítéshez</p>
                     </div>
                 `;
-            }
-        };
+            }        };
     }
     
     // Szinkronizáció végrehajtása
