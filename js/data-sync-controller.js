@@ -14,27 +14,15 @@ export class DataSyncController {
             // === 1. ELŐKONTROLL ===
             const config = this.app.config;
             if (!config?.useSupabase) {
-                await this.app.hmiNotif.showInfo(
-                    '☁️ Felhő kikapcsolva',
-                    'A szinkronizációhoz kapcsold be a felhőt a Beállításokban!'
-                );
-                throw new Error('A felhőszinkronizáció ki van kapcsolva.');
+                throw new Error('A felhőszinkronizáció ki van kapcsolva. Kapcsold be a Felhő aktív beállítást.');
             }
 
             if (!config.supabaseConfig?.url || !config.supabaseConfig?.key) {
-                await this.app.hmiNotif.showInfo(
-                    '⚠️ Hiányzó Supabase adatok',
-                    'Add meg a Supabase URL-t és Anon Public API Key-t a Beállításokban!'
-                );
-                throw new Error('Hiányoznak a Supabase kapcsolati adatai.');
+                throw new Error('Hiányoznak a Supabase kapcsolati adatai. Ellenőrizd az URL-t és az Anon Public API Key mezőt.');
             }
 
             if (!navigator.onLine) {
-                await this.app.hmiNotif.showInfo(
-                    '📡 Nincs internetkapcsolat',
-                    'A szinkronizációhoz stabil internetkapcsolat szükséges.'
-                );
-                throw new Error('Nincs internetkapcsolat.');
+                throw new Error('Nincs internetkapcsolat. A szinkronizációhoz stabil internetkapcsolat szükséges.');
             }
 
             this.app.hmiNotif.showToast('🔄 Szinkronizáció indul...', 'info');
@@ -48,14 +36,12 @@ export class DataSyncController {
             } else if (typeof syncService.fullSync === 'function') {
                 result = await syncService.fullSync();
             } else {
-                throw new Error('Nincs megfelelő sync metódus a SyncService-ben');
+                throw new Error('Nincs megfelelő sync metódus a SyncService-ben.');
             }
 
-            // A korábbi kód undefined eredménnyel is sikeresnek jelezte a műveletet.
-            // Ez akkor történt, amikor a sync metódus hibát nyelt el vagy nem indult el.
             if (!result || result.status !== 'success') {
-                const statusMessage = result?.message || result?.error || 'A szinkronizáció nem fejeződött be.';
-                throw new Error(statusMessage);
+                const syncFailureMessage = result?.message || result?.error || 'A szinkronizáció nem fejeződött be.';
+                throw new Error(syncFailureMessage);
             }
 
             // === 3. UI FRISSÍTÉS ===
@@ -63,14 +49,14 @@ export class DataSyncController {
 
             const syncTime = new Date().toLocaleTimeString('hu-HU');
             const conflicts = this.app.syncService?.lastSyncConflicts || [];
+            const successSummary = this._buildSuccessSummary(result, conflicts, syncTime);
 
-            if (conflicts.length > 0) {
-                this.app.hmiNotif?.showNotification?.(
-                    '🔀 Szinkronizációs ütközések',
-                    `A szinkronizáció során ${conflicts.length} ütközést észleltünk és oldottunk fel sikeresen (időbélyeg alapján). A részleteket megtekintheted a Beállítások -> Eseménynapló menüpontban.`,
-                    'info'
-                );
-            }
+            // Részletes, külön modal a sikeres vagy sikertelen szinkronizációról.
+            this.app.hmiNotif?.showSyncResult?.({
+                success: true,
+                title: 'Szinkronizáció sikeres',
+                message: successSummary
+            });
 
             if (result.errors && result.errors.length > 0) {
                 this.app.hmiNotif.showToast(`⚠️ Részleges szinkronizáció (${result.errors.length} hiba)`, 'warning');
@@ -87,13 +73,36 @@ export class DataSyncController {
             console.error('[SYNC ERROR]', err);
             const userMessage = this._getUserFriendlyError(err);
 
-            await this.app.hmiNotif.showInfo('❌ Szinkronizációs hiba', userMessage);
-            this.app.renderer?.updateFooterStatus('❌ Szinkronizációs hiba!', true);
+            this.app.hmiNotif?.showSyncResult?.({
+                success: false,
+                title: 'Szinkronizáció sikertelen',
+                message: userMessage
+            });
 
-            // Fontos: a hiba továbbadása a SyncDiff modalnak is, különben az
-            // "Ellenőrzés → Szinkronizálás" folyamat tévesen "Kész!" állapotot mutat.
+            this.app.renderer?.updateFooterStatus('❌ Szinkronizációs hiba!', true);
             throw err;
         }
+    }
+
+    _buildSuccessSummary(result, conflicts, syncTime) {
+        const tables = Object.values(result.tables || {});
+        const pulled = tables.reduce((sum, table) => sum + (table.pulled || 0), 0);
+        const pushed = tables.reduce((sum, table) => sum + (table.pushed || 0), 0);
+        const merged = tables.reduce((sum, table) => sum + (table.merged || 0), 0);
+
+        const lines = [
+            'A helyi és a felhőadatok összefésülése befejeződött.',
+            `Letöltve: ${pulled} rekord`,
+            `Feltöltve: ${pushed} rekord`,
+            `Helyben frissítve: ${merged} rekord`,
+            `Befejezés: ${syncTime}`
+        ];
+
+        if (result.queueProcessed) lines.push(`Várólistából feldolgozva: ${result.queueProcessed} művelet`);
+        if (conflicts.length > 0) lines.push(`Feloldott ütközések: ${conflicts.length}`);
+        if (result.errors?.length > 0) lines.push(`Figyelmeztetés: ${result.errors.length} részfeladat hibával zárult.`);
+
+        return lines.join('\n');
     }
 
     /**
@@ -102,14 +111,13 @@ export class DataSyncController {
     _getUserFriendlyError(err) {
         const msg = (err.message || '').toLowerCase();
 
-        // Supabase specifikus hibák
         if (msg.includes('jwt') || msg.includes('auth') || msg.includes('permission')) {
             return '🔐 Hitelesítési hiba. Ellenőrizd a Supabase API kulcsot a Beállításokban.';
         }
         if (msg.includes('network') || msg.includes('fetch') || msg.includes('failed to fetch')) {
             return '🌐 Hálózati hiba. Ellenőrizd az internetkapcsolatot.';
         }
-        if (msg.includes('rlp') || msg.includes('row level')) {
+        if (msg.includes('rls') || msg.includes('row level')) {
             return '🔒 Jogosultsági hiba a Supabase oldalon (RLS). Ellenőrizd a táblák RLS beállításait.';
         }
         if (msg.includes('timeout') || msg.includes('timed out')) {
@@ -134,7 +142,6 @@ export class DataSyncController {
             return '🌐 CORS hiba. Ellenőrizd a Supabase URL-t és a CORS beállításokat.';
         }
 
-        // Ismeretlen hiba
         return err.message || '❌ Ismeretlen hiba történt a szinkronizáció során.';
     }
 
