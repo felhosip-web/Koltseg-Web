@@ -922,7 +922,10 @@ export class EntryManager {
     }
     
     async getByCellKey(cellKeyPrefix) {
-        return await this.db.getByCellKey(cellKeyPrefix);
+        return this.entries.filter(e => 
+            e.cellKey === cellKeyPrefix || 
+            (e.cellKey && e.cellKey.startsWith(cellKeyPrefix + '_'))
+        );
     }
     
     async saveEntry(entry) {
