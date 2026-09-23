@@ -24,6 +24,9 @@ test('SyncService._isRecordDifferent handles primitive type variations without f
     assert.equal(syncService._isRecordDifferent({ amount: 1000 }, { amount: '1000' }), false);
     // Boolean vs boolean
     assert.equal(syncService._isRecordDifferent({ completed: true }, { completed: true }), false);
+    // Boolean must not equal number via coercion
+    assert.equal(syncService._isRecordDifferent({ completed: true }, { completed: 1 }), true);
+    assert.equal(syncService._isRecordDifferent({ completed: false }, { completed: 0 }), true);
     // String vs string
     assert.equal(syncService._isRecordDifferent({ name: 'Test' }, { name: 'Test' }), false);
     // Truly different values
@@ -62,7 +65,7 @@ test('WorkLogManager updates Zustand central store on load', async () => {
     assert.equal(storeWorks[0].name, 'Work 1');
 });
 
-test('SyncService._saveMergedToLocal purges stale local records from IndexedDB', async () => {
+test('SyncService._saveMergedToLocal purges stale local records from IndexedDB when merge non-empty', async () => {
     const db = new Database();
     db._enableMockDb();
     await db.save('items', { id: 'item1', name: 'Item 1' });
@@ -79,7 +82,7 @@ test('SyncService._saveMergedToLocal purges stale local records from IndexedDB',
     };
     syncService.setApp(app);
 
-    // mergedData only has item1 (item2 was deleted on Cloud)
+    // mergedData only has item1 (item2 was deleted on Cloud / tombstone path)
     const mergedData = {
         items: [{ id: 'item1', name: 'Item 1' }]
     };
@@ -89,4 +92,55 @@ test('SyncService._saveMergedToLocal purges stale local records from IndexedDB',
     const remainingLocalItems = await db.getAll('items');
     assert.equal(remainingLocalItems.length, 1);
     assert.equal(remainingLocalItems[0].id, 'item1');
+});
+
+test('SyncService._saveMergedToLocal does NOT wipe other tables on partial mergedData', async () => {
+    const db = new Database();
+    db._enableMockDb();
+    await db.save('items', { id: 'item1', name: 'Item 1' });
+    await db.save('months', { month: '2026-08', updated_at: '2026-08-01T00:00:00.000Z' });
+    await db.save('entries', { id: 'e1', itemId: 'item1', month: '2026-08', cellKey: 'item1_2026-08_1', amount: 100 });
+
+    const configManager = { useSupabase: false };
+    const offlineHandler = { getPendingCount: () => 0 };
+    const syncService = new SyncService(configManager, offlineHandler);
+    syncService.setApp({
+        db,
+        items: { load: async () => {} },
+        refreshAllTabs: () => {}
+    });
+
+    // Csak items – months/entries NEM szerepel → nem szabad törölni őket
+    await syncService._saveMergedToLocal({
+        items: [{ id: 'item1', name: 'Item 1' }]
+    });
+
+    const months = await db.getAll('months');
+    const entries = await db.getAll('entries');
+    assert.equal(months.length, 1, 'months must survive partial merge');
+    assert.equal(months[0].month, '2026-08');
+    assert.equal(entries.length, 1, 'entries must survive partial merge');
+    assert.equal(entries[0].id, 'e1');
+});
+
+test('SyncService._saveMergedToLocal does NOT wipe table on empty merge array', async () => {
+    const db = new Database();
+    db._enableMockDb();
+    await db.save('items', { id: 'item1', name: 'Keep me' });
+    await db.save('items', { id: 'item2', name: 'Also keep' });
+
+    const configManager = { useSupabase: false };
+    const offlineHandler = { getPendingCount: () => 0 };
+    const syncService = new SyncService(configManager, offlineHandler);
+    syncService.setApp({
+        db,
+        items: { load: async () => {} },
+        refreshAllTabs: () => {}
+    });
+
+    // Üres items tömb = pull hiba / üres memória szimuláció – NE töröljön
+    await syncService._saveMergedToLocal({ items: [] });
+
+    const remaining = await db.getAll('items');
+    assert.equal(remaining.length, 2, 'empty merge must not purge local rows');
 });

@@ -1,8 +1,19 @@
 {
-  "version": "7.0.22",
-  "build": "2026-09-18T21:59:00.000Z",
+  "version": "7.0.23",
+  "build": "2026-09-23T09:24:00.000Z",
   "release": "stable",
   "changelog": [
+    {
+      "version": "7.0.23",
+      "date": "2026-09-23T09:24:00.000Z",
+      "changes": [
+        "🔧 JAVÍTÁS: _saveMergedToLocal biztonságos purge – üres/partial merge nem törli a helyi adatokat (adatvesztés-védelem)",
+        "🔧 JAVÍTÁS: Tombstone felhő-törlés queue-ba kerül (nem azonnali vak cloud.delete)",
+        "🔧 JAVÍTÁS: months queue customKey legacy migráció betöltéskor",
+        "🔧 JAVÍTÁS: _isRecordDifferent numerikus/boolean összehasonlítás pontosabb",
+        "✨ ÚJ: Regressziós tesztek partial/empty merge purge ellen"
+      ]
+    },
     {
       "version": "7.0.22",
       "date": "2026-09-18T21:59:00.000Z",
