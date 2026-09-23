@@ -668,8 +668,12 @@ export class SyncService {
 
                     // Felhőbeli törlés: NE azonnali cloud.delete (korrupt tombstone → adatvesztés).
                     // Helyette high-priority queue elem – a processQueue kezeli, újrapróbálható, deduplikált.
-                    // Csak akkor, ha van felhő kliens; a dedupe az addToQueue-ban történik.
-                    if (this.cloud?.client) {
+                    // Csak akkor, ha a cél rekord a lekért felhőadatokban is megtalálható.
+                    // Hiányzó vagy hibás pull eredménynél a tombstone későbbi sync-re marad.
+                    const pulledRows = cloudData[targetTable];
+                    const targetExistsInCloud = Array.isArray(pulledRows) &&
+                        pulledRows.some(item => item && String(item[keyField]) === String(targetId));
+                    if (this.cloud?.client && targetExistsInCloud) {
                         try {
                             const deletePayload = targetTable === 'months'
                                 ? { month: targetId }
