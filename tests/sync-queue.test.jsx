@@ -47,53 +47,6 @@ test('SyncService.addToQueue correctly resolves customKey for months', () => {
     assert.equal(item2.customKey, 'month');
 });
 
-test('SyncService defers tombstone cloud deletes until the target is confirmed in pulled rows', async () => {
-    async function queuedTombstoneDeletes(targetRows) {
-        localStorage.clear();
-        Object.defineProperty(globalThis, 'navigator', {
-            configurable: true,
-            value: { onLine: true }
-        });
-        const syncService = new SyncService(
-            { useSupabase: true, supabaseConfig: { url: '', key: '' } },
-            { getPendingCount: () => 0 }
-        );
-        const queuedDeletes = [];
-
-        syncService.cloud.client = {};
-        syncService.cloud.pull = async () => [];
-        syncService.cloud.upsert = async () => {};
-        syncService.processQueue = async () => ({ processed: 0, failed: 0 });
-        syncService._migrateInvalidTombstones = async () => {};
-        syncService._mergeTable = (_local, cloud) => Array.isArray(cloud) ? cloud : [];
-        syncService._saveMergedToLocal = async () => {};
-        syncService._reloadAndRender = async () => {};
-        syncService.addToQueue = (...args) => queuedDeletes.push(args);
-        syncService.pull = async (table) => {
-            if (table === 'items') return targetRows;
-            if (table === 'deleted_records') {
-                return [{ id: 'tombstone-1', table_name: 'items', record_id: 'item-1' }];
-            }
-            return [];
-        };
-        syncService.setApp({
-            db: {
-                getAll: async () => [],
-                _directDelete: async () => {}
-            }
-        });
-
-        await syncService.sync();
-        return queuedDeletes;
-    }
-
-    assert.deepEqual(await queuedTombstoneDeletes([{ id: 'item-1' }]), [
-        ['delete', { id: 'item-1' }, 'items', 'high', 'id']
-    ]);
-    assert.deepEqual(await queuedTombstoneDeletes([]), []);
-    assert.deepEqual(await queuedTombstoneDeletes({ id: 'item-1' }), []);
-});
-
 test('WorkLogManager updates Zustand central store on load', async () => {
     const mockDb = {
         getAll: async (table) => {

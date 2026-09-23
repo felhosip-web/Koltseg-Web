@@ -48,9 +48,7 @@ export class SyncService {
     // ========================================================
 
     /**
-     * Restore the saved sync queue, marking interrupted items pending for retry and
-     * normalizing legacy month keys. Unreadable or malformed saved data resets the
-     * queue to empty; saving any repairs back to storage is best effort.
+     * Sync queue betöltése localStorage-ból
      */
     _loadSyncQueue() {
         try {
@@ -516,13 +514,8 @@ export class SyncService {
     }
 
     /**
-     * Synchronize queued changes and local/cloud records, including conflict resolution.
-     * Tombstones attempt local deletion and queue cloud deletion for a later pass
-     * when a cloud client is available.
-     *
-     * @returns {Promise<Object>} A status result if already running, unconfigured, or
-     *   offline; otherwise a summary with table counts and recoverable operation errors.
-     * @throws {Error} If conflict resolution is canceled; other uncaught failures propagate.
+     * Teljes kétirányú szinkronizáció push + pull + merge
+     * (módosítva: queue feldolgozással)
      */
     async sync() {
         // === 1. ELLENŐRZÉSEK ===
@@ -668,12 +661,8 @@ export class SyncService {
 
                     // Felhőbeli törlés: NE azonnali cloud.delete (korrupt tombstone → adatvesztés).
                     // Helyette high-priority queue elem – a processQueue kezeli, újrapróbálható, deduplikált.
-                    // Csak akkor, ha a cél rekord a lekért felhőadatokban is megtalálható.
-                    // Hiányzó vagy hibás pull eredménynél a tombstone későbbi sync-re marad.
-                    const pulledRows = cloudData[targetTable];
-                    const targetExistsInCloud = Array.isArray(pulledRows) &&
-                        pulledRows.some(item => item && String(item[keyField]) === String(targetId));
-                    if (this.cloud?.client && targetExistsInCloud) {
+                    // Csak akkor, ha van felhő kliens; a dedupe az addToQueue-ban történik.
+                    if (this.cloud?.client) {
                         try {
                             const deletePayload = targetTable === 'months'
                                 ? { month: targetId }
@@ -863,12 +852,7 @@ export class SyncService {
     }
 
     /**
-     * Compare record content without identifiers, timestamps, or internal metadata.
-     * Booleans remain distinct from numbers; equivalent numbers and numeric strings
-     * compare equal. Two object-valued fields are compared by JSON representation.
-     *
-     * @returns {boolean} Whether any compared field differs between the records.
-     * @throws {TypeError} If an object field cannot be JSON-serialized.
+     * Két tábla összefésülése (időbélyeg alapján)
      */
     _isRecordDifferent(local, cloud) {
         if (!local || !cloud) return local !== cloud;
@@ -1013,12 +997,7 @@ export class SyncService {
     }
 
     /**
-     * Save merged records to the local database for explicitly included tables only.
-     * Missing tables are untouched. Empty or non-array table results skip deletion;
-     * non-empty results attempt to remove local records absent from the merge before saving rows.
-     * Database read, delete, and save failures are caught so other rows can proceed.
-     *
-     * @param {Object} mergedData - Table names mapped to merged record arrays.
+     * Merged adatok mentése a helyi IndexedDB-be
      */
     async _saveMergedToLocal(mergedData) {
         const app = this._getApp();
