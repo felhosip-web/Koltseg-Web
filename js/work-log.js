@@ -1,21 +1,30 @@
 // js/work-log.js - v5.2.0 - Munka nyilvántartó modul (UUID)
 import { UIModalController } from './ui-modal-controller.js';
 import { generateUUID } from './uuid-utils.js';
+import { useAppStore } from './store.js';
 
 export class WorkLogManager {
     constructor(db, syncService) {
         this.db = db;
         this.syncService = syncService;
-        this.works = [];
+    }
+
+    get works() {
+        return useAppStore.getState().works;
+    }
+
+    set works(val) {
+        useAppStore.setState({ works: val });
     }
 
     /**
      * Load all works from database
      */
     async load() {
-        this.works = await this.db.getAll('works') || [];
+        const loadedWorks = await this.db.getAll('works') || [];
         // Sort works by created_at timestamp (newer first for display, but keep stable order)
-        this.works.sort((a, b) => (a.created_at || '').localeCompare(b.created_at || ''));
+        loadedWorks.sort((a, b) => (a.created_at || '').localeCompare(b.created_at || ''));
+        this.works = loadedWorks;
         return this.works;
     }
 

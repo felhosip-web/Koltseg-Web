@@ -476,7 +476,9 @@ export class Database {
                 
                 // Track in Sync Queue
                 if (syncService) {
-                    syncService.addToQueue('delete', { id: key }, storeName, 'high');
+                    const customKey = storeName === 'months' ? 'month' : 'id';
+                    const payload = storeName === 'months' ? { month: key } : { id: key };
+                    syncService.addToQueue('delete', payload, storeName, 'high', customKey);
                 }
             } catch (err) {
                 console.warn('[DB] Hiba a törlés naplózásakor:', err);

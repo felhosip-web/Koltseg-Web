@@ -94,10 +94,12 @@ export class SyncService {
     /**
      * Művelet hozzáadása a queue-hoz
      */
-    addToQueue(operation, data, table, priority = 'normal', customKey = 'id') {
+    addToQueue(operation, data, table, priority = 'normal', customKey = null) {
         if (this.isMuted) {
             return null;
         }
+
+        const resolvedKeyField = customKey || (table === 'months' ? 'month' : 'id');
 
         // Prevent adding completely invalid data to queue
         if (operation !== 'delete' && (!data || typeof data !== 'object')) {
@@ -109,13 +111,14 @@ export class SyncService {
             }
         }
 
-        const keyValue = data[customKey] || data.id;
-        const existingIndex = keyValue ? this._syncQueue.findIndex(i => i.table === table && (i.data[customKey] === keyValue || i.data.id === keyValue)) : -1;
+        const keyValue = typeof data === 'object' && data !== null ? (data[resolvedKeyField] || data.month || data.id) : data;
+        const existingIndex = keyValue ? this._syncQueue.findIndex(i => i.table === table && (i.data[resolvedKeyField] === keyValue || i.data.month === keyValue || i.data.id === keyValue)) : -1;
         if (existingIndex !== -1) {
             this._syncQueue[existingIndex] = {
                 ...this._syncQueue[existingIndex],
                 operation,
                 data,
+                customKey: resolvedKeyField,
                 priority,
                 timestamp: new Date().toISOString(),
                 status: 'pending',
@@ -124,14 +127,13 @@ export class SyncService {
             this._saveSyncQueue();
             return this._syncQueue[existingIndex];
         }
-        console.log('[DEBUG_QUEUE] Added to queue:', operation, table, priority);
-        console.trace('[DEBUG_QUEUE] Trace:');
+
         const item = {
             id: Date.now() + '_' + Math.random().toString(36).substr(2, 6),
             operation, // 'create', 'update', 'delete'
             table,
             data,
-            customKey,
+            customKey: resolvedKeyField,
             priority, // 'high', 'normal', 'low'
             timestamp: new Date().toISOString(),
             retryCount: 0,
@@ -295,7 +297,7 @@ export class SyncService {
             return { success: false, error: 'Nincs felhő kapcsolat' };
         }
 
-        const customKey = item.customKey || 'id';
+        const customKey = item.customKey || (table === 'months' ? 'month' : 'id');
         
         // Auto-fix invalid data
         if (operation !== 'delete' && (!data || typeof data !== 'object')) {
@@ -634,6 +636,16 @@ export class SyncService {
                     } catch (e) {
                         console.warn(`[SYNC] Hiba a tombstone fizikai törlése közben: ${targetTable} / ${targetId}`, e);
                     }
+
+                    // Töröljük a felhőbeli cél táblából is, ha létezik felhő kapcsolat
+                    if (this.cloud?.client) {
+                        try {
+                            const deletePayload = targetTable === 'months' ? { month: targetId } : { id: targetId };
+                            await this.cloud.delete(targetTable, deletePayload, keyField);
+                        } catch (e) {
+                            console.warn(`[SYNC] Hiba a tombstone felhőbeli törlése közben (${targetTable}/${targetId}):`, e);
+                        }
+                    }
                 }
             }
 
@@ -817,33 +829,34 @@ export class SyncService {
      * Két tábla összefésülése (időbélyeg alapján)
      */
     _isRecordDifferent(local, cloud) {
+        if (!local || !cloud) return local !== cloud;
+
         const ignoreKeys = ['updated_at', 'timestamp', '_source', '_updated_at', 'id', 'month', 'created_at', 'creator_id'];
         const localKeys = Object.keys(local).filter(k => !ignoreKeys.includes(k) && !k.startsWith('_'));
         const cloudKeys = Object.keys(cloud).filter(k => !ignoreKeys.includes(k) && !k.startsWith('_'));
-        
+
+        const areValuesDifferent = (v1, v2) => {
+            if (v1 === v2) return false;
+            if ((v1 === null || v1 === undefined) && (v2 === null || v2 === undefined)) return false;
+            if (v1 === null || v1 === undefined || v2 === null || v2 === undefined) return true;
+            if (typeof v1 === 'object' && typeof v2 === 'object') {
+                return JSON.stringify(v1) !== JSON.stringify(v2);
+            }
+            return String(v1) !== String(v2);
+        };
+
         for (const key of localKeys) {
-            if (local[key] !== cloud[key]) {
-                if (typeof local[key] === 'object' && typeof cloud[key] === 'object') {
-                    if (JSON.stringify(local[key]) !== JSON.stringify(cloud[key])) {
-                        return true;
-                    }
-                } else {
-                    return true;
-                }
+            if (areValuesDifferent(local[key], cloud[key])) {
+                return true;
             }
         }
-        
+
         for (const key of cloudKeys) {
-            if (cloud[key] !== local[key]) {
-                if (typeof local[key] === 'object' && typeof cloud[key] === 'object') {
-                    if (JSON.stringify(local[key]) !== JSON.stringify(cloud[key])) {
-                        return true;
-                    }
-                } else {
-                    return true;
-                }
+            if (areValuesDifferent(local[key], cloud[key])) {
+                return true;
             }
         }
+
         return false;
     }
 
@@ -959,12 +972,27 @@ export class SyncService {
             { name: 'works', data: mergedData.works || [], key: 'id' }
         ];
 
-        for (const { name, data, key } of tables) {
-            if (data.length === 0) continue;
+        for (const { name, data, key: keyField } of tables) {
+            const mergedKeySet = new Set(data.map(item => String(item[keyField])));
 
+            // 1. Töröljük a helyi DB-ből azokat a rekordokat, amelyek már nem léteznek az összefésült eredményben
+            try {
+                const existingLocal = await app.db.getAll(name) || [];
+                for (const localItem of existingLocal) {
+                    const localKey = localItem ? String(localItem[keyField]) : null;
+                    if (localKey && !mergedKeySet.has(localKey)) {
+                        console.log(`[SYNC] 🧹 Árva/törölt helyi rekord eltávolítása: ${name} / ${localKey}`);
+                        await app.db._directDelete(name, localItem[keyField]);
+                    }
+                }
+            } catch (e) {
+                console.warn(`[SYNC] Hiba a helyi árva rekordok törlésekor a(z) ${name} táblánál:`, e);
+            }
+
+            // 2. Mentjük a frissített / új rekordokat
             for (const item of data) {
                 try {
-                    // Megtisztítjuk a belső mezőktől a helyi IndexedDB mentés előtt
+                    // Megtisztítjuk a belső metaadatoktól a helyi IndexedDB mentés előtt
                     const { _source, _updated_at, ...cleanItem } = item;
 
                     // Időbélyeg biztosítása
