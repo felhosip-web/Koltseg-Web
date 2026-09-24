@@ -821,6 +821,7 @@ export class SyncService {
                 } catch (e) {
                     console.warn('[SYNC] Nem sikerült elmenteni a hmi_lastSyncTime-ot:', e);
                     results.checkpointUpdated = false;
+                    results.errors.push({ table: 'sync', operation: 'checkpoint', error: e.message || 'Nem sikerült elmenteni a hmi_lastSyncTime értéket.' });
                 }
             } else {
                 console.warn(`[SYNC] ⚠️ Szinkronizáció befejeződött, de ${results.errors.length} hiba történt. "lastSyncTime" nem került frissítésre.`);

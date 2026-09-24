@@ -270,9 +270,11 @@ test('Regression — localStorage.setItem failure preserves checkpoint and repor
 
         assert.equal(syncResult.checkpointUpdated, false);
         assert.equal(syncService.lastSyncTime.toISOString(), oldCheckpoint.toISOString());
+        assert.ok(syncResult.errors.some(e => e.operation === 'checkpoint'));
 
         const report = syncService.getLastReport();
         assert.ok(report !== null);
+        assert.equal(report.status, 'partial');
         assert.equal(report.checkpointStatus, 'unchanged');
         assert.equal(report.lastSuccessfulSync, oldCheckpoint.toISOString());
     } finally {
