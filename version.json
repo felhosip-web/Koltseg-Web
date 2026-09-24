@@ -1,17 +1,19 @@
 {
   "version": "7.2.1",
-  "build": "2026-09-24T16:10:00.000Z",
+  "build": "2026-09-24T18:00:00.000Z",
   "release": "stable",
   "changelog": [
     {
       "version": "7.2.1",
-      "date": "2026-09-24T16:10:00.000Z",
+      "date": "2026-09-24T18:00:00.000Z",
       "changes": [
-        "✨ ÚJ: Biztonságos szinkronizációs sorrend (PULL -> MERGE -> LOCAL SAVE -> QUEUE PROCESS -> PUSH)",
-        "✨ ÚJ: Regressziós tesztek az offline várakozási sor (queue) és a friss felhős adatok összefésülési sorrendjére",
-        "🔧 JAVÍTÁS: Megelőztük az elavult sorban álló (queued) módosítások korai feltöltését a friss felhős adatok összefésülése előtt",
-        "🔧 JAVÍTÁS: A felhőből összefésült frissebb adatok elavulttá teszik és törlik a régebbi sorban álló helyi módosításokat (nincs rejtett felülírás)",
-        "🔧 JAVÍTÁS: Sikertelen Pull esetén a queue elemek nem kerülnek vakon feltöltésre, megőrizve az adatintegritást"
+        "Added regression coverage for synchronization ordering.",
+        "Added regression coverage for offline queue processing against newer cloud data.",
+        "Synchronization now pulls and merges current cloud state before processing pending offline queue changes.",
+        "Queue processing now occurs only after the current cloud state has been incorporated into the local merge state.",
+        "Preserved existing checkpoint, LWW, tombstone and queue retry semantics.",
+        "Prevented stale queued changes from being pushed before the latest cloud state is available to the merge/conflict detection process.",
+        "Prevented synchronization ordering from bypassing conflict detection for offline queued changes."
       ]
     },
     {

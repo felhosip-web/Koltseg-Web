@@ -248,8 +248,6 @@ export class SyncService {
 
     /**
      * Queue feldolgozása (online állapotban)
-     * @param {boolean} fromSync - A szinkronizációs folyamatból hívták-e
-     * @param {Set<string>|null} failedTables - A pull során meghiúsult táblák halmaza
      */
     async processQueue(fromSync = false, failedTables = null) {
         if (this.isSyncing && !fromSync) {
@@ -257,7 +255,11 @@ export class SyncService {
             return { processed: 0, succeeded: 0, failed: 0, pending: this._syncQueue.length };
         }
 
-        const pending = this._syncQueue.filter(item => item.status === 'pending' || item.status === 'failed');
+        const pending = this._syncQueue.filter(item => {
+            if (item.status !== 'pending' && item.status !== 'failed') return false;
+            if (failedTables && failedTables.has && failedTables.has(item.table)) return false;
+            return true;
+        });
         if (pending.length === 0) {
             return { processed: 0, succeeded: 0, failed: 0, pending: 0 };
         }
@@ -269,11 +271,6 @@ export class SyncService {
         let failed = 0;
 
         for (const item of pending) {
-            if (failedTables && failedTables.has(item.table)) {
-                console.log(`[SYNC] Queue elem (${item.table}) kihagyva a feldolgozásból, mert a tábla pull-ja meghiúsult.`);
-                continue;
-            }
-
             // Állapot frissítés
             this.updateQueueItem(item.id, { status: 'processing' });
             processed++;
@@ -285,6 +282,13 @@ export class SyncService {
                 if (result.success) {
                     this.updateQueueItem(item.id, { status: 'done' });
                     succeeded++;
+                    if (this._currentSyncPushedKeys) {
+                        const keyField = item.customKey || (item.table === 'months' ? 'month' : 'id');
+                        const keyValue = typeof item.data === 'object' && item.data !== null ? (item.data[keyField] ?? item.data.month ?? item.data.id) : item.data;
+                        if (keyValue) {
+                            this._currentSyncPushedKeys.add(`${item.table}_${keyValue}`);
+                        }
+                    }
                 } else if (result.unrecoverable) {
                     console.warn(`[SYNC] Javíthatatlan hiba (${result.error}), elem eldobása a queue-ból.`);
                     this.updateQueueItem(item.id, { status: 'done' }); // done-ra állítjuk, hogy kikerüljön
@@ -368,11 +372,12 @@ export class SyncService {
         
         for (const table in pending) {
             const changes = pending[table];
-            if (changes.length === 0) continue;
+            if (!Array.isArray(changes) || changes.length === 0) continue;
             
             for (const change of changes) {
                 const operation = change.operation === 'delete' ? 'delete' : 'update';
-                this.addToQueue(operation, change.data, table, 'high');
+                const key = change.key || (table === 'months' ? 'month' : 'id');
+                this.addToQueue(operation, change.data, table, 'high', key);
                 converted++;
             }
             // Ürítjük a pending-et
@@ -602,6 +607,8 @@ export class SyncService {
         this.isSyncing = true;
         console.log('[SYNC] 🔄 Teljes szinkronizáció indul...');
 
+        this._currentSyncPushedKeys = new Set();
+
         const syncStartTime = new Date().toISOString();
         const results = {
             status: 'success',
@@ -619,16 +626,8 @@ export class SyncService {
         try {
             // === 1.5. HIBÁS TOMBSTONE-OK MIGRÁLÁSA & LEGACY PENDING ATALAKÍTÁSA ===
             await this._migrateInvalidTombstones();
-            this.convertPendingToQueue();
-
-            if (this.offline) {
-                const pendingCount = this.offline.getPendingCount();
-                if (pendingCount > 0) {
-                    console.log(`[SYNC] 📦 ${pendingCount} függő változtatás feldolgozása...`);
-                    const processed = await this.offline.processPendingChanges();
-                    results.pendingProcessed = processed;
-                }
-            }
+            const convertedPending = this.convertPendingToQueue();
+            results.pendingProcessed = convertedPending;
 
             // === 2. PULL: ADATOK LETÖLTÉSE A FELHŐBŐL ===
             console.log('[SYNC] ⬇️ Pull: Adatok letöltése a felhőből...');
@@ -851,8 +850,16 @@ export class SyncService {
                 const items = mergedData[table] || [];
                 if (items.length === 0) continue;
 
-                // Csak azokat töltjük fel, amelyek forrása 'local' vagy 'merged (local wins)'
-                const toPush = items.filter(item => item._source === 'local' || item._source === 'merged (local wins)');
+                // Csak azokat töltjük fel, amelyek forrása 'local' vagy 'merged (local wins)' és még nem lettek feltöltve ebben a ciklusban
+                const toPush = items.filter(item => {
+                    if (item._source !== 'local' && item._source !== 'merged (local wins)') return false;
+                    const customKey = table === 'months' ? 'month' : 'id';
+                    const keyVal = item[customKey];
+                    if (keyVal && this._currentSyncPushedKeys?.has(`${table}_${keyVal}`)) {
+                        return false; // Már feltöltöttük a queue feldolgozás során
+                    }
+                    return true;
+                });
 
                 let pushedCount = 0;
                 for (const item of toPush) {
@@ -862,6 +869,9 @@ export class SyncService {
                         const customKey = table === 'months' ? 'month' : 'id';
                         await this.push(table, cleanItem, false, customKey, true);
                         pushedCount++;
+                        if (cleanItem[customKey]) {
+                            this._currentSyncPushedKeys?.add(`${table}_${cleanItem[customKey]}`);
+                        }
                     } catch (err) {
                         console.warn(`[SYNC] ⚠️ Push hiba a(z) ${table} táblánál:`, err);
                         results.errors.push({ table, operation: 'push', error: err.message });
@@ -933,6 +943,7 @@ export class SyncService {
             throw error;
         } finally {
             this.isSyncing = false;
+            this._currentSyncPushedKeys = null;
         }
     }
 
