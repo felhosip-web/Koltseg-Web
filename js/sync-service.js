@@ -643,6 +643,11 @@ export class SyncService {
                 const targetId = tombstone.record_id;
                 
                 if (targetTable && targetId && targetTable !== 'deleted_records') {
+                    if (failedTables.has(targetTable)) {
+                        console.warn(`[SYNC] ⚠️ Tombstone kihagyva a(z) ${targetTable}/${targetId} rekordnál, mert a(z) ${targetTable} tábla letöltése meghiúsult.`);
+                        continue;
+                    }
+
                     const keyField = targetTable === 'months' ? 'month' : 'id';
                     
                     // Kiszűrjük a mergedData-ból

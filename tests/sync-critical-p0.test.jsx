@@ -172,3 +172,65 @@ test('Test 5 — sync failure safety: a failed cloud pull must not wipe local re
     assert.equal(remainingItems.some(i => i.id === 'local-item-1'), true);
     assert.equal(remainingItems.some(i => i.id === 'local-item-2'), true);
 });
+
+test('Test 6 — tombstone safety on failed table pull: tombstones must NOT be applied to local records when target table pull fails', async () => {
+    const db = new Database();
+    db._enableMockDb();
+    await db.save('items', { id: 'local-item-tombstone', name: 'Preserved Local Item' });
+
+    const configManager = {
+        useSupabase: true,
+        supabaseConfig: { url: 'https://mock.supabase.co', key: 'mock-key' }
+    };
+    const offlineHandler = { getPendingCount: () => 0, processPendingChanges: async () => 0 };
+    const syncService = new SyncService(configManager, offlineHandler);
+
+    // Mock CloudSync client where 'items' pull fails, but 'deleted_records' succeeds returning a tombstone for 'items'
+    syncService.cloud.client = {
+        from: (storeName) => ({
+            select: async (cols) => {
+                if (storeName === 'items') {
+                    return { data: null, error: new Error('Cloud pull failed for items') };
+                }
+                if (storeName === 'deleted_records') {
+                    return {
+                        data: [{
+                            id: 'tombstone-1',
+                            table_name: 'items',
+                            record_id: 'local-item-tombstone',
+                            deleted_at: new Date().toISOString()
+                        }],
+                        error: null
+                    };
+                }
+                return { data: [], error: null };
+            },
+            upsert: async () => ({ error: null }),
+            delete: () => ({ eq: async () => ({ error: null }) })
+        })
+    };
+
+    const app = {
+        db,
+        items: { items: [{ id: 'local-item-tombstone', name: 'Preserved Local Item' }] },
+        months: { months: [] },
+        entries: { entries: [] },
+        templates: { templates: [] },
+        reminderManager: { reminders: [] },
+        incomingManager: { incomings: [], senders: [] },
+        workLogManager: { works: [] },
+        refreshAllTabs: () => {}
+    };
+    syncService.setApp(app);
+
+    const syncResult = await syncService.sync();
+
+    // Verify error was reported
+    assert.equal(syncResult.errors.length >= 1, true);
+    assert.equal(syncResult.errors.some(e => e.table === 'items' && e.operation === 'pull'), true);
+
+    // Assert local "items" record still exists after sync
+    const remainingItems = await db.getAll('items');
+    assert.equal(remainingItems.length, 1);
+    assert.equal(remainingItems[0].id, 'local-item-tombstone');
+});
