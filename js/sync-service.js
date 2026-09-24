@@ -450,13 +450,8 @@ export class SyncService {
                 // Párhuzamos lekérdezés minden táblára, 4 mp-es timeouttal
                 await Promise.all(
                     tables.map(async (table) => {
-                        try {
-                            const data = await withTimeout(this.cloud?.pull(table), 4000);
-                            results[table] = data || [];
-                        } catch (err) {
-                            console.warn(`[SYNC] Pull hiba/időtúllépés a(z) ${table} táblánál:`, err);
-                            results[table] = [];
-                        }
+                        const data = await withTimeout(this.cloud?.pull(table), 4000);
+                        results[table] = data || [];
                     })
                 );
                 return results;
@@ -464,7 +459,7 @@ export class SyncService {
             return await withTimeout(this.cloud?.pull(storeName), 4000);
         } catch (err) {
             console.warn(`[SYNC] Pull hiba a(z) ${storeName} táblánál:`, err);
-            return [];
+            throw err;
         }
     }
 
@@ -573,6 +568,7 @@ export class SyncService {
             console.log('[SYNC] ⬇️ Pull: Adatok letöltése a felhőből...');
             const tables = ['items', 'months', 'entries', 'templates', 'reminders', 'incomings', 'incoming_senders', 'works', 'deleted_records'];
             const cloudData = {};
+            const failedTables = new Set();
 
             for (const table of tables) {
                 try {
@@ -584,6 +580,7 @@ export class SyncService {
                     console.warn(`[SYNC] ⚠️ Pull hiba a ${table} táblánál:`, err);
                     results.tables[table] = { pulled: 0, error: err.message };
                     results.errors.push({ table, operation: 'pull', error: err.message });
+                    failedTables.add(table);
                 }
             }
 
@@ -611,6 +608,10 @@ export class SyncService {
             this.unresolvedConflicts = []; // Kezdjük tiszta lappal
 
             for (const table of tables) {
+                if (failedTables.has(table)) {
+                    console.warn(`[SYNC] ⚠️ ${table} tábla kihagyva a merge-ből, mert a pull meghiúsult.`);
+                    continue;
+                }
                 const local = localData[table] || [];
                 const cloud = cloudData[table] || [];
                 
@@ -642,6 +643,11 @@ export class SyncService {
                 const targetId = tombstone.record_id;
                 
                 if (targetTable && targetId && targetTable !== 'deleted_records') {
+                    if (failedTables.has(targetTable)) {
+                        console.warn(`[SYNC] ⚠️ Tombstone kihagyva a(z) ${targetTable}/${targetId} rekordnál, mert a(z) ${targetTable} tábla letöltése meghiúsult.`);
+                        continue;
+                    }
+
                     const keyField = targetTable === 'months' ? 'month' : 'id';
                     
                     // Kiszűrjük a mergedData-ból

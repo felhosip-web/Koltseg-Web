@@ -1240,7 +1240,7 @@ export class CloudSync {
 
                 if (keyValue === undefined || keyValue === null) {
                     console.warn('[CLOUD] Delete: nincs érvényes kulcs', { data, customKey });
-                    return;
+                    throw new Error('Hiányzó kulcsmező a törlés művelethez');
                 }
 
                 const { error } = await this.client
@@ -1255,7 +1255,7 @@ export class CloudSync {
                 // Upsert: data objektum
                 if (!data || typeof data !== 'object') {
                     console.warn('[CLOUD] Upsert: érvénytelen adat', data);
-                    return;
+                    throw new Error('Érvénytelen adat az upsert művelethez');
                 }
 
                 await this.upsert(storeName, data, customKey);
@@ -1263,7 +1263,7 @@ export class CloudSync {
 
         } catch (err) {
             console.warn(`[CLOUD] Sync error on ${storeName}:`, err.message);
-            // Nem dobunk hibát, hogy a helyi adat megmaradjon
+            throw err;
         }
     }
 
@@ -1381,7 +1381,7 @@ export class CloudSync {
                     this.tablesMissing = true;
                 }
             }
-            return [];
+            throw err;
         }
     }
 
