@@ -1,8 +1,21 @@
 {
-  "version": "7.1.1",
-  "build": "2026-09-24T12:00:00.000Z",
+  "version": "7.2.1",
+  "build": "2026-09-24T18:00:00.000Z",
   "release": "stable",
   "changelog": [
+    {
+      "version": "7.2.1",
+      "date": "2026-09-24T18:00:00.000Z",
+      "changes": [
+        "Added regression coverage for synchronization ordering.",
+        "Added regression coverage for offline queue processing against newer cloud data.",
+        "Synchronization now pulls and merges current cloud state before processing pending offline queue changes.",
+        "Queue processing now occurs only after the current cloud state has been incorporated into the local merge state.",
+        "Preserved existing checkpoint, LWW, tombstone and queue retry semantics.",
+        "Prevented stale queued changes from being pushed before the latest cloud state is available to the merge/conflict detection process.",
+        "Prevented synchronization ordering from bypassing conflict detection for offline queued changes."
+      ]
+    },
     {
       "version": "7.1.1",
       "date": "2026-09-24T12:00:00.000Z",
