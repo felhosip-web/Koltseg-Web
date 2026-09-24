@@ -3,6 +3,7 @@
 
 import { CloudSync } from './oop-core.js';
 import { generateUUID, isValidUUID } from './uuid-utils.js';
+import { SyncReport } from './sync-report.js';
 
 export class SyncService {
     /**
@@ -26,6 +27,7 @@ export class SyncService {
         }
         
         this.syncResults = null;
+        this.lastReport = null;
         this.currentSyncConflicts = [];
         this.lastSyncConflicts = [];
         this.unresolvedConflicts = []; // ÚJ: Interaktív ütközések listája
@@ -250,22 +252,24 @@ export class SyncService {
     async processQueue(fromSync = false) {
         if (this.isSyncing && !fromSync) {
             console.log('[SYNC] Már fut szinkronizáció, queue feldolgozás később');
-            return { processed: 0, failed: 0 };
+            return { processed: 0, succeeded: 0, failed: 0, pending: this._syncQueue.length };
         }
 
         const pending = this._syncQueue.filter(item => item.status === 'pending' || item.status === 'failed');
         if (pending.length === 0) {
-            return { processed: 0, failed: 0 };
+            return { processed: 0, succeeded: 0, failed: 0, pending: 0 };
         }
 
         console.log(`[SYNC] 🔄 Queue feldolgozása: ${pending.length} elem`);
 
         let processed = 0;
+        let succeeded = 0;
         let failed = 0;
 
         for (const item of pending) {
             // Állapot frissítés
             this.updateQueueItem(item.id, { status: 'processing' });
+            processed++;
 
             try {
                 // Művelet végrehajtása
@@ -273,7 +277,7 @@ export class SyncService {
                 
                 if (result.success) {
                     this.updateQueueItem(item.id, { status: 'done' });
-                    processed++;
+                    succeeded++;
                 } else if (result.unrecoverable) {
                     console.warn(`[SYNC] Javíthatatlan hiba (${result.error}), elem eldobása a queue-ból.`);
                     this.updateQueueItem(item.id, { status: 'done' }); // done-ra állítjuk, hogy kikerüljön
@@ -286,6 +290,7 @@ export class SyncService {
                     } else {
                         this.updateQueueItem(item.id, { status: 'pending', retryCount: item.retryCount });
                     }
+                    failed++;
                 }
             } catch (e) {
                 console.warn(`[SYNC] Queue item hiba:`, e);
@@ -296,6 +301,7 @@ export class SyncService {
                 } else {
                     this.updateQueueItem(item.id, { status: 'pending', retryCount: item.retryCount });
                 }
+                failed++;
             }
         }
 
@@ -303,8 +309,10 @@ export class SyncService {
         this._syncQueue = this._syncQueue.filter(item => item.status !== 'done');
         this._saveSyncQueue();
 
-        console.log(`[SYNC] ✅ Queue feldolgozva: ${processed} sikeres, ${failed} sikertelen`);
-        return { processed, failed };
+        const remainingPending = this._syncQueue.filter(item => item.status === 'pending' || item.status === 'failed').length;
+
+        console.log(`[SYNC] ✅ Queue feldolgozva: ${succeeded} sikeres, ${failed} sikertelen`);
+        return { processed, succeeded, failed, pending: remainingPending };
     }
 
     /**
@@ -533,13 +541,18 @@ export class SyncService {
         this.isSyncing = true;
         console.log('[SYNC] 🔄 Teljes szinkronizáció indul...');
 
+        const syncStartTime = new Date().toISOString();
         const results = {
             status: 'success',
-            startTime: new Date().toISOString(),
+            startTime: syncStartTime,
             tables: {},
             pendingProcessed: 0,
             queueProcessed: 0,
-            errors: []
+            queueSucceeded: 0,
+            queueFailed: 0,
+            queuePending: 0,
+            errors: [],
+            checkpointUpdated: false
         };
 
         try {
@@ -550,6 +563,9 @@ export class SyncService {
             console.log('[SYNC] 📋 Queue feldolgozása...');
             const queueResult = await this.processQueue(true);
             results.queueProcessed = queueResult.processed;
+            results.queueSucceeded = queueResult.succeeded;
+            results.queueFailed = queueResult.failed;
+            results.queuePending = queueResult.pending;
             if (queueResult.failed > 0) {
                 results.errors.push({ operation: 'queue', error: `${queueResult.failed} elem sikertelen` });
             }
@@ -795,12 +811,17 @@ export class SyncService {
             const isFullSuccess = results.errors.length === 0;
             const completionTime = new Date();
 
+            results.checkpointUpdated = false;
+
             if (isFullSuccess) {
-                this.lastSyncTime = completionTime;
                 try {
-                    localStorage.setItem('hmi_lastSyncTime', this.lastSyncTime.toISOString());
+                    localStorage.setItem('hmi_lastSyncTime', completionTime.toISOString());
+                    this.lastSyncTime = completionTime;
+                    results.checkpointUpdated = true;
                 } catch (e) {
                     console.warn('[SYNC] Nem sikerült elmenteni a hmi_lastSyncTime-ot:', e);
+                    results.checkpointUpdated = false;
+                    results.errors.push({ table: 'sync', operation: 'checkpoint', error: e.message || 'Nem sikerült elmenteni a hmi_lastSyncTime értéket.' });
                 }
             } else {
                 console.warn(`[SYNC] ⚠️ Szinkronizáció befejeződött, de ${results.errors.length} hiba történt. "lastSyncTime" nem került frissítésre.`);
@@ -813,6 +834,17 @@ export class SyncService {
             console.log('[SYNC] 📊 Eredmények:', results);
 
             this.syncResults = results;
+
+            // === 10. REPORT ES EVENT LOG GENERÁLÁS ===
+            const report = SyncReport.fromResults(results, this);
+            this.lastReport = report;
+            results.report = report;
+
+            const appInstance = this._getApp();
+            if (appInstance?.logger) {
+                const logLevel = report.status === 'success' ? 'info' : 'warn';
+                appInstance.logger.log('sync', logLevel, report.toEventLogSummary());
+            }
             
             // Queue értesítés
             this._notifyQueueListeners();
@@ -824,6 +856,16 @@ export class SyncService {
             results.status = 'error';
             results.error = error.message;
             this.syncResults = results;
+
+            const report = SyncReport.fromCriticalError(error, syncStartTime, this);
+            this.lastReport = report;
+            results.report = report;
+
+            const appInstance = this._getApp();
+            if (appInstance?.logger) {
+                appInstance.logger.log('sync', 'error', report.toEventLogSummary());
+            }
+
             throw error;
         } finally {
             this.isSyncing = false;
@@ -1148,6 +1190,13 @@ export class SyncService {
      */
     getLastResults() {
         return this.syncResults;
+    }
+
+    /**
+     * Utolsó szinkronizációs riport (SyncReport)
+     */
+    getLastReport() {
+        return this.lastReport;
     }
 
     /**

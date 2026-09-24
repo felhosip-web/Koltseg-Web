@@ -384,6 +384,15 @@ export class UIController {
             this.openSyncModal();
         });
 
+        document.getElementById('btnShowLastSyncReport')?.addEventListener('click', () => {
+            const report = this.app?.syncService?.getLastReport();
+            if (report) {
+                this.app?.hmiNotif?.showSyncReportModal?.(report);
+            } else {
+                this.app?.hmiNotif?.showToast?.('Nincs korábbi szinkronizációs eredmény ebben a munkamenetben.', 'info');
+            }
+        });
+
         const closeSyncModal = () => {
             const modal = document.getElementById('syncModal');
             if (modal) modal.classList.add('hidden');
