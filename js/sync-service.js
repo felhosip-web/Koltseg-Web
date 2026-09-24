@@ -248,8 +248,10 @@ export class SyncService {
 
     /**
      * Queue feldolgozása (online állapotban)
+     * @param {boolean} fromSync - A szinkronizációs folyamatból hívták-e
+     * @param {Set<string>|null} failedTables - A pull során meghiúsult táblák halmaza
      */
-    async processQueue(fromSync = false) {
+    async processQueue(fromSync = false, failedTables = null) {
         if (this.isSyncing && !fromSync) {
             console.log('[SYNC] Már fut szinkronizáció, queue feldolgozás később');
             return { processed: 0, succeeded: 0, failed: 0, pending: this._syncQueue.length };
@@ -267,6 +269,11 @@ export class SyncService {
         let failed = 0;
 
         for (const item of pending) {
+            if (failedTables && failedTables.has(item.table)) {
+                console.log(`[SYNC] Queue elem (${item.table}) kihagyva a feldolgozásból, mert a tábla pull-ja meghiúsult.`);
+                continue;
+            }
+
             // Állapot frissítés
             this.updateQueueItem(item.id, { status: 'processing' });
             processed++;
@@ -372,7 +379,9 @@ export class SyncService {
             pending[table] = [];
         }
         
-        this.offline._saveToStorage();
+        if (typeof this.offline?._saveToStorage === 'function') {
+            this.offline._saveToStorage();
+        }
         console.log(`[SYNC] 🔄 ${converted} pending változtatás átalakítva queue-vá`);
         return converted;
     }
@@ -517,8 +526,60 @@ export class SyncService {
     }
 
     /**
-     * Teljes kétirányú szinkronizáció push + pull + merge
-     * (módosítva: queue feldolgozással)
+     * A várakozási sor (queue) egyeztetése a felhőből összefésült (merged) adatokkal.
+     * Ha a felhőbeli állapot frissebb volt (cloud wins), a régebbi helyi queue elem elavulttá válik és törlésre kerül.
+     */
+    _reconcileQueueWithMergeResult(mergedData, failedTables) {
+        if (!mergedData || typeof mergedData !== 'object') return;
+
+        let prunedCount = 0;
+        this._syncQueue = this._syncQueue.filter(queueItem => {
+            const { table, operation, data, customKey } = queueItem;
+
+            // Ha a tábla letöltése (pull) meghiúsult, megőrizzük a queue elemet (nem töröljük)
+            if (failedTables && failedTables.has(table)) {
+                return true;
+            }
+
+            const keyField = customKey || (table === 'months' ? 'month' : 'id');
+            const keyValue = typeof data === 'object' && data !== null ? (data[keyField] ?? data.month ?? data.id) : data;
+
+            if (!keyValue) return true;
+
+            const tableMerged = mergedData[table] || [];
+            const mergedRecord = tableMerged.find(r => String(r[keyField]) === String(keyValue));
+
+            if (operation === 'create' || operation === 'update') {
+                if (mergedRecord) {
+                    // Ha a felhő nyert (cloud wins) vagy megegyeznek (identical), a helyi sorban álló módosítás elavult
+                    if (mergedRecord._source === 'merged (cloud wins)' || mergedRecord._source === 'merged (identical)') {
+                        console.log(`[SYNC] 🧹 Queue elem eltávolítva (${operation} ${table} ${keyValue}): felhő frissebb vagy megegyezik.`);
+                        prunedCount++;
+                        return false;
+                    }
+                } else {
+                    // Ha a rekord nincs a mergedData-ban, ellenőrizzük, hogy törölve lett-e felhős tombstone által
+                    const tombstoneMerged = mergedData.deleted_records || [];
+                    const deletedByCloud = tombstoneMerged.some(t => t.table_name === table && String(t.record_id) === String(keyValue));
+                    if (deletedByCloud) {
+                        console.log(`[SYNC] 🧹 Queue elem eltávolítva (${operation} ${table} ${keyValue}): felhőben törölve lett.`);
+                        prunedCount++;
+                        return false;
+                    }
+                }
+            }
+
+            return true;
+        });
+
+        if (prunedCount > 0) {
+            this._saveSyncQueue();
+        }
+    }
+
+    /**
+     * Teljes kétirányú szinkronizáció pull + merge + local save + queue process + push
+     * Biztonságos sorrend: PULL -> MERGE -> LOCAL SAVE -> PROCESS QUEUE -> PUSH
      */
     async sync() {
         // === 1. ELLENŐRZÉSEK ===
@@ -556,21 +617,10 @@ export class SyncService {
         };
 
         try {
-            // === 1.5. HIBÁS TOMBSTONE-OK MIGRÁLÁSA ===
+            // === 1.5. HIBÁS TOMBSTONE-OK MIGRÁLÁSA & LEGACY PENDING ATALAKÍTÁSA ===
             await this._migrateInvalidTombstones();
+            this.convertPendingToQueue();
 
-            // === 2. QUEUE FELDOLGOZÁS (prioritás) ===
-            console.log('[SYNC] 📋 Queue feldolgozása...');
-            const queueResult = await this.processQueue(true);
-            results.queueProcessed = queueResult.processed;
-            results.queueSucceeded = queueResult.succeeded;
-            results.queueFailed = queueResult.failed;
-            results.queuePending = queueResult.pending;
-            if (queueResult.failed > 0) {
-                results.errors.push({ operation: 'queue', error: `${queueResult.failed} elem sikertelen` });
-            }
-
-            // === 3. FÜGGŐ VÁLTOZTATÁSOK FELDOLGOZÁSA (kompatibilitás) ===
             if (this.offline) {
                 const pendingCount = this.offline.getPendingCount();
                 if (pendingCount > 0) {
@@ -580,7 +630,7 @@ export class SyncService {
                 }
             }
 
-            // === 4. PULL: ADATOK LETÖLTÉSE A FELHŐBŐL ===
+            // === 2. PULL: ADATOK LETÖLTÉSE A FELHŐBŐL ===
             console.log('[SYNC] ⬇️ Pull: Adatok letöltése a felhőből...');
             const tables = ['items', 'months', 'entries', 'templates', 'reminders', 'incomings', 'incoming_senders', 'works', 'deleted_records'];
             const cloudData = {};
@@ -772,10 +822,32 @@ export class SyncService {
                 results.errors.push({ table: 'app_settings', operation: 'settings', error: err.message });
             }
 
-            // === 6. SZELEKTÍV FELTÖLTÉS (Push): CSAK a helyben módosult/új adatokat töltjük fel! ===
+            // === 6. SZELEKTÍV HELYI FRISSÍTÉS (Save Local): CSAK az új/frissebb felhőbeli adatokat mentjük! ===
+            console.log('[SYNC] 💾 Szelektív Helyi adatbázis frissítése...');
+            await this._saveMergedToLocal(mergedData);
+
+            // === 7. MEMÓRIA ÉS UI FRISSÍTÉS ===
+            console.log('[SYNC] 🔄 Memória és UI frissítése...');
+            await this._reloadAndRender();
+
+            // === 8. QUEUE EGYEZTETÉS ÉS FELDOLGOZÁS (PUSH) ===
+            console.log('[SYNC] 📋 Queue egyeztetése és feldolgozása (Push)...');
+            this._reconcileQueueWithMergeResult(mergedData, failedTables);
+
+            const queueResult = await this.processQueue(true, failedTables);
+            results.queueProcessed = queueResult.processed;
+            results.queueSucceeded = queueResult.succeeded;
+            results.queueFailed = queueResult.failed;
+            results.queuePending = queueResult.pending;
+            if (queueResult.failed > 0) {
+                results.errors.push({ operation: 'queue', error: `${queueResult.failed} elem sikertelen` });
+            }
+
+            // === 8.5. SZELEKTÍV FELTÖLTÉS (Push): CSAK a helyben módosult/új adatokat töltjük fel! ===
             console.log('[SYNC] ⬆️ Szelektív Push: CSAK a helyben módosult vagy új adatok feltöltése...');
             
             for (const table of tables) {
+                if (failedTables.has(table)) continue;
                 const items = mergedData[table] || [];
                 if (items.length === 0) continue;
 
@@ -798,14 +870,6 @@ export class SyncService {
                 results.tables[table].pushed = pushedCount;
                 console.log(`[SYNC] ✅ ${table}: ${pushedCount} új/módosult elem feltöltve a felhőbe (összesen vizsgált: ${items.length})`);
             }
-
-            // === 7. SZELEKTÍV HELYI FRISSÍTÉS (Save Local): CSAK az új/frissebb felhőbeli adatokat mentjük! ===
-            console.log('[SYNC] 💾 Szelektív Helyi adatbázis frissítése...');
-            await this._saveMergedToLocal(mergedData);
-
-            // === 8. MEMÓRIA ÉS UI FRISSÍTÉS ===
-            console.log('[SYNC] 🔄 Memória és UI frissítése...');
-            await this._reloadAndRender();
 
             // === 9. BEFEJEZÉS ===
             const isFullSuccess = results.errors.length === 0;
