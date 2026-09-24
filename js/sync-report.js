@@ -31,7 +31,8 @@ export class SyncReport {
         }
 
         const errors = results.errors || [];
-        const status = errors.length === 0 ? 'success' : 'partial';
+        const checkpointStatus = results.checkpointUpdated === true ? 'updated' : 'unchanged';
+        const status = errors.length === 0 && results.checkpointUpdated === true ? 'success' : 'partial';
 
         // Táblák statisztikáinak előkészítése
         const tables = {};
@@ -71,16 +72,17 @@ export class SyncReport {
 
         const failedTables = Array.from(failedTablesSet);
 
-        // Queue adatok
-        let queueStatus = { processed: results.queueProcessed || 0, success: results.queueProcessed || 0, failed: 0, pending: 0 };
-        if (syncService && typeof syncService.getQueueStatus === 'function') {
+        // Queue adatok per-sync counters alapján
+        const queueStatus = {
+            processed: results.queueProcessed ?? 0,
+            success: results.queueSucceeded ?? Math.max(0, (results.queueProcessed ?? 0) - (results.queueFailed ?? 0)),
+            failed: results.queueFailed ?? 0,
+            pending: results.queuePending ?? 0
+        };
+
+        if (results.queueProcessed === undefined && syncService && typeof syncService.getQueueStatus === 'function') {
             const currentQueue = syncService.getQueueStatus();
-            queueStatus = {
-                processed: results.queueProcessed || 0,
-                success: Math.max(0, (results.queueProcessed || 0) - (currentQueue.failed || 0)),
-                failed: currentQueue.failed || 0,
-                pending: currentQueue.pending || 0
-            };
+            queueStatus.pending = currentQueue.pending || 0;
         }
 
         // Konfliktusok száma
@@ -95,8 +97,6 @@ export class SyncReport {
             deletionsCount = rawTables.deleted_records.pulled || rawTables.deleted_records.merged || 0;
         }
 
-        // Checkpoint státusz: sikeres sync esetén 'updated', különben 'unchanged'
-        const checkpointStatus = status === 'success' ? 'updated' : 'unchanged';
 
         // Utolsó sikeres checkpoint időpontja
         let lastSuccessfulSync = null;

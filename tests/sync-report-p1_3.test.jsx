@@ -66,6 +66,10 @@ test('SyncReport — Successful sync produces success status, updated checkpoint
             works: { pulled: 31, merged: 31, pushed: 0 }
         },
         queueProcessed: 4,
+        queueSucceeded: 4,
+        queueFailed: 0,
+        queuePending: 0,
+        checkpointUpdated: true,
         errors: []
     };
 
@@ -230,4 +234,171 @@ test('Integration — DataSyncController.forceSync triggers Sync Result modal an
     assert.ok(shownModalReport !== null, 'forceSync must show Sync Result modal');
     assert.equal(shownModalReport.status, 'success');
     assert.equal(shownModalReport.checkpointStatus, 'updated');
+});
+
+test('Regression — localStorage.setItem failure preserves checkpoint and reports unchanged', async () => {
+    localStorage.clear();
+    const oldCheckpoint = new Date('2026-01-01T10:00:00.000Z');
+    localStorage.setItem('hmi_lastSyncTime', oldCheckpoint.toISOString());
+
+    const db = new Database();
+    db._enableMockDb();
+
+    const app = createMockApp(db);
+    const syncService = new SyncService(app.config, { getPendingCount: () => 0 });
+    syncService.setApp(app);
+
+    syncService.cloud.client = {
+        from: (storeName) => ({
+            select: async () => ({ data: [], error: null }),
+            upsert: async () => ({ error: null }),
+            delete: () => ({ eq: async () => ({ error: null }) })
+        })
+    };
+
+    // Mock Storage.prototype.setItem to throw when setting hmi_lastSyncTime
+    const origSetItem = dom.window.Storage.prototype.setItem;
+    dom.window.Storage.prototype.setItem = function(key, val) {
+        if (key === 'hmi_lastSyncTime') {
+            throw new Error('QuotaExceededError / Storage failure');
+        }
+        return origSetItem.call(this, key, val);
+    };
+
+    try {
+        const syncResult = await syncService.sync();
+
+        assert.equal(syncResult.checkpointUpdated, false);
+        assert.equal(syncService.lastSyncTime.toISOString(), oldCheckpoint.toISOString());
+
+        const report = syncService.getLastReport();
+        assert.ok(report !== null);
+        assert.equal(report.checkpointStatus, 'unchanged');
+        assert.equal(report.lastSuccessfulSync, oldCheckpoint.toISOString());
+    } finally {
+        dom.window.Storage.prototype.setItem = origSetItem;
+    }
+});
+
+test('Regression — forceSync precheck failure does not show stale lastReport', async () => {
+    localStorage.clear();
+    const db = new Database();
+    db._enableMockDb();
+
+    const app = createMockApp(db);
+    const syncService = new SyncService(app.config, { getPendingCount: () => 0 });
+    syncService.setApp(app);
+    app.syncService = syncService;
+
+    // Simulate an old report existing from a previous sync
+    const oldReport = new SyncReport({
+        status: 'success',
+        startTime: '2026-09-24T08:00:00.000Z',
+        endTime: '2026-09-24T08:00:02.000Z',
+        duration: '2.0 s'
+    });
+    syncService.lastReport = oldReport;
+
+    // Precheck failure: turn off Supabase config
+    app.config.useSupabase = false;
+
+    let shownModalReport = null;
+    let shownSyncResultError = null;
+
+    app.hmiNotif.showSyncReportModal = (report) => {
+        shownModalReport = report;
+    };
+    app.hmiNotif.showSyncResult = (options) => {
+        shownSyncResultError = options;
+    };
+
+    const controller = new DataSyncController(app);
+
+    await assert.rejects(
+        async () => {
+            await controller.forceSync();
+        },
+        /A felhőszinkronizáció ki van kapcsolva/
+    );
+
+    // Verify old report was NOT shown
+    assert.equal(shownModalReport, null, 'Stale lastReport must NOT be displayed on precheck failure');
+    assert.ok(shownSyncResultError !== null);
+    assert.equal(shownSyncResultError.success, false);
+    assert.ok(shownSyncResultError.message.includes('felhőszinkronizáció ki van kapcsolva'));
+});
+
+test('Regression — Per-sync queue statistics accuracy in SyncReport', async () => {
+    localStorage.clear();
+    const db = new Database();
+    db._enableMockDb();
+
+    const app = createMockApp(db);
+    const syncService = new SyncService(app.config, { getPendingCount: () => 0 });
+    syncService.setApp(app);
+
+    // Queue has 2 items: 1 succeeds, 1 fails
+    syncService.addToQueue('update', { id: 'item-ok', name: 'OK Item' }, 'items');
+    syncService.addToQueue('update', { id: 'item-err', name: 'Err Item' }, 'items');
+
+    syncService.cloud.client = {
+        from: (storeName) => ({
+            select: async () => ({ data: [], error: null }),
+            upsert: async (payload) => {
+                if (payload && payload.id === 'item-err') {
+                    throw new Error('Supabase write failure for item-err');
+                }
+                return { error: null };
+            },
+            delete: () => ({ eq: async () => ({ error: null }) })
+        })
+    };
+
+    const syncResult = await syncService.sync();
+
+    assert.equal(syncResult.queueProcessed, 2);
+    assert.equal(syncResult.queueSucceeded, 1);
+    assert.equal(syncResult.queueFailed, 1);
+
+    const report = syncService.getLastReport();
+    assert.equal(report.queue.processed, 2);
+    assert.equal(report.queue.success, 1);
+    assert.equal(report.queue.failed, 1);
+});
+
+test('Regression — Sync Report Modal keyboard accessibility and focus restoration', async () => {
+    const hmiNotif = new UIModalController();
+
+    // Create a dummy trigger button and focus it
+    const triggerBtn = document.createElement('button');
+    triggerBtn.id = 'dummyTrigger';
+    document.body.appendChild(triggerBtn);
+    triggerBtn.focus();
+    assert.equal(document.activeElement, triggerBtn);
+
+    const report = new SyncReport({
+        status: 'success',
+        startTime: '2026-09-24T10:00:00.000Z',
+        endTime: '2026-09-24T10:00:02.000Z',
+        duration: '2 s'
+    });
+
+    const promise = hmiNotif.showSyncReportModal(report);
+
+    const modal = document.getElementById('syncReportModal');
+    assert.ok(modal !== null);
+    assert.equal(modal.classList.contains('hidden'), false);
+
+    // Primary OK button should receive focus
+    const btnOk = modal.querySelector('#btnSyncReportOk');
+    assert.ok(btnOk !== null);
+    assert.equal(document.activeElement, btnOk);
+
+    // Click OK button to close
+    btnOk.click();
+    await promise;
+
+    // Modal should be hidden and focus restored to triggerBtn
+    assert.equal(modal.classList.contains('hidden'), true);
+    assert.equal(document.activeElement, triggerBtn);
 });

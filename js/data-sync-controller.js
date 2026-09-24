@@ -10,6 +10,9 @@ export class DataSyncController {
     async forceSync() {
         this.app.renderer?.updateFooterStatus('🔄 Szinkronizáció folyamatban...', false);
 
+        const syncService = this.app.syncService || this.app.syncManager;
+        const previousReport = syncService?.lastReport;
+
         try {
             // === 1. ELŐKONTROLL ===
             const config = this.app.config;
@@ -28,7 +31,6 @@ export class DataSyncController {
             this.app.hmiNotif.showToast('🔄 Szinkronizáció indul...', 'info');
 
             // === 2. SZINKRONIZÁCIÓ VÉGREHAJTÁSA ===
-            const syncService = this.app.syncService || this.app.syncManager;
             let result = null;
 
             if (typeof syncService.sync === 'function') {
@@ -77,7 +79,9 @@ export class DataSyncController {
         } catch (err) {
             console.error('[SYNC ERROR]', err);
 
-            const report = this.app.syncService?.lastReport;
+            const currentReport = syncService?.lastReport;
+            const report = (currentReport && currentReport !== previousReport) ? currentReport : null;
+
             if (report && this.app.hmiNotif?.showSyncReportModal) {
                 this.app.hmiNotif.showSyncReportModal(report);
             } else {

@@ -227,20 +227,49 @@ export class UIModalController {
                 </div>
             `;
 
+            const previouslyFocused = document.activeElement;
+
             modal.classList.remove('hidden');
 
             const btnOk = modal.querySelector('#btnSyncReportOk');
             const btnCloseX = modal.querySelector('#btnCloseSyncReportX');
 
+            if (btnOk) {
+                btnOk.focus();
+            }
+
             const cleanup = () => {
                 modal.classList.add('hidden');
                 document.removeEventListener('keydown', keyHandler);
+                if (previouslyFocused && typeof previouslyFocused.focus === 'function') {
+                    try {
+                        previouslyFocused.focus();
+                    } catch (e) {}
+                }
                 resolve(true);
             };
 
             const keyHandler = (e) => {
                 if (e.key === 'Escape') {
+                    e.preventDefault();
                     cleanup();
+                } else if (e.key === 'Tab') {
+                    const focusables = Array.from(modal.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')).filter(el => !el.disabled);
+                    if (focusables.length === 0) return;
+                    const first = focusables[0];
+                    const last = focusables[focusables.length - 1];
+
+                    if (e.shiftKey) { // Shift + Tab
+                        if (document.activeElement === first || !modal.contains(document.activeElement)) {
+                            e.preventDefault();
+                            last.focus();
+                        }
+                    } else { // Tab
+                        if (document.activeElement === last || !modal.contains(document.activeElement)) {
+                            e.preventDefault();
+                            first.focus();
+                        }
+                    }
                 }
             };
 
