@@ -753,6 +753,7 @@ export class SyncService {
                 
             } catch (err) {
                 console.warn('[SYNC] ⚠️ Beállítások szinkronizálása sikertelen (lehet, hogy az app_settings tábla nem létezik még?):', err);
+                results.errors.push({ table: 'app_settings', operation: 'settings', error: err.message });
             }
 
             // === 6. SZELEKTÍV FELTÖLTÉS (Push): CSAK a helyben módosult/új adatokat töltjük fel! ===
@@ -791,16 +792,24 @@ export class SyncService {
             await this._reloadAndRender();
 
             // === 9. BEFEJEZÉS ===
-            this.lastSyncTime = new Date();
-            try {
-                localStorage.setItem('hmi_lastSyncTime', this.lastSyncTime.toISOString());
-            } catch (e) {
-                console.warn('[SYNC] Nem sikerült elmenteni a hmi_lastSyncTime-ot:', e);
+            const isFullSuccess = results.errors.length === 0;
+            const completionTime = new Date();
+
+            if (isFullSuccess) {
+                this.lastSyncTime = completionTime;
+                try {
+                    localStorage.setItem('hmi_lastSyncTime', this.lastSyncTime.toISOString());
+                } catch (e) {
+                    console.warn('[SYNC] Nem sikerült elmenteni a hmi_lastSyncTime-ot:', e);
+                }
+            } else {
+                console.warn(`[SYNC] ⚠️ Szinkronizáció befejeződött, de ${results.errors.length} hiba történt. "lastSyncTime" nem került frissítésre.`);
             }
-            results.endTime = this.lastSyncTime.toISOString();
+
+            results.endTime = completionTime.toISOString();
             results.duration = (new Date(results.endTime) - new Date(results.startTime)) / 1000 + 's';
             
-            console.log(`[SYNC] ✅ Szinkronizáció befejezve (${results.duration})`);
+            console.log(`[SYNC] ${isFullSuccess ? '✅ Szinkronizáció befejezve' : '⚠️ Részleges szinkronizáció befejezve'} (${results.duration})`);
             console.log('[SYNC] 📊 Eredmények:', results);
 
             this.syncResults = results;
