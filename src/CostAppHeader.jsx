@@ -203,7 +203,7 @@ export default function CostAppHeader() {
                     </button>
 
                     <div id="exportMenu"
-                        className={`${exportMenuOpen ? '' : 'hidden'} absolute right-[-2rem] sm:right-0 top-full mt-2 w-56 max-w-[calc(100vw-2rem)] bg-white border border-gray-200 rounded-xl shadow-xl z-50 py-1 text-sm overflow-y-auto max-h-[calc(100vh-10rem)] text-left`}>
+                        className={`${exportMenuOpen ? '' : 'hidden'} absolute left-0 right-auto sm:left-auto sm:right-0 top-full mt-2 w-48 sm:w-52 max-w-[calc(100vw-2rem)] bg-white border border-gray-200 rounded-xl shadow-xl z-50 py-1 text-xs sm:text-sm overflow-y-auto max-h-[calc(100vh-10rem)] text-left`}>
                         <div className="px-3 py-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider">Riportok
                         </div>
                         <button id="btnExportExcel" onClick={handleExportExcel}

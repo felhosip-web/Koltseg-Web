@@ -25,6 +25,11 @@ export class WorkLogManager {
         // Sort works by created_at timestamp (newer first for display, but keep stable order)
         loadedWorks.sort((a, b) => (a.created_at || '').localeCompare(b.created_at || ''));
         this.works = loadedWorks;
+        if (typeof window !== 'undefined' && typeof window.Event === 'function') {
+            try {
+                window.dispatchEvent(new window.Event('app-data-updated'));
+            } catch (e) {}
+        }
         return this.works;
     }
 

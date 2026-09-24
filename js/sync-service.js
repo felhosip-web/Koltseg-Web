@@ -591,6 +591,12 @@ export class SyncService {
             console.log('[SYNC] 🔀 Merge: Adatok összefésülése...');
             
             const app = this._getApp();
+            if (app && app.workLogManager && typeof app.workLogManager.load === 'function') {
+                const currentWorks = app.workLogManager.works;
+                if (!currentWorks || currentWorks.length === 0) {
+                    await app.workLogManager.load();
+                }
+            }
             const localDeletedRecords = app && app.db ? await app.db.getAll('deleted_records') : [];
 
             const localData = {
@@ -765,10 +771,10 @@ export class SyncService {
                         // Letisztítjuk a belső metaadatokat a felhőbe küldés előtt
                         const { _source, _updated_at, ...cleanItem } = item;
                         const customKey = table === 'months' ? 'month' : 'id';
-                        await this.push(table, cleanItem, false, customKey, true);
+                        await this.push(table, cleanItem, false, customKey, false);
                         pushedCount++;
                     } catch (err) {
-                        console.warn(`[SYNC] ⚠️ Push hiba a(z) ${table} táblánál:`, err);
+                        console.warn(`[SYNC] ⚠️ Push hiba a(z) ${table} táblánál (sikertelen feltöltés queue-ba téve):`, err);
                         results.errors.push({ table, operation: 'push', error: err.message });
                     }
                 }
@@ -1087,11 +1093,16 @@ export class SyncService {
             ]);
 
             app.renderer?.renderTable?.();
-            app.workLogRenderer?.render?.();
+            await app.workLogRenderer?.render?.();
             app.renderer?.renderSummary?.();
             app.remindersRenderer?.renderList?.();
             app.incomingRenderer?.render?.();
             app.refreshAllTabs?.();
+            if (typeof window !== 'undefined' && typeof window.Event === 'function') {
+                try {
+                    window.dispatchEvent(new window.Event('app-data-updated'));
+                } catch (e) {}
+            }
 
             // Ha a charts tab aktív, frissítsük
             if (app.activeTab === 'charts' && app.chartsRenderer) {

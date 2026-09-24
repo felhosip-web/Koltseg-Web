@@ -1,8 +1,18 @@
 {
-  "version": "7.0.23",
-  "build": "2026-09-23T09:24:00.000Z",
+  "version": "7.0.24",
+  "build": "2026-09-24T07:53:00.000Z",
   "release": "stable",
   "changelog": [
+    {
+      "version": "7.0.24",
+      "date": "2026-09-24T07:53:00.000Z",
+      "changes": [
+        "🐛 BUGFIX: Munka nyilvántartás (works) felhő szinkronizáció teljes javítása (dual-store adatfolyam szinkronizálás, IDB előbetöltés merge előtt)",
+        "🔧 JAVÍTÁS: Szelektív push során a sikertelen 'works' és egyéb tábla feltöltések automatikusan a queue-ba kerülnek újrapróbáláshoz",
+        "🔧 JAVÍTÁS: Szinkronizáció utáni azonnali UI és React Zustand store frissítés app-data-updated eseménnyel",
+        "✨ ÚJ: Automatizált szinkronizációs tesztek a 'works' táblához (tests/work-sync.test.jsx)"
+      ]
+    },
     {
       "version": "7.0.23",
       "date": "2026-09-23T09:24:00.000Z",

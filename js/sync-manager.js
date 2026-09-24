@@ -127,6 +127,7 @@ export class SyncManager {
             reminders: this.service._getLocalData('reminders'),
             incomings: this.service._getLocalData('incomings'),
             incoming_senders: this.service._getLocalData('incoming_senders'),
+            works: this.service._getLocalData('works'),
             deleted_records: localDeletedRecords
         };
         
@@ -310,6 +311,11 @@ export class SyncManager {
 
             // 2. Helyi adatok összeszerelése
             const app = this.app;
+            if (app && app.workLogManager && typeof app.workLogManager.load === 'function') {
+                if (!app.workLogManager.works || app.workLogManager.works.length === 0) {
+                    await app.workLogManager.load();
+                }
+            }
             const localData = {};
             for (const table of this.tables) {
                 // _getTableData is synchronous and returns an array from memory

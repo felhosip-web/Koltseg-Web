@@ -2,7 +2,7 @@
 
 Modern, hibrid architektúrájú (React + Vanilla JS) PWA költségnyilvántartó alkalmazás offline-first működéssel, mátrixos adatszerkezettel és kétirányú Supabase szinkronizációval.
 
-![Verzió](https://img.shields.io/badge/verzió-7.0.23-blue)
+![Verzió](https://img.shields.io/badge/verzió-7.0.24-blue)
 ![PWA](https://img.shields.io/badge/PWA-támogatott-4f46e5)
 ![Offline](https://img.shields.io/badge/Offline-teljesen_működő-10b981)
 

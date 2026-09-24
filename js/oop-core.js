@@ -1381,7 +1381,7 @@ export class CloudSync {
                     this.tablesMissing = true;
                 }
             }
-            return [];
+            throw err;
         }
     }
 
