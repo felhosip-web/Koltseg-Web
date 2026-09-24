@@ -1,8 +1,20 @@
 {
-  "version": "7.0.23",
-  "build": "2026-09-23T09:24:00.000Z",
+  "version": "7.1.1",
+  "build": "2026-09-24T12:00:00.000Z",
   "release": "stable",
   "changelog": [
+    {
+      "version": "7.1.1",
+      "date": "2026-09-24T12:00:00.000Z",
+      "changes": [
+        "✨ ÚJ: Részletes szinkronizációs eredmény riport (SyncReport) és diagnosztikai modal",
+        "✨ ÚJ: Szinkronizációs státuszok és statisztikák (Pull/Merge/Push táblánként, Queue, ütközések, törlések)",
+        "✨ ÚJ: Szinkronizációs összefoglaló bejegyzések az alkalmazás Eseménynaplójába (Event Log)",
+        "✨ ÚJ: Checkpoint frissítési státusz diagnosztika (Sikeres vs Részleges/Kritikus)",
+        "✨ ÚJ: Legutóbbi szinkronizáció eredményének visszanézési lehetősége",
+        "🔧 JAVÍTÁS: Checkpoint-kezelés és szinkronizációs hibakezelés regressziós lefedettségének stabilizálása"
+      ]
+    },
     {
       "version": "7.0.23",
       "date": "2026-09-23T09:24:00.000Z",

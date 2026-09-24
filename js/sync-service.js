@@ -3,6 +3,7 @@
 
 import { CloudSync } from './oop-core.js';
 import { generateUUID, isValidUUID } from './uuid-utils.js';
+import { SyncReport } from './sync-report.js';
 
 export class SyncService {
     /**
@@ -26,6 +27,7 @@ export class SyncService {
         }
         
         this.syncResults = null;
+        this.lastReport = null;
         this.currentSyncConflicts = [];
         this.lastSyncConflicts = [];
         this.unresolvedConflicts = []; // ÚJ: Interaktív ütközések listája
@@ -533,9 +535,10 @@ export class SyncService {
         this.isSyncing = true;
         console.log('[SYNC] 🔄 Teljes szinkronizáció indul...');
 
+        const syncStartTime = new Date().toISOString();
         const results = {
             status: 'success',
-            startTime: new Date().toISOString(),
+            startTime: syncStartTime,
             tables: {},
             pendingProcessed: 0,
             queueProcessed: 0,
@@ -813,6 +816,17 @@ export class SyncService {
             console.log('[SYNC] 📊 Eredmények:', results);
 
             this.syncResults = results;
+
+            // === 10. REPORT ES EVENT LOG GENERÁLÁS ===
+            const report = SyncReport.fromResults(results, this);
+            this.lastReport = report;
+            results.report = report;
+
+            const appInstance = this._getApp();
+            if (appInstance?.logger) {
+                const logLevel = report.status === 'success' ? 'info' : 'warn';
+                appInstance.logger.log('sync', logLevel, report.toEventLogSummary());
+            }
             
             // Queue értesítés
             this._notifyQueueListeners();
@@ -824,6 +838,16 @@ export class SyncService {
             results.status = 'error';
             results.error = error.message;
             this.syncResults = results;
+
+            const report = SyncReport.fromCriticalError(error, syncStartTime, this);
+            this.lastReport = report;
+            results.report = report;
+
+            const appInstance = this._getApp();
+            if (appInstance?.logger) {
+                appInstance.logger.log('sync', 'error', report.toEventLogSummary());
+            }
+
             throw error;
         } finally {
             this.isSyncing = false;
@@ -1148,6 +1172,13 @@ export class SyncService {
      */
     getLastResults() {
         return this.syncResults;
+    }
+
+    /**
+     * Utolsó szinkronizációs riport (SyncReport)
+     */
+    getLastReport() {
+        return this.lastReport;
     }
 
     /**

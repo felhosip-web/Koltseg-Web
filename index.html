@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Költség Nyilvántartó v7.0.23</title>
+    <title>Költség Nyilvántartó v7.1.1</title>
 
     <!-- ===== KÜLSŐ CDN-ek (cache-elve a Service Worker által) ===== -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -433,7 +433,7 @@
                     </div>
 
                     <!-- Ellenőrzés -->
-                    <div class="mb-4 flex justify-center">
+                    <div class="mb-4 flex flex-col gap-2">
                         <button id="btnCheckSync"
                             class="p-4 bg-blue-50 hover:bg-blue-100 border-2 border-blue-200 rounded-2xl transition text-center w-full flex items-center justify-center gap-3">
                             <i class="fas fa-search text-blue-600 text-xl"></i>
@@ -441,6 +441,10 @@
                                 <h4 class="font-bold text-gray-800">Különbségek Ellenőrzése</h4>
                                 <p class="text-xs text-gray-500">Helyi és felhő adatok összehasonlítása</p>
                             </div>
+                        </button>
+                        <button id="btnShowLastSyncReport"
+                            class="py-2.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition flex items-center justify-center gap-2">
+                            <i class="fas fa-square-poll-vertical text-slate-600"></i> Legutóbbi szinkronizáció eredménye
                         </button>
                     </div>
 
@@ -603,7 +607,7 @@
                     class="p-4 border-t border-gray-100 bg-slate-50 flex items-center justify-between text-[11px] text-slate-400">
                     <span class="flex items-center gap-1"><i class="fas fa-info-circle text-indigo-500"></i> Tipp: Az
                         adatok szinkronizálásához legyen aktív a felhőkapcsolat!</span>
-                    <span class="font-bold app-version-label">v7.0.23</span>
+                    <span class="font-bold app-version-label">v7.1.1</span>
                 </div>
             </div>
         </div>

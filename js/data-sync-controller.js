@@ -48,21 +48,26 @@ export class DataSyncController {
             await this._refreshAllUI();
 
             const syncTime = new Date().toLocaleTimeString('hu-HU');
-            const conflicts = this.app.syncService?.lastSyncConflicts || [];
-            const successSummary = this._buildSuccessSummary(result, conflicts, syncTime);
+            const report = result?.report || this.app.syncService?.lastReport;
 
-            // Részletes, külön modal a sikeres vagy sikertelen szinkronizációról.
-            this.app.hmiNotif?.showSyncResult?.({
-                success: true,
-                title: 'Szinkronizáció sikeres',
-                message: successSummary
-            });
+            // Részletes, külön modal a szinkronizáció eredményéről (manual sync esetén automatikusan megjelenik)
+            if (report && this.app.hmiNotif?.showSyncReportModal) {
+                this.app.hmiNotif.showSyncReportModal(report);
+            } else {
+                const conflicts = this.app.syncService?.lastSyncConflicts || [];
+                const successSummary = this._buildSuccessSummary(result, conflicts, syncTime);
+                this.app.hmiNotif?.showSyncResult?.({
+                    success: result.errors?.length === 0,
+                    title: result.errors?.length === 0 ? 'Szinkronizáció sikeres' : 'Részleges szinkronizáció',
+                    message: successSummary
+                });
+            }
 
             if (result.errors && result.errors.length > 0) {
-                this.app.hmiNotif.showToast(`⚠️ Részleges szinkronizáció (${result.errors.length} hiba)`, 'warning');
+                this.app.hmiNotif?.showToast?.(`⚠️ Részleges szinkronizáció (${result.errors.length} hiba)`, 'warning');
                 this.app.renderer?.updateFooterStatus(`⚠️ Szinkronizálva (hibákkal): ${syncTime}`);
             } else {
-                this.app.hmiNotif.showToast(`✅ Szinkronizáció sikeres! (${syncTime})`, 'success');
+                this.app.hmiNotif?.showToast?.(`✅ Szinkronizáció sikeres! (${syncTime})`, 'success');
                 this.app.renderer?.updateFooterStatus(`✅ Szinkronizálva: ${syncTime}`);
             }
 
@@ -71,13 +76,18 @@ export class DataSyncController {
 
         } catch (err) {
             console.error('[SYNC ERROR]', err);
-            const userMessage = this._getUserFriendlyError(err);
 
-            this.app.hmiNotif?.showSyncResult?.({
-                success: false,
-                title: 'Szinkronizáció sikertelen',
-                message: userMessage
-            });
+            const report = this.app.syncService?.lastReport;
+            if (report && this.app.hmiNotif?.showSyncReportModal) {
+                this.app.hmiNotif.showSyncReportModal(report);
+            } else {
+                const userMessage = this._getUserFriendlyError(err);
+                this.app.hmiNotif?.showSyncResult?.({
+                    success: false,
+                    title: 'Szinkronizáció sikertelen',
+                    message: userMessage
+                });
+            }
 
             this.app.renderer?.updateFooterStatus('❌ Szinkronizációs hiba!', true);
             throw err;
