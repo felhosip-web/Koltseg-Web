@@ -40,12 +40,13 @@ import { ModuleManager } from './module-manager.js';
 import { TimeTrackerModule } from './modules/time-tracker/time-tracker.js';
 import { parseCellKey } from './utils/cell-key-utils.js';
 import { SyncManager } from './sync-manager.js';
+import { useAppStore as useReactAppStore } from '../src/store/useAppStore.js';
 
 // ================================================================
 // === APP OSZTÁLY ===
 // ================================================================
 
-class App {
+export class App {
     /**
      * Konstruktor - Alkalmazás fő példányának inicializálása
      */
@@ -437,6 +438,14 @@ class App {
         return () => window.removeEventListener('app-data-updated', listener);
     }
 
+    updateReactStore() {
+        const snapshot = this.getAppSnapshot();
+        if (typeof useReactAppStore?.getState === 'function') {
+            useReactAppStore.getState().setSnapshot(snapshot);
+        }
+        window.dispatchEvent(new Event('app-data-updated'));
+    }
+
     // ================================================================
     // === HÁLÓZATI KEZELÉS ===
     // ================================================================
@@ -755,8 +764,8 @@ refreshAllTabs() {
     // 5. Bejövő utalások
     this.incomingRenderer?.render?.();
 
-    // 6. Statisztika (React)
-    window.dispatchEvent(new Event('app-data-updated'));
+    // 6. Statisztika (React) & Direct React Store update
+    this.updateReactStore();
 
     // 7. Reminder státusz (lábléc)
     if (typeof this.updateReminderStatus === 'function') {
@@ -1000,10 +1009,12 @@ async function initApp() {
     await app.start();
 }
 
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initApp);
-} else {
-    initApp();
+if (typeof window !== 'undefined' && !window.__DISABLE_AUTO_INIT__) {
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initApp);
+    } else {
+        initApp();
+    }
 }
 
 console.log('💡 Költség Nyilvántartó v4.1 elindult');
