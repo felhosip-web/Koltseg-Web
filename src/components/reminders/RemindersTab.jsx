@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
+import { useAppStore } from '../../store/useAppStore';
 
 export default function RemindersTab() {
-    const [reminders, setReminders] = useState([]);
+    const reminders = useAppStore(state => state.reminders || []);
     const [currentFilter, setCurrentFilter] = useState('all');
 
     // Form state
@@ -19,33 +20,6 @@ export default function RemindersTab() {
     const [editRemCurrency, setEditRemCurrency] = useState('HUF');
     const [editRemDate, setEditRemDate] = useState('');
     const [editRemFreq, setEditRemFreq] = useState('once');
-
-    useEffect(() => {
-        const fetchReminders = () => {
-            if (window.app && window.app.reminderManager) {
-                setReminders([...(window.app.reminderManager.reminders || [])]);
-            }
-        };
-        fetchReminders();
-
-        let listener = null;
-        if (window.app && typeof window.app.subscribeAppData === 'function') {
-            listener = window.app.subscribeAppData((data) => {
-                if (data.reminders) {
-                    setReminders([...data.reminders]);
-                }
-            });
-        }
-
-        // Polling fallback
-        const interval = setInterval(fetchReminders, 1000);
-        return () => {
-            clearInterval(interval);
-            if (window.app && typeof window.app.unsubscribeAppData === 'function' && listener) {
-                window.app.unsubscribeAppData(listener);
-            }
-        };
-    }, []);
 
     const formatFrequency = (freq) => {
         switch (freq) {
