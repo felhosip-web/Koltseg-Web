@@ -437,6 +437,15 @@ class App {
         return () => window.removeEventListener('app-data-updated', listener);
     }
 
+    updateReactStore() {
+        const snapshot = this.getAppSnapshot();
+        const reactStore = window.useAppStore || window.__reactUseAppStore;
+        if (reactStore && typeof reactStore.getState === 'function') {
+            reactStore.getState().setSnapshot(snapshot);
+        }
+        window.dispatchEvent(new Event('app-data-updated'));
+    }
+
     // ================================================================
     // === HÁLÓZATI KEZELÉS ===
     // ================================================================
@@ -755,8 +764,8 @@ refreshAllTabs() {
     // 5. Bejövő utalások
     this.incomingRenderer?.render?.();
 
-    // 6. Statisztika (React)
-    window.dispatchEvent(new Event('app-data-updated'));
+    // 6. Statisztika (React) & Direct React Store update
+    this.updateReactStore();
 
     // 7. Reminder státusz (lábléc)
     if (typeof this.updateReminderStatus === 'function') {

@@ -1218,6 +1218,7 @@ export class SyncService {
                 app.workLogManager?.load?.() || Promise.resolve()
             ]);
 
+            app.updateReactStore?.();
             app.renderer?.renderTable?.();
             app.workLogRenderer?.render?.();
             app.renderer?.renderSummary?.();

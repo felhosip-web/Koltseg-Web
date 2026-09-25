@@ -905,8 +905,11 @@ export class EntryManager {
     async load() { 
         try {
             const data = await this.db.getAll('entries');
-            // Normalize cellKey to explicit itemId and month fields
+            // Normalize cellKey to explicit itemId and month fields and vice versa
             data.forEach(e => {
+                if (!e.cellKey && e.itemId && e.month) {
+                    e.cellKey = `${e.itemId}_${e.month}`;
+                }
                 if (e.cellKey && (!e.itemId || !e.month)) {
                     const parsed = parseCellKey(e);
                     if (!e.itemId) e.itemId = parsed.itemId;

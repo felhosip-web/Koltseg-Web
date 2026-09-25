@@ -1,6 +1,10 @@
 import { useEffect } from 'react';
 import { useAppStore } from '../store/useAppStore.js';
 
+if (typeof window !== 'undefined') {
+    window.useAppStore = useAppStore;
+}
+
 /**
  * Headless component that acts as a bridge between the old Vanilla JS OOP-Core
  * and the new React Zustand store.
