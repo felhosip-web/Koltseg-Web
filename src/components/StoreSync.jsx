@@ -14,42 +14,11 @@ export default function StoreSync() {
     const setSnapshot = useAppStore(state => state.setSnapshot);
 
     useEffect(() => {
-        const syncData = () => {
-            if (window.app && typeof window.app.getAppSnapshot === 'function') {
-                const snapshot = window.app.getAppSnapshot();
-                const currentState = useAppStore.getState();
-                // Avoid redundant re-renders if updateReactStore already updated the store
-                if (
-                    currentState.items === snapshot.items &&
-                    currentState.months === snapshot.months &&
-                    currentState.entries === snapshot.entries &&
-                    currentState.incomings === snapshot.incomings &&
-                    currentState.works === snapshot.works &&
-                    currentState.reminders === snapshot.reminders
-                ) {
-                    return;
-                }
-                setSnapshot(snapshot);
-            }
-        };
-
         // Initial sync on mount if app is already loaded
-        if (window.app && window.app.isBooted) {
-            syncData();
+        if (window.app && window.app.isBooted && typeof window.app.getAppSnapshot === 'function') {
+            const snapshot = window.app.getAppSnapshot();
+            setSnapshot(snapshot);
         }
-
-        // Handle custom subscribe method if implemented in Vanilla, else fallback to DOM event
-        let unsubscribe = null;
-        if (window.app && typeof window.app.subscribeAppData === 'function') {
-            unsubscribe = window.app.subscribeAppData(syncData);
-        } else {
-            window.addEventListener('app-data-updated', syncData);
-            unsubscribe = () => window.removeEventListener('app-data-updated', syncData);
-        }
-
-        return () => {
-            if (unsubscribe) unsubscribe();
-        };
     }, [setSnapshot]);
 
     return null; // This is a headless component, it renders nothing.

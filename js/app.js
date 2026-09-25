@@ -40,6 +40,7 @@ import { ModuleManager } from './module-manager.js';
 import { TimeTrackerModule } from './modules/time-tracker/time-tracker.js';
 import { parseCellKey } from './utils/cell-key-utils.js';
 import { SyncManager } from './sync-manager.js';
+import { useAppStore as useReactAppStore } from '../src/store/useAppStore.js';
 
 // ================================================================
 // === APP OSZTÁLY ===
@@ -439,9 +440,8 @@ export class App {
 
     updateReactStore() {
         const snapshot = this.getAppSnapshot();
-        const reactStore = window.useAppStore || window.__reactUseAppStore;
-        if (reactStore && typeof reactStore.getState === 'function') {
-            reactStore.getState().setSnapshot(snapshot);
+        if (typeof useReactAppStore?.getState === 'function') {
+            useReactAppStore.getState().setSnapshot(snapshot);
         }
         window.dispatchEvent(new Event('app-data-updated'));
     }

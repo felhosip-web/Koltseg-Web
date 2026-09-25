@@ -27,7 +27,3 @@ export const useAppStore = create((set) => ({
     // UI Akciók
     setActiveTab: (tab) => set({ activeTab: tab })
 }));
-
-if (typeof window !== 'undefined') {
-    window.useAppStore = useAppStore;
-}

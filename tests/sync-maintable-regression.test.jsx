@@ -86,12 +86,19 @@ test('Test 2 — Sync Service updates React Zustand Store deterministically usin
         import('../src/components/StoreSync.jsx')
     ]);
 
-    // Reset stores
+    // Reset stores and spy on setSnapshot
+    let setSnapshotCalls = 0;
+    const originalSetSnapshot = useReactStore.getState().setSnapshot;
+
     useReactStore.setState({
         items: [],
         months: [],
         entries: [],
-        isLoaded: false
+        isLoaded: false,
+        setSnapshot: (snapshot) => {
+            setSnapshotCalls++;
+            originalSetSnapshot(snapshot);
+        }
     });
     useVanillaStore.setState({
         items: [],
@@ -152,7 +159,6 @@ test('Test 2 — Sync Service updates React Zustand Store deterministically usin
     });
 
     window.app = app;
-    window.useAppStore = useReactStore;
     syncService.setApp(app);
 
     // Verify production App method exists and is a function
@@ -172,6 +178,9 @@ test('Test 2 — Sync Service updates React Zustand Store deterministically usin
         );
     });
 
+    // Initial mount call count
+    const initialSetSnapshotCalls = setSnapshotCalls;
+
     // Verify initial empty state
     assert.equal(useReactStore.getState().items.length, 0);
 
@@ -182,6 +191,9 @@ test('Test 2 — Sync Service updates React Zustand Store deterministically usin
 
     // Verify app-data-updated event was dispatched by production updateReactStore()
     assert.equal(eventDispatched, true);
+
+    // Verify setSnapshot was called exactly ONCE during sync (initialSetSnapshotCalls + 1)
+    assert.equal(setSnapshotCalls, initialSetSnapshotCalls + 1);
 
     // Verify React Zustand store state
     const reactState = useReactStore.getState();
