@@ -1,10 +1,6 @@
 import { useEffect } from 'react';
 import { useAppStore } from '../store/useAppStore.js';
 
-if (typeof window !== 'undefined') {
-    window.useAppStore = useAppStore;
-}
-
 /**
  * Headless component that acts as a bridge between the old Vanilla JS OOP-Core
  * and the new React Zustand store.
@@ -21,6 +17,18 @@ export default function StoreSync() {
         const syncData = () => {
             if (window.app && typeof window.app.getAppSnapshot === 'function') {
                 const snapshot = window.app.getAppSnapshot();
+                const currentState = useAppStore.getState();
+                // Avoid redundant re-renders if updateReactStore already updated the store
+                if (
+                    currentState.items === snapshot.items &&
+                    currentState.months === snapshot.months &&
+                    currentState.entries === snapshot.entries &&
+                    currentState.incomings === snapshot.incomings &&
+                    currentState.works === snapshot.works &&
+                    currentState.reminders === snapshot.reminders
+                ) {
+                    return;
+                }
                 setSnapshot(snapshot);
             }
         };

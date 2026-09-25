@@ -45,7 +45,7 @@ import { SyncManager } from './sync-manager.js';
 // === APP OSZTÁLY ===
 // ================================================================
 
-class App {
+export class App {
     /**
      * Konstruktor - Alkalmazás fő példányának inicializálása
      */
@@ -1009,10 +1009,12 @@ async function initApp() {
     await app.start();
 }
 
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initApp);
-} else {
-    initApp();
+if (typeof window !== 'undefined' && !window.__DISABLE_AUTO_INIT__) {
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initApp);
+    } else {
+        initApp();
+    }
 }
 
 console.log('💡 Költség Nyilvántartó v4.1 elindult');

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { JSDOM } from 'jsdom';
+import Dexie from 'dexie';
 import 'fake-indexeddb/auto';
 import { Database, ItemManager, MonthManager, EntryManager } from '../js/oop-core.js';
 import { SyncService } from '../js/sync-service.js';
@@ -13,6 +14,7 @@ test('Test 1 — EntryManager.load() synthesizes cellKey when missing but preser
     globalThis.window = dom.window;
     globalThis.document = dom.window.document;
     globalThis.localStorage = dom.window.localStorage;
+    globalThis.window.Dexie = Dexie;
 
     const db = new Database();
     db._enableMockDb();
@@ -52,7 +54,7 @@ test('Test 1 — EntryManager.load() synthesizes cellKey when missing but preser
     dom.window.close();
 });
 
-test('Test 2 — Sync Service updates React Zustand Store deterministically with mounted MainTable', async () => {
+test('Test 2 — Sync Service updates React Zustand Store deterministically using production App.prototype.updateReactStore', async () => {
     const dom = new JSDOM(`<!DOCTYPE html><html><body><div id="root"></div></body></html>`, {
         url: 'http://localhost/'
     });
@@ -65,6 +67,8 @@ test('Test 2 — Sync Service updates React Zustand Store deterministically with
     globalThis.HTMLElement = dom.window.HTMLElement;
     globalThis.Node = dom.window.Node;
     globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+    globalThis.window.Dexie = Dexie;
+    globalThis.window.__DISABLE_AUTO_INIT__ = true;
 
     if (globalThis.navigator) {
         Object.defineProperty(globalThis.navigator, 'onLine', {
@@ -73,7 +77,8 @@ test('Test 2 — Sync Service updates React Zustand Store deterministically with
         });
     }
 
-    const [React, { createRoot }, { useAppStore: useReactStore }, { default: MainTable }, { default: StoreSync }] = await Promise.all([
+    const [{ App }, React, { createRoot }, { useAppStore: useReactStore }, { default: MainTable }, { default: StoreSync }] = await Promise.all([
+        import('../js/app.js'),
         import('react'),
         import('react-dom/client'),
         import('../src/store/useAppStore.js'),
@@ -124,10 +129,14 @@ test('Test 2 — Sync Service updates React Zustand Store deterministically with
         })
     };
 
-    const executionLog = [];
+    let eventDispatched = false;
+    dom.window.addEventListener('app-data-updated', () => {
+        eventDispatched = true;
+    });
 
-    // Setup Vanilla App instance
-    const app = {
+    // Instantiate app prototype so production updateReactStore() & getAppSnapshot() are tested directly
+    const app = Object.create(App.prototype);
+    Object.assign(app, {
         db,
         items: new ItemManager(db, syncService),
         months: new MonthManager(db, syncService),
@@ -138,32 +147,17 @@ test('Test 2 — Sync Service updates React Zustand Store deterministically with
         workLogManager: { load: async () => {} },
         config: { eurRate: 400 },
         isBooted: true,
-        getAppSnapshot() {
-            executionLog.push('snapshotCreated');
-            return {
-                items: this.items.items || [],
-                months: this.months.months || [],
-                entries: this.entries.entries || [],
-                eurRate: 400,
-                isBooted: true
-            };
-        },
-        updateReactStore() {
-            executionLog.push('updateReactStoreCalled');
-            const snapshot = this.getAppSnapshot();
-            useReactStore.getState().setSnapshot(snapshot);
-            executionLog.push('reactStoreUpdated');
-            window.dispatchEvent(new Event('app-data-updated'));
-        },
-        refreshAllTabs() {
-            executionLog.push('refreshAllTabsCalled');
-            this.updateReactStore();
-        }
-    };
+        timeTracker: null,
+        activeTab: 'table'
+    });
 
     window.app = app;
     window.useAppStore = useReactStore;
     syncService.setApp(app);
+
+    // Verify production App method exists and is a function
+    assert.equal(typeof App.prototype.updateReactStore, 'function');
+    assert.equal(typeof App.prototype.getAppSnapshot, 'function');
 
     const root = createRoot(document.getElementById('root'));
     const { act } = React;
@@ -186,10 +180,8 @@ test('Test 2 — Sync Service updates React Zustand Store deterministically with
         await syncService.sync();
     });
 
-    // Verify order of load & store update execution
-    assert.ok(executionLog.indexOf('updateReactStoreCalled') !== -1);
-    assert.ok(executionLog.indexOf('snapshotCreated') !== -1);
-    assert.ok(executionLog.indexOf('reactStoreUpdated') !== -1);
+    // Verify app-data-updated event was dispatched by production updateReactStore()
+    assert.equal(eventDispatched, true);
 
     // Verify React Zustand store state
     const reactState = useReactStore.getState();
@@ -200,7 +192,7 @@ test('Test 2 — Sync Service updates React Zustand Store deterministically with
     assert.equal(reactState.entries.length, 1);
     assert.equal(reactState.entries[0].cellKey, 'item-1_2026-09');
 
-    // Verify MainTable rendered the category name and table element
+    // Verify MainTable rendered category name and table element
     const tableEl = document.getElementById('vtTable');
     assert.ok(tableEl);
     assert.ok(document.body.innerHTML.includes('Kávé'));
