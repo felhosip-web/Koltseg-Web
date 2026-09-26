@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { appService } from '../services/appService.js';
 
 export const useAppStore = create((set) => ({
     // Kezdeti üres állapot (amíg a Vanilla JS be nem tölti az adatokat)
@@ -13,6 +14,7 @@ export const useAppStore = create((set) => ({
     fuelLogs: [],
     dayjs: null,
     eurRate: 400,
+    lastSyncTime: null,
     isLoaded: false, // Segít a React-nek tudni, hogy megérkeztek-e az első adatok
 
     // UI Állapotok
@@ -25,5 +27,9 @@ export const useAppStore = create((set) => ({
     }),
 
     // UI Akciók
-    setActiveTab: (tab) => set({ activeTab: tab })
+    setActiveTab: (tab) => set({ activeTab: tab }),
+    setLastSyncTime: (lastSyncTime) => set({ lastSyncTime }),
+    generateTestData: async (count = 30) => {
+        await appService.generateTestData(count);
+    }
 }));

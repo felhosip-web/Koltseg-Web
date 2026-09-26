@@ -1,11 +1,5 @@
 import React, { useState, useEffect } from 'react';
-
-/**
- * Header component for the cost tracking application.
- * Displays the app title, network status indicators, action buttons for creating items/months,
- * settings access, data controls, and export/sync options.
- * @returns {JSX.Element} The header component with navigation and controls
- */
+import { appService } from './services/appService.js';
 
 /**
  * Header component for the cost tracking application.
@@ -18,11 +12,6 @@ export default function CostAppHeader() {
     const [showInstallBtn, setShowInstallBtn] = useState(false);
 
     useEffect(() => {
-        // Fallback for case where event fired before React mounted
-        if (window.app?.pwaManager?.deferredInstallPrompt) {
-            setShowInstallBtn(true);
-        }
-
         const handleInstallAvailable = () => setShowInstallBtn(true);
         const handleInstalled = () => setShowInstallBtn(false);
 
@@ -37,7 +26,7 @@ export default function CostAppHeader() {
 
     const handleInstallClick = (e) => {
         e.preventDefault();
-        window.app?.pwaManager?.promptInstall?.();
+        appService.promptPwaInstall();
     };
 
     const handleDataControl = (e) => {
@@ -50,80 +39,77 @@ export default function CostAppHeader() {
         e.preventDefault();
         e.stopPropagation();
         setExportMenuOpen(false);
-        window.app?.uiController?.exportController?.exportExcel?.();
+        appService.exportExcel();
     };
 
     const handleExportPdf = (e) => {
         e.preventDefault();
         e.stopPropagation();
         setExportMenuOpen(false);
-        window.app?.uiController?.exportController?.exportPdf?.();
+        appService.exportPdf();
     };
 
     const handleExportJson = (e) => {
         e.preventDefault();
         e.stopPropagation();
         setExportMenuOpen(false);
-        window.app?.uiController?.exportController?.exportJson?.();
+        appService.exportJson();
     };
 
     const handleImportJson = (e) => {
         e.preventDefault();
         e.stopPropagation();
         setExportMenuOpen(false);
-        window.app?.uiController?.exportController?.importJson?.();
+        appService.importJson();
     };
 
     const handleForceSync = (e) => {
         e.preventDefault();
         e.stopPropagation();
         setExportMenuOpen(false);
-        window.app?.uiController?.openSyncModal?.();
+        appService.openSyncModal();
     };
 
     const handleDbAudit = (e) => {
         e.preventDefault();
         e.stopPropagation();
         setExportMenuOpen(false);
-        window.app?.uiController?.maintenanceController?.startDbAudit?.();
+        appService.startDbAudit();
     };
 
     const handleRestoreBackup = (e) => {
         e.preventDefault();
         e.stopPropagation();
         setExportMenuOpen(false);
-        window.app?.uiController?.maintenanceController?.restoreBackup?.();
+        appService.restoreBackup();
     };
 
     const handleForceBackup = (e) => {
         e.preventDefault();
         e.stopPropagation();
         setExportMenuOpen(false);
-        window.app?.uiController?.maintenanceController?.forceBackup?.();
+        appService.forceBackup();
     };
 
     const handleWipeDatabase = (e) => {
         e.preventDefault();
         e.stopPropagation();
         setExportMenuOpen(false);
-        window.app?.uiController?.maintenanceController?.wipeDatabase?.();
+        appService.wipeDatabase();
     };
 
     const [queueStatus, setQueueStatus] = useState(null);
 
     useEffect(() => {
-        let unsubscribeQueue = null;
-        if (window.app?.syncService?.onQueueChange) {
-            unsubscribeQueue = window.app.syncService.onQueueChange((status) => {
-                setQueueStatus(status);
-            });
-        } else {
-            // initial check if it's there but listener is missing
-            if(window.app?.syncService) setQueueStatus(window.app.syncService.getQueueStatus());
-        }
+        const initialStatus = appService.getQueueStatus();
+        if (initialStatus) setQueueStatus(initialStatus);
+
+        const unsubscribeQueue = appService.subscribeQueueStatus((status) => {
+            setQueueStatus(status);
+        });
 
         return () => {
-            if (unsubscribeQueue) {
+            if (typeof unsubscribeQueue === 'function') {
                 unsubscribeQueue();
             }
         };
@@ -153,11 +139,11 @@ export default function CostAppHeader() {
             <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
                 <div className="flex flex-wrap gap-2">
                     <button id="btnNewItem"
-                        className="px-5 py-2.5 bg-blue-600 text-white rounded-2xl text-sm font-bold flex items-center gap-2 hover:bg-blue-700 transition shadow-sm" onClick={() => window.app?.uiController?.inputModal?.open('item')}>
+                        className="px-5 py-2.5 bg-blue-600 text-white rounded-2xl text-sm font-bold flex items-center gap-2 hover:bg-blue-700 transition shadow-sm" onClick={() => appService.openInputModal('item')}>
                         <i className="fas fa-plus-circle"></i> Tétel
                     </button>
                     <button id="btnNewMonth"
-                        className="px-5 py-2.5 bg-emerald-600 text-white rounded-2xl text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 transition shadow-sm" onClick={() => window.app?.uiController?.inputModal?.open('month')}>
+                        className="px-5 py-2.5 bg-emerald-600 text-white rounded-2xl text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 transition shadow-sm" onClick={() => appService.openInputModal('month')}>
                         <i className="fas fa-calendar-plus"></i> Hónap
                     </button>
                     <button id="btnAiMagic"
@@ -253,7 +239,7 @@ export default function CostAppHeader() {
                 </div>
 
                 <button type="button" id="syncQueueContainer" className="relative inline-block ml-2 cursor-pointer group bg-transparent border-none p-1 hover:bg-gray-50 rounded transition-colors"
-                    title="Függőben lévő szinkronizációs műveletek" aria-label="Szinkronizációs várólista" onClick={() => window.app?.uiController?._handleQueueClick?.()}>
+                    title="Függőben lévő szinkronizációs műveletek" aria-label="Szinkronizációs várólista" onClick={() => appService.handleQueueClick()}>
                     <i className="fas fa-cloud-upload-alt text-gray-400 text-lg group-hover:text-amber-500 transition"></i>
                     <span id="syncQueueBadge"
                         className="absolute -top-1 -right-1 bg-amber-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center hidden">0</span>

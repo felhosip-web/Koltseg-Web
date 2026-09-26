@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { appService } from './services/appService.js';
 
 /**
  * Landing screen component that allows users to choose between different app modules.
@@ -45,16 +46,7 @@ export default function LandingApp() {
    */
   const handleLaunchCostApp = () => {
     setIsVisible(false);
-    const costApp = document.getElementById('costAppView');
-    if (costApp) {
-        costApp.classList.remove('hidden');
-    }
-    localStorage.setItem('hmi_selected_module', 'cost');
-
-    // We let Vanilla JS handle the rest by keeping window.app intact
-    if (window.app?.renderer?.renderTable) {
-        window.app.renderer.renderTable();
-    }
+    appService.launchCostApp();
   };
 
   /**
@@ -63,15 +55,7 @@ export default function LandingApp() {
    */
   const handleLaunchWorkApp = () => {
     setIsVisible(false);
-    const workApp = document.getElementById('workAppView');
-    if (workApp) {
-        workApp.classList.remove('hidden');
-    }
-    localStorage.setItem('hmi_selected_module', 'work');
-
-    if (window.app?.workLogRenderer?.render) {
-        window.app.workLogRenderer.render();
-    }
+    appService.launchWorkApp();
   };
 
   if (!isVisible) return null;

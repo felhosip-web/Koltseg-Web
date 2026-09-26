@@ -424,6 +424,7 @@ export class App {
             works: this.workLogManager?.works || [],
             isBooted: this.isBooted,
             timeTracker: timeTrackerState,
+            lastSyncTime: this.syncService?.lastSyncTime || null,
             dayjs: window.dayjs
         };
     }

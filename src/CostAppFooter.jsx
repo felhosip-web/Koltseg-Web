@@ -1,44 +1,26 @@
 import React from 'react';
+import { useAppStore } from './store/useAppStore.js';
 
 /**
  * Footer component displaying system status, save indicators, and app version.
  * Shows a save status LED, last save timestamp, and version information with debug toggle button.
+ * Reads lastSyncTime reactively from the Zustand store.
  * @returns {JSX.Element} The footer component
  */
-import { useState, useEffect } from 'react';
-
 export default function CostAppFooter() {
-    const [lastSave, setLastSave] = useState('Soha');
+    const lastSyncTime = useAppStore(state => state.lastSyncTime);
 
-    useEffect(() => {
-        const updateTime = () => {
-            if (window.app?.syncService?.lastSyncTime) {
-                const date = new Date(window.app.syncService.lastSyncTime);
-                setLastSave(date.toLocaleTimeString('hu-HU', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
-            } else {
-                setLastSave('Soha');
+    let formattedSave = 'Soha';
+    if (lastSyncTime) {
+        try {
+            const date = new Date(lastSyncTime);
+            if (!isNaN(date.getTime())) {
+                formattedSave = date.toLocaleTimeString('hu-HU', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
             }
-        };
-
-        // Initial check
-        updateTime();
-
-        // Listen for sync completion and queue changes
-        const handleSyncEvent = () => updateTime();
-
-        window.addEventListener('app-data-updated', handleSyncEvent);
-        let unsubscribeQueue = null;
-        if (window.app?.syncService?.onQueueChange) {
-            unsubscribeQueue = window.app.syncService.onQueueChange(handleSyncEvent);
+        } catch (e) {
+            formattedSave = 'Soha';
         }
-
-        return () => {
-            window.removeEventListener('app-data-updated', handleSyncEvent);
-            if (unsubscribeQueue) {
-                unsubscribeQueue();
-            }
-        };
-    }, []);
+    }
 
     return (
         <footer
@@ -50,7 +32,7 @@ export default function CostAppFooter() {
                     Online</span>
             </div>
             <div className="font-mono text-[10px] text-gray-400">
-                Utolsó mentés: <span id="lastSaveTime">{lastSave}</span>
+                Utolsó mentés: <span id="lastSaveTime">{formattedSave}</span>
             </div>
             <div className="text-gray-400 relative p-1" id="debugToggleBtnContainer">
                 Költségnyilvántartó <span className="app-version-label">v7.2.1</span>

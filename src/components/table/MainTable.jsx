@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { CategoryIcons } from '../../../js/category-icons.js';
 import { useAppStore } from '../../store/useAppStore.js';
+import { appService } from '../../services/appService.js';
 
 export default function MainTable() {
     const snapshot = useAppStore();
+    const generateTestData = useAppStore(state => state.generateTestData);
     const [loadedMonths, setLoadedMonths] = useState(15);
     const wrapperRef = useRef(null);
 
@@ -27,19 +29,7 @@ export default function MainTable() {
                     <div className="mb-4">A táblázat üres — adj hozzá kategóriákat és hónapokat, vagy generálj tesztadatokat.</div>
                     <div className="flex items-center justify-center gap-3">
                         <button id="vtGenerateTestData" className="px-4 py-2 bg-emerald-600 text-white rounded-xl" onClick={async () => {
-                            try {
-                                if (window.app && typeof window.app.generateTestData === 'function') {
-                                    await window.app.generateTestData(30);
-                                    await window.app.items.load();
-                                    await window.app.months.load();
-                                    await window.app.entries.load();
-                                    window.dispatchEvent(new Event('app-data-updated'));
-                                    window.app.hmiNotif?.showToast('Tesztadatok létrehozva', 'success');
-                                }
-                            } catch(e) {
-                                console.error(e);
-                                window.app.hmiNotif?.showToast('Tesztadat generálás sikertelen', 'error');
-                            }
+                            await generateTestData(30);
                         }}>Generálj tesztadatokat</button>
                     </div>
                 </div>
@@ -58,9 +48,7 @@ export default function MainTable() {
                             <th className="px-6 py-4 font-black text-gray-700 bg-gray-100 md:sticky md:left-0 z-10 md:z-30 min-w-[100px] w-[1%] whitespace-nowrap text-left">Kategória</th>
                             {visibleMonths.map(m => (
                                 <th key={m} className="px-4 py-4 text-center border-l border-gray-200 min-w-[160px] whitespace-nowrap dblclick-month-purge cursor-pointer hover:bg-red-50/80 transition-colors" data-month={m} onDoubleClick={(e) => {
-                                    if (window.app?.uiController?.handleMonthDeleteSequence) {
-                                        window.app.uiController.handleMonthDeleteSequence(m);
-                                    }
+                                    appService.deleteMonthSequence(m);
                                 }}>{m}</th>
                             ))}
                         </tr>
@@ -99,15 +87,11 @@ function CategoryCell({ item }) {
             data-itemid={item.id} data-itemname={item.name}
             onDoubleClick={async (e) => {
                 if (e.target.closest('button')) return;
-                if (window.app?.hmiNotif?.showCategoryActionsModal) {
-                    const action = await window.app.hmiNotif.showCategoryActionsModal(item.name);
-                    if (action === 'rename') {
-                        document.dispatchEvent(new CustomEvent('hmi-input-open', { detail: { type: 'rename', itemId: item.id, currentName: item.name } }));
-                    } else if (action === 'delete') {
-                        window.app?.uiController?.handleRowDeleteSequence(item.id, item.name);
-                    }
-                } else {
-                    window.app?.uiController?.handleRowDeleteSequence(item.id, item.name);
+                const action = await appService.showCategoryActionsModal(item.name);
+                if (action === 'rename') {
+                    document.dispatchEvent(new CustomEvent('hmi-input-open', { detail: { type: 'rename', itemId: item.id, currentName: item.name } }));
+                } else if (action === 'delete' || !action) {
+                    appService.deleteRowSequence(item.id, item.name);
                 }
             }}
         >
@@ -202,9 +186,7 @@ function DataCell({ itemId, month, entries, eurRate }) {
             data-cellbasekey={cellBaseKey}
             style={style}
             onClick={(e) => {
-                if (window.app?.uiController?.handleCellClick) {
-                    window.app.uiController.handleCellClick(e.currentTarget);
-                }
+                appService.handleCellClick(e.currentTarget);
             }}
         >
             {content}
