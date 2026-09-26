@@ -162,6 +162,56 @@ export const appService = {
         }
     },
 
+    /** Incoming actions */
+    addNewIncomingEntry() {
+        if (appInstance?.incomingRenderer?.addNewEntry) {
+            appInstance.incomingRenderer.addNewEntry();
+        }
+    },
+
+    handleIncomingCellClick(element) {
+        if (appInstance?.incomingRenderer?._handleCellClick) {
+            appInstance.incomingRenderer._handleCellClick(element);
+        }
+    },
+
+    deleteIncomingColumn(date) {
+        if (appInstance?.incomingRenderer?.deleteColumn) {
+            appInstance.incomingRenderer.deleteColumn(date);
+        }
+    },
+
+    deleteIncomingRow(sender) {
+        if (appInstance?.incomingRenderer?.deleteRow) {
+            appInstance.incomingRenderer.deleteRow(sender);
+        }
+    },
+
+    /** Reminder actions */
+    async createReminder(data) {
+        if (appInstance?.remindersApp?._handleNewReminder) {
+            return await appInstance.remindersApp._handleNewReminder(data);
+        }
+    },
+
+    async updateReminder(data) {
+        if (appInstance?.remindersApp?._updateReminder) {
+            return await appInstance.remindersApp._updateReminder(data);
+        }
+    },
+
+    async deleteReminder(id) {
+        if (appInstance?.remindersApp?._handleDeleteReminder) {
+            return await appInstance.remindersApp._handleDeleteReminder(id);
+        }
+    },
+
+    async completeReminder(id) {
+        if (appInstance?.remindersApp?._handleCompleteReminder) {
+            return await appInstance.remindersApp._handleCompleteReminder(id);
+        }
+    },
+
     /** Work App Actions */
     openWorkModal() {
         if (appInstance?.workLogRenderer?.openModal) {
