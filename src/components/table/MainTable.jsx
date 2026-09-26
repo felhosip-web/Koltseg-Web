@@ -90,7 +90,7 @@ function CategoryCell({ item }) {
                 const action = await appService.showCategoryActionsModal(item.name);
                 if (action === 'rename') {
                     document.dispatchEvent(new CustomEvent('hmi-input-open', { detail: { type: 'rename', itemId: item.id, currentName: item.name } }));
-                } else if (action === 'delete' || !action) {
+                } else if (action === 'delete' || action === 'not_available') {
                     appService.deleteRowSequence(item.id, item.name);
                 }
             }}

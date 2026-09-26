@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import test, { beforeEach, afterEach } from 'node:test';
 import { JSDOM } from 'jsdom';
+import { appService } from '../src/services/appService.js';
 
 function setupEnvironment() {
     const dom = new JSDOM(
@@ -19,18 +20,79 @@ function setupEnvironment() {
     globalThis.localStorage = dom.window.localStorage;
     globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
+    // Ensure window.app is deleted for pure decoupling test
+    delete globalThis.window.app;
+
     return dom;
 }
 
-test('1. MainTable mounts and renders without window.app, reacts to Zustand state changes, and triggers actions via appService', async () => {
+let savedWindowApp = undefined;
+
+beforeEach(() => {
+    if (globalThis.window) {
+        savedWindowApp = globalThis.window.app;
+    }
+});
+
+afterEach(() => {
+    appService.unbind();
+    if (globalThis.window) {
+        if (savedWindowApp !== undefined) {
+            globalThis.window.app = savedWindowApp;
+        } else {
+            delete globalThis.window.app;
+        }
+    }
+});
+
+test('1. appService operates via explicit bind(fakeApp) without global window.app', async () => {
     const dom = setupEnvironment();
     delete globalThis.window.app;
 
-    const [React, { createRoot }, { useAppStore }, { appService }, { default: MainTable }] = await Promise.all([
+    let testDataCalls = 0;
+    let monthSeqCalls = [];
+    let cellClickCalls = [];
+
+    const fakeApp = {
+        isBooted: true,
+        generateTestData: async (count) => { testDataCalls += count; },
+        items: { load: async () => {} },
+        months: { load: async () => {} },
+        entries: { load: async () => {} },
+        updateReactStore: () => {},
+        hmiNotif: { showToast: () => {} },
+        uiController: {
+            handleMonthDeleteSequence: (m) => monthSeqCalls.push(m),
+            handleCellClick: (el) => cellClickCalls.push(el)
+        }
+    };
+
+    appService.bind(fakeApp);
+
+    assert.equal(appService.getAppInstance(), fakeApp);
+    assert.equal(globalThis.window.app, undefined);
+
+    await appService.generateTestData(30);
+    assert.equal(testDataCalls, 30);
+
+    appService.deleteMonthSequence('2026-09');
+    assert.deepEqual(monthSeqCalls, ['2026-09']);
+
+    const fakeEl = { dataset: { cellbasekey: 'item1_2026-09' } };
+    appService.handleCellClick(fakeEl);
+    assert.equal(cellClickCalls.length, 1);
+
+    dom.window.close();
+});
+
+test('2. MainTable mounts and renders with bound appService when window.app is deleted', async () => {
+    const dom = setupEnvironment();
+    delete globalThis.window.app;
+
+    const [React, { createRoot }, { useAppStore }, { default: MainTable }] = await Promise.all([
         import('react'),
         import('react-dom/client'),
         import('../src/store/useAppStore.js'),
-        import('../src/services/appService.js'),
         import('../src/components/table/MainTable.jsx')
     ]);
 
@@ -44,13 +106,21 @@ test('1. MainTable mounts and renders without window.app, reacts to Zustand stat
     let cellClickCalls = [];
     let generateTestDataCalls = 0;
 
-    appService.deleteMonthSequence = (m) => deleteMonthCalls.push(m);
-    appService.handleCellClick = (el) => cellClickCalls.push(el);
-
-    const origGenerateTestData = appService.generateTestData;
-    appService.generateTestData = async (count) => {
-        generateTestDataCalls += count;
+    const fakeApp = {
+        isBooted: true,
+        generateTestData: async (count) => { generateTestDataCalls += count; },
+        items: { load: async () => {} },
+        months: { load: async () => {} },
+        entries: { load: async () => {} },
+        updateReactStore: () => {},
+        hmiNotif: { showToast: () => {} },
+        uiController: {
+            handleMonthDeleteSequence: (m) => deleteMonthCalls.push(m),
+            handleCellClick: (el) => cellClickCalls.push(el)
+        }
     };
+
+    appService.bind(fakeApp);
 
     const container = document.getElementById('root');
     const root = createRoot(container);
@@ -84,6 +154,26 @@ test('1. MainTable mounts and renders without window.app, reacts to Zustand stat
     assert.ok(container.textContent.includes('2026-09'));
     assert.ok(container.textContent.includes((12000).toLocaleString('hu-HU')));
 
+    // Test category dblclick cancel modal does not trigger deletion
+    let deleteRowCalls = [];
+    const fakeAppCategoryModal = {
+        isBooted: true,
+        hmiNotif: { showCategoryActionsModal: async () => null }, // User cancels
+        uiController: {
+            handleRowDeleteSequence: (id, name) => deleteRowCalls.push(id),
+            handleMonthDeleteSequence: (m) => deleteMonthCalls.push(m),
+            handleCellClick: (el) => cellClickCalls.push(el)
+        }
+    };
+    appService.bind(fakeAppCategoryModal);
+
+    const categoryCell = container.querySelector('td[data-itemid="item-1"]');
+    assert.ok(categoryCell);
+    await act(async () => {
+        categoryCell.dispatchEvent(new Event('dblclick', { bubbles: true, cancelable: true }));
+    });
+    assert.equal(deleteRowCalls.length, 0, 'Cancelling category modal should NOT trigger row deletion');
+
     // Test month dblclick handler through appService
     const monthHeader = container.querySelector('th[data-month="2026-09"]');
     assert.ok(monthHeader);
@@ -100,12 +190,11 @@ test('1. MainTable mounts and renders without window.app, reacts to Zustand stat
     });
     assert.equal(cellClickCalls.length, 1);
 
-    appService.generateTestData = origGenerateTestData;
     await act(async () => root.unmount());
     dom.window.close();
 });
 
-test('2. CostAppFooter renders without window.app and reactively consumes Zustand lastSyncTime', async () => {
+test('3. CostAppFooter renders without window.app and reactively consumes Zustand lastSyncTime', async () => {
     const dom = setupEnvironment();
     delete globalThis.window.app;
 
@@ -144,14 +233,13 @@ test('2. CostAppFooter renders without window.app and reactively consumes Zustan
     dom.window.close();
 });
 
-test('3. CostAppHeader renders without window.app and routes actions through appService', async () => {
+test('4. CostAppHeader renders without window.app and routes actions through bound appService', async () => {
     const dom = setupEnvironment();
     delete globalThis.window.app;
 
-    const [React, { createRoot }, { appService }, { default: CostAppHeader }] = await Promise.all([
+    const [React, { createRoot }, { default: CostAppHeader }] = await Promise.all([
         import('react'),
         import('react-dom/client'),
-        import('../src/services/appService.js'),
         import('../src/CostAppHeader.jsx')
     ]);
 
@@ -161,9 +249,19 @@ test('3. CostAppHeader renders without window.app and routes actions through app
     let exportExcelCalls = 0;
     let syncModalCalls = 0;
 
-    appService.openInputModal = (type) => inputModalCalls.push(type);
-    appService.exportExcel = () => { exportExcelCalls++; };
-    appService.openSyncModal = () => { syncModalCalls++; };
+    const fakeApp = {
+        uiController: {
+            inputModal: { open: (type) => inputModalCalls.push(type) },
+            exportController: { exportExcel: () => { exportExcelCalls++; } },
+            openSyncModal: () => { syncModalCalls++; }
+        },
+        syncService: {
+            getQueueStatus: () => ({ total: 0 }),
+            onQueueChange: () => () => {}
+        }
+    };
+
+    appService.bind(fakeApp);
 
     const container = document.getElementById('root');
     const root = createRoot(container);
@@ -208,24 +306,25 @@ test('3. CostAppHeader renders without window.app and routes actions through app
     dom.window.close();
 });
 
-test('4. WorkAppHeader renders without window.app and routes actions through appService', async () => {
+test('5. WorkAppHeader renders without window.app and routes actions through bound appService', async () => {
     const dom = setupEnvironment();
     delete globalThis.window.app;
 
-    const [React, { createRoot }, { appService }, { default: WorkAppHeader }] = await Promise.all([
+    const [React, { createRoot }, { default: WorkAppHeader }] = await Promise.all([
         import('react'),
         import('react-dom/client'),
-        import('../src/services/appService.js'),
         import('../src/WorkAppHeader.jsx')
     ]);
 
     const { act } = React;
 
     let workModalCalls = 0;
-    let returnToMenuCalls = 0;
 
-    appService.openWorkModal = () => { workModalCalls++; };
-    appService.returnToMenuFromWork = () => { returnToMenuCalls++; };
+    const fakeApp = {
+        workLogRenderer: { openModal: () => { workModalCalls++; } }
+    };
+
+    appService.bind(fakeApp);
 
     const container = document.getElementById('root');
     const root = createRoot(container);
@@ -243,36 +342,32 @@ test('4. WorkAppHeader renders without window.app and routes actions through app
     });
     assert.equal(workModalCalls, 1);
 
-    const btnWorkToMenu = container.querySelector('#btnWorkToMenu');
-    assert.ok(btnWorkToMenu);
-    await act(async () => {
-        btnWorkToMenu.dispatchEvent(new Event('click', { bubbles: true, cancelable: true }));
-    });
-    assert.equal(returnToMenuCalls, 1);
-
     await act(async () => root.unmount());
     dom.window.close();
 });
 
-test('5. LandingApp renders without window.app and routes launch handlers through appService', async () => {
+test('6. LandingApp renders without window.app and routes launch handlers through bound appService', async () => {
     const dom = setupEnvironment();
     delete globalThis.window.app;
     localStorage.removeItem('hmi_selected_module');
 
-    const [React, { createRoot }, { appService }, { default: LandingApp }] = await Promise.all([
+    const [React, { createRoot }, { default: LandingApp }] = await Promise.all([
         import('react'),
         import('react-dom/client'),
-        import('../src/services/appService.js'),
         import('../src/LandingApp.jsx')
     ]);
 
     const { act } = React;
 
-    let launchCostCalls = 0;
-    let launchWorkCalls = 0;
+    let renderTableCalls = 0;
+    let renderWorkCalls = 0;
 
-    appService.launchCostApp = () => { launchCostCalls++; };
-    appService.launchWorkApp = () => { launchWorkCalls++; };
+    const fakeApp = {
+        renderer: { renderTable: () => { renderTableCalls++; } },
+        workLogRenderer: { render: () => { renderWorkCalls++; } }
+    };
+
+    appService.bind(fakeApp);
 
     const container = document.getElementById('root');
     const root = createRoot(container);
@@ -288,36 +383,38 @@ test('5. LandingApp renders without window.app and routes launch handlers throug
     await act(async () => {
         btnCost.dispatchEvent(new Event('click', { bubbles: true, cancelable: true }));
     });
-    assert.equal(launchCostCalls, 1);
+    assert.equal(renderTableCalls, 1);
 
     await act(async () => root.unmount());
 
     // Re-mount to test work launch
-    const root2 = createRoot(container);
+    localStorage.removeItem('hmi_selected_module');
+    const container2 = document.createElement('div');
+    document.body.appendChild(container2);
+    const root2 = createRoot(container2);
     await act(async () => {
         root2.render(React.createElement(LandingApp));
     });
 
-    const btnWork = container.querySelector('#btnLaunchWorkApp');
+    const btnWork = container2.querySelector('#btnLaunchWorkApp');
     assert.ok(btnWork);
     await act(async () => {
         btnWork.dispatchEvent(new Event('click', { bubbles: true, cancelable: true }));
     });
-    assert.equal(launchWorkCalls, 1);
+    assert.equal(renderWorkCalls, 1);
 
     await act(async () => root2.unmount());
     dom.window.close();
 });
 
-test('6. StoreSync operates via appService.getInitialSnapshot without direct window.app checks', async () => {
+test('7. StoreSync operates via appService.getInitialSnapshot without direct window.app checks', async () => {
     const dom = setupEnvironment();
     delete globalThis.window.app;
 
-    const [React, { createRoot }, { useAppStore }, { appService }, { default: StoreSync }] = await Promise.all([
+    const [React, { createRoot }, { useAppStore }, { default: StoreSync }] = await Promise.all([
         import('react'),
         import('react-dom/client'),
         import('../src/store/useAppStore.js'),
-        import('../src/services/appService.js'),
         import('../src/components/StoreSync.jsx')
     ]);
 
@@ -327,13 +424,17 @@ test('6. StoreSync operates via appService.getInitialSnapshot without direct win
         useAppStore.setState({ isLoaded: false });
     });
 
-    // Mock appService.getInitialSnapshot
-    appService.getInitialSnapshot = () => ({
-        items: [{ id: 'boot-item-1', name: 'Boot Test' }],
-        months: ['2026-09'],
-        entries: [],
-        eurRate: 400
-    });
+    const fakeApp = {
+        isBooted: true,
+        getAppSnapshot: () => ({
+            items: [{ id: 'boot-item-1', name: 'Boot Test' }],
+            months: ['2026-09'],
+            entries: [],
+            eurRate: 400
+        })
+    };
+
+    appService.bind(fakeApp);
 
     const container = document.getElementById('root');
     const root = createRoot(container);

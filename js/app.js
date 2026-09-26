@@ -41,6 +41,7 @@ import { TimeTrackerModule } from './modules/time-tracker/time-tracker.js';
 import { parseCellKey } from './utils/cell-key-utils.js';
 import { SyncManager } from './sync-manager.js';
 import { useAppStore as useReactAppStore } from '../src/store/useAppStore.js';
+import { appService } from '../src/services/appService.js';
 
 // ================================================================
 // === APP OSZTÁLY ===
@@ -51,6 +52,7 @@ export class App {
      * Konstruktor - Alkalmazás fő példányának inicializálása
      */
     constructor() {
+        appService.bind(this);
         // === 1. ALAP KOMPONENSEK ===
         this.config = new ConfigManager();
         this.db = new Database();
@@ -944,6 +946,7 @@ async function initApp() {
     setTimeout(initDebugPanel, 1200);
 
     const app = new App();
+    appService.bind(app);
     window.app = app;
     window.getVersion = () => app.getVersionInfo();
 

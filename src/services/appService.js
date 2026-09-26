@@ -1,17 +1,42 @@
 /**
  * Application Service Boundary
  * Serves as the explicit bridge between React components/Zustand actions
- * and lower-level domain services or legacy controller interfaces.
+ * and lower-level domain services or application instances via explicit binding.
  */
 
+let appInstance = null;
+
 export const appService = {
+    /**
+     * Binds the application instance explicitly.
+     * @param {Object} app Application instance
+     */
+    bind(app) {
+        appInstance = app;
+    },
+
+    /**
+     * Unbinds the current application instance.
+     */
+    unbind() {
+        appInstance = null;
+    },
+
+    /**
+     * Gets the current bound application instance.
+     * @returns {Object|null}
+     */
+    getAppInstance() {
+        return appInstance;
+    },
+
     /**
      * Retrieves initial application snapshot if app is booted.
      * @returns {Object|null}
      */
     getInitialSnapshot() {
-        if (typeof window !== 'undefined' && window.app?.isBooted && typeof window.app.getAppSnapshot === 'function') {
-            return window.app.getAppSnapshot();
+        if (appInstance?.isBooted && typeof appInstance.getAppSnapshot === 'function') {
+            return appInstance.getAppSnapshot();
         }
         return null;
     },
@@ -21,169 +46,169 @@ export const appService = {
      * @param {number} count Number of test entries
      */
     async generateTestData(count = 30) {
-        if (typeof window !== 'undefined' && window.app) {
+        if (appInstance) {
             try {
-                if (typeof window.app.generateTestData === 'function') {
-                    await window.app.generateTestData(count);
+                if (typeof appInstance.generateTestData === 'function') {
+                    await appInstance.generateTestData(count);
                 }
-                if (window.app.items?.load) await window.app.items.load();
-                if (window.app.months?.load) await window.app.months.load();
-                if (window.app.entries?.load) await window.app.entries.load();
+                if (appInstance.items?.load) await appInstance.items.load();
+                if (appInstance.months?.load) await appInstance.months.load();
+                if (appInstance.entries?.load) await appInstance.entries.load();
 
-                if (typeof window.app.updateReactStore === 'function') {
-                    window.app.updateReactStore();
+                if (typeof appInstance.updateReactStore === 'function') {
+                    appInstance.updateReactStore();
                 } else if (typeof window !== 'undefined') {
                     window.dispatchEvent(new Event('app-data-updated'));
                 }
 
-                window.app.hmiNotif?.showToast?.('Tesztadatok létrehozva', 'success');
+                appInstance.hmiNotif?.showToast?.('Tesztadatok létrehozva', 'success');
             } catch (e) {
                 console.error('[appService] generateTestData error:', e);
-                window.app?.hmiNotif?.showToast?.('Tesztadat generálás sikertelen', 'error');
+                appInstance?.hmiNotif?.showToast?.('Tesztadat generálás sikertelen', 'error');
             }
         }
     },
 
     /** Table / UI actions */
     deleteMonthSequence(month) {
-        if (typeof window !== 'undefined' && window.app?.uiController?.handleMonthDeleteSequence) {
-            window.app.uiController.handleMonthDeleteSequence(month);
+        if (appInstance?.uiController?.handleMonthDeleteSequence) {
+            appInstance.uiController.handleMonthDeleteSequence(month);
         }
     },
 
     deleteRowSequence(itemId, itemName) {
-        if (typeof window !== 'undefined' && window.app?.uiController?.handleRowDeleteSequence) {
-            window.app.uiController.handleRowDeleteSequence(itemId, itemName);
+        if (appInstance?.uiController?.handleRowDeleteSequence) {
+            appInstance.uiController.handleRowDeleteSequence(itemId, itemName);
         }
     },
 
     async showCategoryActionsModal(itemName) {
-        if (typeof window !== 'undefined' && window.app?.hmiNotif?.showCategoryActionsModal) {
-            return await window.app.hmiNotif.showCategoryActionsModal(itemName);
+        if (appInstance?.hmiNotif?.showCategoryActionsModal) {
+            return await appInstance.hmiNotif.showCategoryActionsModal(itemName);
         }
-        return null;
+        return 'not_available';
     },
 
     handleCellClick(element) {
-        if (typeof window !== 'undefined' && window.app?.uiController?.handleCellClick) {
-            window.app.uiController.handleCellClick(element);
+        if (appInstance?.uiController?.handleCellClick) {
+            appInstance.uiController.handleCellClick(element);
         }
     },
 
     openInputModal(type) {
-        if (typeof window !== 'undefined' && window.app?.uiController?.inputModal?.open) {
-            window.app.uiController.inputModal.open(type);
+        if (appInstance?.uiController?.inputModal?.open) {
+            appInstance.uiController.inputModal.open(type);
         }
     },
 
     /** Export / Import / Sync / Maintenance actions */
     exportExcel() {
-        if (typeof window !== 'undefined' && window.app?.uiController?.exportController?.exportExcel) {
-            window.app.uiController.exportController.exportExcel();
+        if (appInstance?.uiController?.exportController?.exportExcel) {
+            appInstance.uiController.exportController.exportExcel();
         }
     },
 
     exportPdf() {
-        if (typeof window !== 'undefined' && window.app?.uiController?.exportController?.exportPdf) {
-            window.app.uiController.exportController.exportPdf();
+        if (appInstance?.uiController?.exportController?.exportPdf) {
+            appInstance.uiController.exportController.exportPdf();
         }
     },
 
     exportJson() {
-        if (typeof window !== 'undefined' && window.app?.uiController?.exportController?.exportJson) {
-            window.app.uiController.exportController.exportJson();
+        if (appInstance?.uiController?.exportController?.exportJson) {
+            appInstance.uiController.exportController.exportJson();
         }
     },
 
     importJson() {
-        if (typeof window !== 'undefined' && window.app?.uiController?.exportController?.importJson) {
-            window.app.uiController.exportController.importJson();
+        if (appInstance?.uiController?.exportController?.importJson) {
+            appInstance.uiController.exportController.importJson();
         }
     },
 
     openSyncModal() {
-        if (typeof window !== 'undefined' && window.app?.uiController?.openSyncModal) {
-            window.app.uiController.openSyncModal();
+        if (appInstance?.uiController?.openSyncModal) {
+            appInstance.uiController.openSyncModal();
         }
     },
 
     startDbAudit() {
-        if (typeof window !== 'undefined' && window.app?.uiController?.maintenanceController?.startDbAudit) {
-            window.app.uiController.maintenanceController.startDbAudit();
+        if (appInstance?.uiController?.maintenanceController?.startDbAudit) {
+            appInstance.uiController.maintenanceController.startDbAudit();
         }
     },
 
     restoreBackup() {
-        if (typeof window !== 'undefined' && window.app?.uiController?.maintenanceController?.restoreBackup) {
-            window.app.uiController.maintenanceController.restoreBackup();
+        if (appInstance?.uiController?.maintenanceController?.restoreBackup) {
+            appInstance.uiController.maintenanceController.restoreBackup();
         }
     },
 
     forceBackup() {
-        if (typeof window !== 'undefined' && window.app?.uiController?.maintenanceController?.forceBackup) {
-            window.app.uiController.maintenanceController.forceBackup();
+        if (appInstance?.uiController?.maintenanceController?.forceBackup) {
+            appInstance.uiController.maintenanceController.forceBackup();
         }
     },
 
     wipeDatabase() {
-        if (typeof window !== 'undefined' && window.app?.uiController?.maintenanceController?.wipeDatabase) {
-            window.app.uiController.maintenanceController.wipeDatabase();
+        if (appInstance?.uiController?.maintenanceController?.wipeDatabase) {
+            appInstance.uiController.maintenanceController.wipeDatabase();
         }
     },
 
     handleQueueClick() {
-        if (typeof window !== 'undefined' && window.app?.uiController?._handleQueueClick) {
-            window.app.uiController._handleQueueClick();
+        if (appInstance?.uiController?._handleQueueClick) {
+            appInstance.uiController._handleQueueClick();
         }
     },
 
     /** Work App Actions */
     openWorkModal() {
-        if (typeof window !== 'undefined' && window.app?.workLogRenderer?.openModal) {
-            window.app.workLogRenderer.openModal();
+        if (appInstance?.workLogRenderer?.openModal) {
+            appInstance.workLogRenderer.openModal();
         }
     },
 
     openModuleChooser() {
-        if (typeof window !== 'undefined' && window.app?.moduleManager?.openChooserModal) {
-            window.app.moduleManager.openChooserModal();
+        if (appInstance?.moduleManager?.openChooserModal) {
+            appInstance.moduleManager.openChooserModal();
         }
     },
 
     openHelp(topic) {
-        if (typeof window !== 'undefined' && window.app?.hmiNotif?.openHelp) {
-            window.app.hmiNotif.openHelp(topic);
+        if (appInstance?.hmiNotif?.openHelp) {
+            appInstance.hmiNotif.openHelp(topic);
         }
     },
 
     openSettings() {
-        if (typeof window !== 'undefined' && window.app?.ui) {
-            window.app.ui.populateSettingsForm?.();
-            window.app.ui.togglePanel?.('settingsPanel');
+        if (appInstance?.ui) {
+            appInstance.ui.populateSettingsForm?.();
+            appInstance.ui.togglePanel?.('settingsPanel');
         }
     },
 
     exportWorkExcel() {
-        if (typeof window !== 'undefined' && window.app?.ui?.exportController?.exportWorkExcel) {
-            window.app.ui.exportController.exportWorkExcel();
+        if (appInstance?.ui?.exportController?.exportWorkExcel) {
+            appInstance.ui.exportController.exportWorkExcel();
         }
     },
 
     exportWorkPdf() {
-        if (typeof window !== 'undefined' && window.app?.ui?.exportController?.exportWorkPdf) {
-            window.app.ui.exportController.exportWorkPdf();
+        if (appInstance?.ui?.exportController?.exportWorkPdf) {
+            appInstance.ui.exportController.exportWorkPdf();
         }
     },
 
     exportWorkJson() {
-        if (typeof window !== 'undefined' && window.app?.ui?.exportController?.exportWorkJson) {
-            window.app.ui.exportController.exportWorkJson();
+        if (appInstance?.ui?.exportController?.exportWorkJson) {
+            appInstance.ui.exportController.exportWorkJson();
         }
     },
 
     importWorkJson() {
-        if (typeof window !== 'undefined' && window.app?.ui?.exportController?.importWorkJson) {
-            window.app.ui.exportController.importWorkJson();
+        if (appInstance?.ui?.exportController?.importWorkJson) {
+            appInstance.ui.exportController.importWorkJson();
         }
     },
 
@@ -196,8 +221,8 @@ export const appService = {
         if (typeof localStorage !== 'undefined') {
             localStorage.setItem('hmi_selected_module', 'cost');
         }
-        if (typeof window !== 'undefined' && window.app?.renderer?.renderTable) {
-            window.app.renderer.renderTable();
+        if (appInstance?.renderer?.renderTable) {
+            appInstance.renderer.renderTable();
         }
     },
 
@@ -209,8 +234,8 @@ export const appService = {
         if (typeof localStorage !== 'undefined') {
             localStorage.setItem('hmi_selected_module', 'work');
         }
-        if (typeof window !== 'undefined' && window.app?.workLogRenderer?.render) {
-            window.app.workLogRenderer.render();
+        if (appInstance?.workLogRenderer?.render) {
+            appInstance.workLogRenderer.render();
         }
     },
 
@@ -228,21 +253,21 @@ export const appService = {
 
     /** PWA & Queue Status */
     promptPwaInstall() {
-        if (typeof window !== 'undefined' && window.app?.pwaManager?.promptInstall) {
-            window.app.pwaManager.promptInstall();
+        if (appInstance?.pwaManager?.promptInstall) {
+            appInstance.pwaManager.promptInstall();
         }
     },
 
     getQueueStatus() {
-        if (typeof window !== 'undefined' && window.app?.syncService?.getQueueStatus) {
-            return window.app.syncService.getQueueStatus();
+        if (appInstance?.syncService?.getQueueStatus) {
+            return appInstance.syncService.getQueueStatus();
         }
         return null;
     },
 
     subscribeQueueStatus(callback) {
-        if (typeof window !== 'undefined' && window.app?.syncService?.onQueueChange) {
-            return window.app.syncService.onQueueChange(callback);
+        if (appInstance?.syncService?.onQueueChange) {
+            return appInstance.syncService.onQueueChange(callback);
         }
         return null;
     }
