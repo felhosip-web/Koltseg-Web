@@ -578,6 +578,7 @@ export class App {
     
 
     updateReminderStatus() {
+        if (typeof dayjs === 'undefined') return;
         // Minimal fallback for reminder LED if needed, otherwise handled by React
         const reminders = this.reminderManager?.reminders || [];
         const today = dayjs();

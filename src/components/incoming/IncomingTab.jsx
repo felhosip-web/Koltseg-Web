@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { useAppStore } from '../../store/useAppStore';
+import { appService } from '../../services/appService';
 
 export default function IncomingTab() {
     const incomings = useAppStore(state => state.incomings || []);
@@ -18,7 +19,7 @@ export default function IncomingTab() {
     const handleAddIncoming = (e) => {
         e.preventDefault();
         e.stopPropagation();
-        window.app?.incomingRenderer?.addNewEntry?.();
+        appService.addNewIncomingEntry();
     };
 
     const handleCellClick = (e, sender, date, entryId, amount) => {
@@ -32,19 +33,19 @@ export default function IncomingTab() {
                 amount: amount || ''
             }
         };
-        window.app?.incomingRenderer?._handleCellClick?.(fakeElement);
+        appService.handleIncomingCellClick(fakeElement);
     };
 
     const handleDeleteColumn = (e, date) => {
         e.preventDefault();
         e.stopPropagation();
-        window.app?.incomingRenderer?.deleteColumn?.(date);
+        appService.deleteIncomingColumn(date);
     };
 
     const handleDeleteRow = (e, sender) => {
         e.preventDefault();
         e.stopPropagation();
-        window.app?.incomingRenderer?.deleteRow?.(sender);
+        appService.deleteIncomingRow(sender);
     };
 
     return (
