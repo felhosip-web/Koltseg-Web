@@ -1,44 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useMemo } from 'react';
+import { useAppStore } from '../../store/useAppStore';
 
 export default function IncomingTab() {
-    const [incomings, setIncomings] = useState([]);
-    const [senders, setSenders] = useState([]);
+    const incomings = useAppStore(state => state.incomings || []);
 
-    useEffect(() => {
-        const fetchIncomings = () => {
-            if (window.app && window.app.incomingManager) {
-                setIncomings([...(window.app.incomingManager.incomings || [])]);
-                setSenders([...(window.app.incomingManager.getSenders?.() || [])]);
-            }
-        };
-        fetchIncomings();
+    const senders = useMemo(() => {
+        return [...new Set(incomings.map(e => e?.sender).filter(Boolean))].sort();
+    }, [incomings]);
 
-        const hasAppDataSubscription = window.app && typeof window.app.subscribeAppData === 'function';
-        let listener = null;
-        if (hasAppDataSubscription) {
-            listener = window.app.subscribeAppData((data) => {
-                if (data.incomings) {
-                    setIncomings([...data.incomings]);
-                }
-                if (window.app.incomingManager) {
-                     setSenders([...(window.app.incomingManager.getSenders?.() || [])]);
-                }
-            });
-        }
-
-        const interval = hasAppDataSubscription ? null : setInterval(fetchIncomings, 1000);
-
-        return () => {
-            if (listener && window.app && typeof window.app.unsubscribeAppData === 'function') {
-                window.app.unsubscribeAppData(listener);
-            }
-            if (interval) {
-                clearInterval(interval);
-            }
-        };
-    }, []);
-
-    const dates = [...new Set(incomings.map(e => e.date))].sort();
+    const dates = [...new Set(incomings.map(e => e?.date).filter(Boolean))].sort();
 
     const formatDate = (dateStr) => {
         const d = new Date(dateStr + 'T00:00:00');
