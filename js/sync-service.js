@@ -892,6 +892,10 @@ export class SyncService {
                     localStorage.setItem('hmi_lastSyncTime', completionTime.toISOString());
                     this.lastSyncTime = completionTime;
                     results.checkpointUpdated = true;
+                    const appInstance = this._getApp();
+                    if (appInstance && typeof appInstance.updateReactStore === 'function') {
+                        appInstance.updateReactStore();
+                    }
                 } catch (e) {
                     console.warn('[SYNC] Nem sikerült elmenteni a hmi_lastSyncTime-ot:', e);
                     results.checkpointUpdated = false;

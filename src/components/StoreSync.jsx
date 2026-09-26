@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { useAppStore } from '../store/useAppStore.js';
+import { appService } from '../services/appService.js';
 
 /**
  * Headless component that acts as a bridge between the old Vanilla JS OOP-Core
@@ -15,8 +16,8 @@ export default function StoreSync() {
 
     useEffect(() => {
         // Initial sync on mount if app is already loaded
-        if (window.app && window.app.isBooted && typeof window.app.getAppSnapshot === 'function') {
-            const snapshot = window.app.getAppSnapshot();
+        const snapshot = appService.getInitialSnapshot();
+        if (snapshot) {
             setSnapshot(snapshot);
         }
     }, [setSnapshot]);

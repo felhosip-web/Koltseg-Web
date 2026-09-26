@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { appService } from './services/appService.js';
 
 export default function WorkAppHeader() {
     const [exportMenuOpen, setExportMenuOpen] = useState(false);
@@ -6,38 +7,31 @@ export default function WorkAppHeader() {
     const handleNewWork = (e) => {
         e.preventDefault();
         e.stopPropagation();
-        window.app?.workLogRenderer?.openModal?.();
+        appService.openWorkModal();
     };
 
     const handleWorkToMenu = (e) => {
         e.preventDefault();
         e.stopPropagation();
-        const workApp = document.getElementById('workAppView');
-        const landing = document.getElementById('appLandingScreenRoot')?.parentElement;
-        if (workApp) workApp.classList.add('hidden');
-        if (landing) landing.classList.remove('hidden');
-        localStorage.removeItem('hmi_selected_module');
+        appService.returnToMenuFromWork();
     };
 
     const handleModulesToggle = (e) => {
         e.preventDefault();
         e.stopPropagation();
-        window.app?.moduleManager?.openChooserModal?.();
+        appService.openModuleChooser();
     };
 
     const handleHelpWork = (e) => {
         e.preventDefault();
         e.stopPropagation();
-        window.app?.hmiNotif?.openHelp?.('work_log');
+        appService.openHelp('work_log');
     };
 
     const handleSettingsWork = (e) => {
         e.preventDefault();
         e.stopPropagation();
-        if (window.app?.ui) {
-            window.app.ui.populateSettingsForm();
-            window.app.ui.togglePanel('settingsPanel');
-        }
+        appService.openSettings();
     };
 
     const handleDataControlWork = (e) => {
@@ -50,35 +44,35 @@ export default function WorkAppHeader() {
         e.preventDefault();
         e.stopPropagation();
         setExportMenuOpen(false);
-        window.app?.ui?.exportController?.exportWorkExcel?.();
+        appService.exportWorkExcel();
     };
 
     const handleExportPdfWork = (e) => {
         e.preventDefault();
         e.stopPropagation();
         setExportMenuOpen(false);
-        window.app?.ui?.exportController?.exportWorkPdf?.();
+        appService.exportWorkPdf();
     };
 
     const handleExportJsonWork = (e) => {
         e.preventDefault();
         e.stopPropagation();
         setExportMenuOpen(false);
-        window.app?.ui?.exportController?.exportWorkJson?.();
+        appService.exportWorkJson();
     };
 
     const handleImportJsonWork = (e) => {
         e.preventDefault();
         e.stopPropagation();
         setExportMenuOpen(false);
-        window.app?.ui?.exportController?.importWorkJson?.();
+        appService.importWorkJson();
     };
 
     const handleForceSyncWork = (e) => {
         e.preventDefault();
         e.stopPropagation();
         setExportMenuOpen(false);
-        window.app?.ui?.openSyncModal?.();
+        appService.openSyncModal();
     };
 
     return (
