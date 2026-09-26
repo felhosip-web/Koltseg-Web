@@ -37,16 +37,13 @@ test('IncomingTab reactively consumes Zustand incomings state and calls window.a
         useAppStore.setState({ incomings: [] });
     });
 
-    // Mock window.app with incomingRenderer and incomingManager
+    // Mock window.app with incomingRenderer
     let addNewEntryCalls = 0;
     let deleteColCalls = [];
     let deleteRowCalls = [];
     let cellClickCalls = [];
 
     window.app = {
-        incomingManager: {
-            getSenders: () => ['Partner A']
-        },
         incomingRenderer: {
             addNewEntry: () => { addNewEntryCalls++; },
             deleteColumn: (date) => { deleteColCalls.push(date); },
@@ -201,7 +198,37 @@ test('RemindersTab reactively consumes Zustand reminders state and calls window.
 
     assert.deepEqual(completeReminderCalls, ['rem-101']);
 
-    // 4. User action for delete click calls window.app.remindersApp._handleDeleteReminder
+    // 4. User action for edit button click opens edit modal and calling update invokes _updateReminder
+    const btnEdit = container.querySelector('.btn-edit-reminder');
+    assert.ok(btnEdit, 'Edit reminder button should exist');
+
+    await act(async () => {
+        btnEdit.dispatchEvent(new Event('click', { bubbles: true, cancelable: true }));
+    });
+
+    const editModal = container.querySelector('.fixed');
+    assert.ok(editModal, 'Edit reminder modal should open');
+
+    const modalInputs = container.querySelectorAll('.fixed input');
+    assert.ok(modalInputs.length >= 3, 'Edit modal inputs should exist');
+    await act(async () => {
+        setInputValue(modalInputs[0], 'Updated Insurance Payment');
+        setInputValue(modalInputs[1], '30000');
+    });
+
+    const saveBtn = Array.from(container.querySelectorAll('button')).find(b => b.textContent.trim() === 'Mentés');
+    assert.ok(saveBtn, 'Edit modal save button should exist');
+
+    await act(async () => {
+        saveBtn.dispatchEvent(new Event('click', { bubbles: true, cancelable: true }));
+    });
+
+    assert.equal(updateReminderCalls.length, 1, 'Clicking Mentés in edit modal should invoke _updateReminder');
+    assert.equal(updateReminderCalls[0].id, 'rem-101');
+    assert.equal(updateReminderCalls[0].title, 'Updated Insurance Payment');
+    assert.equal(updateReminderCalls[0].amount, 30000);
+
+    // 5. User action for delete click calls window.app.remindersApp._handleDeleteReminder
     const btnDelete = container.querySelector('.btn-delete-reminder');
     assert.ok(btnDelete, 'Delete reminder button should exist');
 
@@ -211,7 +238,7 @@ test('RemindersTab reactively consumes Zustand reminders state and calls window.
 
     assert.deepEqual(deleteReminderCalls, ['rem-101']);
 
-    // 5. User action for form submit calls window.app.remindersApp._handleNewReminder
+    // 6. User action for form submit calls window.app.remindersApp._handleNewReminder
     const form = container.querySelector('#reactReminderForm');
     assert.ok(form, 'Reminder form should exist');
 

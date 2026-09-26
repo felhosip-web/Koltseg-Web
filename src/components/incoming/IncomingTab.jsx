@@ -5,9 +5,7 @@ export default function IncomingTab() {
     const incomings = useAppStore(state => state.incomings || []);
 
     const senders = useMemo(() => {
-        const fromIncomings = incomings.map(e => e?.sender).filter(Boolean);
-        const fromManager = window.app?.incomingManager?.getSenders?.() || [];
-        return [...new Set([...fromIncomings, ...fromManager])].sort();
+        return [...new Set(incomings.map(e => e?.sender).filter(Boolean))].sort();
     }, [incomings]);
 
     const dates = [...new Set(incomings.map(e => e?.date).filter(Boolean))].sort();
