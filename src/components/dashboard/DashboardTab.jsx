@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { db } from '../../../js/db.js';
 import { NameDays } from '../../../js/utils/namedays.js';
 import { useAppStore } from '../../store/useAppStore.js';
+import { appService } from '../../services/appService.js';
 
 // A minimal port of the dashboard rendering logic using React state
 
@@ -204,15 +205,15 @@ export default function DashboardTab() {
     useEffect(() => {
         // Fetch weather
         const fetchWeather = async () => {
-            if (!window.app) return;
-            const weatherCity = window.app.config?.weatherCity || 'Budapest';
+            const weatherCity = appService.getWeatherCity();
 
             const now = Date.now();
             const cacheDuration = 15 * 60 * 1000;
-            if (window.app.weatherCache &&
-                window.app.weatherCache.city.toLowerCase() === weatherCity.toLowerCase() &&
-                (now - window.app.weatherCache.timestamp < cacheDuration)) {
-                applyWeatherData(window.app.weatherCache);
+            const weatherCache = appService.getWeatherCache();
+            if (weatherCache &&
+                weatherCache.city.toLowerCase() === weatherCity.toLowerCase() &&
+                (now - weatherCache.timestamp < cacheDuration)) {
+                applyWeatherData(weatherCache);
                 return;
             }
 
@@ -238,7 +239,7 @@ export default function DashboardTab() {
                     const isDay = wData.current.is_day !== 0;
 
                     const cacheEntry = { temp, code, isDay, city: displayName, timestamp: now };
-                    window.app.weatherCache = cacheEntry;
+                    appService.setWeatherCache(cacheEntry);
                     applyWeatherData(cacheEntry);
                 }
             } catch (err) {
@@ -284,18 +285,7 @@ export default function DashboardTab() {
             setWeatherData({ icon: iconClass, color: colorClass, temp, city });
         };
 
-        const handleAppUpdate = () => {
-            if (window.app) {
-                fetchWeather();
-            }
-        };
-
-        if (window.app) {
-            fetchWeather();
-        }
-
-        window.addEventListener('app-data-updated', handleAppUpdate);
-        return () => window.removeEventListener('app-data-updated', handleAppUpdate);
+        fetchWeather();
     }, []);
 
     useEffect(() => {
@@ -306,9 +296,10 @@ export default function DashboardTab() {
             else if (hour < 18) setGreeting('Jó napot!');
             else setGreeting('Jó estét!');
 
-            if (window.dayjs) {
-                window.dayjs.locale('hu');
-                setCurrentDateStr(window.dayjs().format('YYYY. MMMM D., dddd'));
+            const dayjs = snapshot?.dayjs || window.dayjs;
+            if (dayjs) {
+                dayjs.locale('hu');
+                setCurrentDateStr(dayjs().format('YYYY. MMMM D., dddd'));
             } else {
                 setCurrentDateStr(new Date().toLocaleDateString('hu-HU', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' }));
             }
@@ -322,23 +313,19 @@ export default function DashboardTab() {
         };
         updateTimeAndNameDays();
 
-        const handleUpdate = () => {
-            updateTimeAndNameDays();
-        };
-        window.addEventListener('app-data-updated', handleUpdate);
         const timerId = setInterval(updateTimeAndNameDays, 60000);
         return () => {
-            window.removeEventListener('app-data-updated', handleUpdate);
             clearInterval(timerId);
         };
-    }, []);
+    }, [snapshot?.dayjs]);
 
     useEffect(() => {
         // Fetch Time Tracker Data async
         const fetchTimeTrackerData = () => {
-            if (window.app && window.app.timeTracker && window.dayjs && db) {
-                const startOfWeek = window.dayjs().startOf('week').format('YYYY-MM-DD');
-                const endOfWeek = window.dayjs().endOf('week').format('YYYY-MM-DD');
+            const dayjs = snapshot?.dayjs || window.dayjs;
+            if (dayjs && db) {
+                const startOfWeek = dayjs().startOf('week').format('YYYY-MM-DD');
+                const endOfWeek = dayjs().endOf('week').format('YYYY-MM-DD');
 
                 db.timeEntries.where('date').between(startOfWeek, endOfWeek, true, true).toArray().then(weekEntries => {
                     let weekMinutes = 0;
@@ -359,15 +346,8 @@ export default function DashboardTab() {
             }
         };
 
-        const handleAppUpdate = () => {
-            fetchTimeTrackerData();
-        };
-
         fetchTimeTrackerData();
-
-        window.addEventListener('app-data-updated', handleAppUpdate);
-        return () => window.removeEventListener('app-data-updated', handleAppUpdate);
-    }, []);
+    }, [snapshot?.dayjs, snapshot?.timeTracker]);
 
     useEffect(() => {
         if (!stats || !stats.monthlyData || !chartRef.current) return;
@@ -445,13 +425,11 @@ export default function DashboardTab() {
      */
     const navigateTo = (mod) => {
         if (mod === 'cost') {
-            window.app?.switchTab('table');
+            appService.switchTab('table');
         } else {
-            if (window.app?.moduleManager) {
-                let modId = mod;
-                if (modId === 'fuel_log') modId = 'fuel';
-                window.app.moduleManager.launchModule(modId);
-            }
+            let modId = mod;
+            if (modId === 'fuel_log') modId = 'fuel';
+            appService.launchModule(modId);
         }
     };
 
@@ -461,7 +439,7 @@ export default function DashboardTab() {
      */
     const triggerAction = (action) => {
         if (action === 'new_cost') {
-            window.app?.uiController?.inputModal?.open('item');
+            appService.openInputModal('item');
         } else if (action === 'new_note') {
             navigateTo('notepad');
             setTimeout(() => {
@@ -623,7 +601,7 @@ export default function DashboardTab() {
 
                 <div
                     className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100 flex flex-col justify-between cursor-pointer hover:shadow-md transition"
-                    onClick={() => { if(window.app?.showView) window.app.showView('time'); }}
+                    onClick={() => { appService.showView('time'); }}
                 >
                     <div>
                         <div className="flex justify-between items-start mb-2">

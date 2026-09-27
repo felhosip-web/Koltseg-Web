@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import test, { beforeEach, afterEach } from 'node:test';
 import { JSDOM } from 'jsdom';
+import Dexie from 'dexie';
+import 'fake-indexeddb/auto';
 import { appService } from '../src/services/appService.js';
 
 function setupEnvironment() {
@@ -19,6 +21,7 @@ function setupEnvironment() {
     globalThis.MutationObserver = dom.window.MutationObserver;
     globalThis.localStorage = dom.window.localStorage;
     globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+    globalThis.window.Dexie = Dexie;
 
     // Ensure window.app is deleted for pure decoupling test
     delete globalThis.window.app;
@@ -446,6 +449,177 @@ test('7. StoreSync operates via appService.getInitialSnapshot without direct win
     assert.equal(useAppStore.getState().isLoaded, true);
     assert.equal(useAppStore.getState().items.length, 1);
     assert.equal(useAppStore.getState().items[0].name, 'Boot Test');
+
+    await act(async () => root.unmount());
+    dom.window.close();
+});
+
+test('8. TimeTrackerTab executes time tracker actions through bound appService without window.app', async () => {
+    const dom = setupEnvironment();
+    delete globalThis.window.app;
+
+    const [React, { createRoot }, { useAppStore }, { default: TimeTrackerTab }] = await Promise.all([
+        import('react'),
+        import('react-dom/client'),
+        import('../src/store/useAppStore.js'),
+        import('../src/components/time-tracker/TimeTrackerTab.jsx')
+    ]);
+
+    const { act } = React;
+
+    let startCalls = [];
+    let pauseCalls = 0;
+    let resumeCalls = 0;
+    let stopCalls = 0;
+    let projectModalCalls = 0;
+    let entryModalCalls = [];
+    let deleteEntryCalls = [];
+    let deleteProjectCalls = [];
+    let toastCalls = [];
+
+    const fakeApp = {
+        hmiNotif: {
+            showToast: (msg, type) => toastCalls.push({ msg, type })
+        },
+        timeTracker: {
+            startTimer: (projId, task) => startCalls.push({ projId, task }),
+            pauseTimer: () => { pauseCalls++; },
+            resumeTimer: () => { resumeCalls++; },
+            stopTimer: () => { stopCalls++; },
+            showProjectModal: () => { projectModalCalls++; },
+            showEntryModal: (entry) => entryModalCalls.push(entry),
+            deleteEntry: (id) => deleteEntryCalls.push(id),
+            deleteProject: (id) => deleteProjectCalls.push(id)
+        }
+    };
+
+    appService.bind(fakeApp);
+
+    act(() => {
+        useAppStore.setState({
+            isLoaded: true,
+            timeTracker: {
+                projects: [{ id: 'p1', name: 'Web Dev', hourlyRate: 5000 }],
+                activeTimer: { projectId: 'p1', task: 'Coding', startISO: new Date().toISOString(), elapsedPausedMs: 0, isPaused: false }
+            }
+        });
+    });
+
+    const container = document.getElementById('root');
+    const root = createRoot(container);
+
+    await act(async () => {
+        root.render(React.createElement(TimeTrackerTab));
+    });
+
+    assert.ok(container.textContent.includes('Időmérő'));
+    assert.ok(container.textContent.includes('Aktív időmérő'));
+
+    // Test pause timer button
+    const btnPause = container.querySelector('#btnPauseTimer');
+    assert.ok(btnPause);
+    await act(async () => {
+        btnPause.dispatchEvent(new Event('click', { bubbles: true, cancelable: true }));
+    });
+    assert.equal(pauseCalls, 1);
+
+    // Test stop timer button
+    const btnStop = container.querySelector('#btnStopTimer');
+    assert.ok(btnStop);
+    await act(async () => {
+        btnStop.dispatchEvent(new Event('click', { bubbles: true, cancelable: true }));
+    });
+    assert.equal(stopCalls, 1);
+
+    // Test start timer validation & start action
+    const btnStart = container.querySelector('#btnStartTimer');
+    assert.ok(btnStart);
+    await act(async () => {
+        btnStart.dispatchEvent(new Event('click', { bubbles: true, cancelable: true }));
+    });
+    assert.ok(toastCalls.some(t => t.msg.includes('projektet')));
+
+    // Confirm window.app is completely undefined
+    assert.equal(globalThis.window.app, undefined);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+});
+
+test('9. DashboardTab executes navigation, weather, and quick actions through bound appService without window.app', async () => {
+    const dom = setupEnvironment();
+    delete globalThis.window.app;
+
+    const [React, { createRoot }, { useAppStore }, { default: DashboardTab }] = await Promise.all([
+        import('react'),
+        import('react-dom/client'),
+        import('../src/store/useAppStore.js'),
+        import('../src/components/dashboard/DashboardTab.jsx')
+    ]);
+
+    const { act } = React;
+
+    let switchTabCalls = [];
+    let launchModuleCalls = [];
+    let showViewCalls = [];
+    let openInputModalCalls = [];
+
+    const fakeApp = {
+        config: { weatherCity: 'Budapest' },
+        weatherCache: null,
+        switchTab: (tab) => switchTabCalls.push(tab),
+        showView: (v) => showViewCalls.push(v),
+        moduleManager: {
+            launchModule: (modId) => launchModuleCalls.push(modId)
+        },
+        uiController: {
+            inputModal: {
+                open: (type) => openInputModalCalls.push(type)
+            }
+        }
+    };
+
+    appService.bind(fakeApp);
+
+    act(() => {
+        useAppStore.setState({
+            isLoaded: true,
+            entries: [],
+            items: [],
+            months: [],
+            incomings: [],
+            reminders: [],
+            eurRate: 400
+        });
+    });
+
+    const container = document.getElementById('root');
+    const root = createRoot(container);
+
+    await act(async () => {
+        root.render(React.createElement(DashboardTab));
+    });
+
+    assert.ok(container.textContent.includes('Aktuális Havi Egyenleg'));
+
+    // Test quick action: new_cost triggers inputModal open
+    const quickCostBtn = Array.from(container.querySelectorAll('button')).find(b => b.textContent.includes('Kiadás'));
+    assert.ok(quickCostBtn);
+    await act(async () => {
+        quickCostBtn.dispatchEvent(new Event('click', { bubbles: true, cancelable: true }));
+    });
+    assert.deepEqual(openInputModalCalls, ['item']);
+
+    // Test Időmérő card click triggers showView('time')
+    const timeCard = container.querySelector('.bg-rose-50')?.closest('div.bg-white');
+    assert.ok(timeCard);
+    await act(async () => {
+        timeCard.dispatchEvent(new Event('click', { bubbles: true, cancelable: true }));
+    });
+    assert.deepEqual(showViewCalls, ['time']);
+
+    // Confirm window.app remains completely undefined
+    assert.equal(globalThis.window.app, undefined);
 
     await act(async () => root.unmount());
     dom.window.close();

@@ -2,10 +2,6 @@ import React, { useState } from 'react';
 import { useAppStore } from '../../store/useAppStore';
 import { appService } from '../../services/appService';
 
-/**
- * Renders reminders from Zustand and delegates reminder actions through appService.
- * @returns {React.JSX.Element} Reminder forms, filters, list, and edit modal.
- */
 export default function RemindersTab() {
     const reminders = useAppStore(state => state.reminders || []);
     const [currentFilter, setCurrentFilter] = useState('all');
@@ -35,7 +31,6 @@ export default function RemindersTab() {
         }
     };
 
-    /** Submits the reminder form and resets its fields after the service resolves. */
     const handleNewReminder = async (e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -55,7 +50,6 @@ export default function RemindersTab() {
         setRemFreq('once');
     };
 
-    /** Submits the edited reminder and closes the modal after the service resolves. */
     const handleUpdateReminder = async () => {
         await appService.updateReminder({
             id: editRemId,
@@ -78,12 +72,10 @@ export default function RemindersTab() {
         setIsEditModalOpen(true);
     };
 
-    /** Requests deletion of the selected reminder through appService. */
     const handleDeleteClick = (id) => {
         appService.deleteReminder(id);
     };
 
-    /** Requests completion of the selected reminder through appService. */
     const handleCompleteClick = (id) => {
         appService.completeReminder(id);
     };
