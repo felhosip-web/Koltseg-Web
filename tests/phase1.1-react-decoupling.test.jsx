@@ -495,9 +495,18 @@ test('8. TimeTrackerTab executes time tracker actions through bound appService w
 
     appService.bind(fakeApp);
 
+    const fakeDayjs = () => ({
+        format: () => '2026-09-27',
+        startOf: () => ({ format: () => '2026-09-01' }),
+        endOf: () => ({ format: () => '2026-09-30' })
+    });
+
+    const fakeEntry = { id: 'entry-123', projectId: 'p1', durationMin: 60, earnings: 5000, task: 'Coding' };
+
     act(() => {
         useAppStore.setState({
             isLoaded: true,
+            dayjs: fakeDayjs,
             timeTracker: {
                 projects: [{ id: 'p1', name: 'Web Dev', hourlyRate: 5000 }],
                 activeTimer: { projectId: 'p1', task: 'Coding', startISO: new Date().toISOString(), elapsedPausedMs: 0, isPaused: false }
@@ -515,7 +524,7 @@ test('8. TimeTrackerTab executes time tracker actions through bound appService w
     assert.ok(container.textContent.includes('Időmérő'));
     assert.ok(container.textContent.includes('Aktív időmérő'));
 
-    // Test pause timer button
+    // 1. Test pauseTimer
     const btnPause = container.querySelector('#btnPauseTimer');
     assert.ok(btnPause);
     await act(async () => {
@@ -523,7 +532,23 @@ test('8. TimeTrackerTab executes time tracker actions through bound appService w
     });
     assert.equal(pauseCalls, 1);
 
-    // Test stop timer button
+    // 2. Test resumeTimer (switch activeTimer to paused state)
+    await act(async () => {
+        useAppStore.setState({
+            timeTracker: {
+                projects: [{ id: 'p1', name: 'Web Dev', hourlyRate: 5000 }],
+                activeTimer: { projectId: 'p1', task: 'Coding', startISO: new Date().toISOString(), elapsedPausedMs: 1000, isPaused: true }
+            }
+        });
+    });
+    const btnResume = container.querySelector('#btnResumeTimer');
+    assert.ok(btnResume);
+    await act(async () => {
+        btnResume.dispatchEvent(new Event('click', { bubbles: true, cancelable: true }));
+    });
+    assert.equal(resumeCalls, 1);
+
+    // 3. Test stopTimer
     const btnStop = container.querySelector('#btnStopTimer');
     assert.ok(btnStop);
     await act(async () => {
@@ -531,13 +556,69 @@ test('8. TimeTrackerTab executes time tracker actions through bound appService w
     });
     assert.equal(stopCalls, 1);
 
-    // Test start timer validation & start action
+    // 4. Test validation toasts for start (missing project, then missing task)
     const btnStart = container.querySelector('#btnStartTimer');
     assert.ok(btnStart);
     await act(async () => {
         btnStart.dispatchEvent(new Event('click', { bubbles: true, cancelable: true }));
     });
     assert.ok(toastCalls.some(t => t.msg.includes('projektet')));
+
+    const selectProject = container.querySelector('#timerProjectSelect');
+    const taskInput = container.querySelector('#timerTaskInput');
+    assert.ok(selectProject && taskInput);
+
+    const selectSetter = Object.getOwnPropertyDescriptor(globalThis.HTMLSelectElement.prototype, 'value').set;
+    const inputSetter = Object.getOwnPropertyDescriptor(globalThis.HTMLInputElement.prototype, 'value').set;
+
+    await act(async () => {
+        selectSetter.call(selectProject, 'p1');
+        selectProject.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await act(async () => {
+        btnStart.dispatchEvent(new Event('click', { bubbles: true, cancelable: true }));
+    });
+    assert.ok(toastCalls.some(t => t.msg.includes('mit csinálsz')));
+
+    // 5. Test startTimeTracker action
+    await act(async () => {
+        inputSetter.call(taskInput, 'Refactoring');
+        taskInput.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => {
+        btnStart.dispatchEvent(new Event('click', { bubbles: true, cancelable: true }));
+    });
+    assert.deepEqual(startCalls, [{ projId: 'p1', task: 'Refactoring' }]);
+
+    // 6. Test showTimeTrackerEntryModal (manual entry add)
+    const btnManualAdd = container.querySelector('#btnManualAdd');
+    assert.ok(btnManualAdd);
+    await act(async () => {
+        btnManualAdd.dispatchEvent(new Event('click', { bubbles: true, cancelable: true }));
+    });
+    assert.equal(entryModalCalls.length, 1);
+    assert.equal(entryModalCalls[0], undefined); // undefined means new entry
+
+    // 7. Test projects dropdown toggle, showTimeTrackerProjectModal and deleteTimeTrackerProject
+    const toggleProjectsBtn = container.querySelector('#toggleProjectsBtn');
+    assert.ok(toggleProjectsBtn);
+    await act(async () => {
+        toggleProjectsBtn.dispatchEvent(new Event('click', { bubbles: true, cancelable: true }));
+    });
+
+    const btnNewProject = container.querySelector('#btnNewProject');
+    assert.ok(btnNewProject);
+    await act(async () => {
+        btnNewProject.dispatchEvent(new Event('click', { bubbles: true, cancelable: true }));
+    });
+    assert.equal(projectModalCalls, 1);
+
+    const btnDeleteProject = container.querySelector('.btn-delete-project');
+    assert.ok(btnDeleteProject);
+    await act(async () => {
+        btnDeleteProject.dispatchEvent(new Event('click', { bubbles: true, cancelable: true }));
+    });
+    assert.deepEqual(deleteProjectCalls, ['p1']);
 
     // Confirm window.app is completely undefined
     assert.equal(globalThis.window.app, undefined);
