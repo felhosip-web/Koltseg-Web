@@ -2,6 +2,10 @@ import React, { useMemo } from 'react';
 import { useAppStore } from '../../store/useAppStore';
 import { appService } from '../../services/appService';
 
+/**
+ * Renders incoming transfers from Zustand and delegates actions through appService.
+ * @returns {React.JSX.Element} The incoming transfers table and add-entry control.
+ */
 export default function IncomingTab() {
     const incomings = useAppStore(state => state.incomings || []);
 
@@ -16,12 +20,14 @@ export default function IncomingTab() {
         return d.toLocaleDateString('hu-HU', { year: 'numeric', month: 'short', day: 'numeric' });
     };
 
+    /** Stops the click event and delegates opening the incoming-entry form. */
     const handleAddIncoming = (e) => {
         e.preventDefault();
         e.stopPropagation();
         appService.addNewIncomingEntry();
     };
 
+    /** Adapts the clicked cell's values to the dataset expected by the renderer. */
     const handleCellClick = (e, sender, date, entryId, amount) => {
         e.preventDefault();
         e.stopPropagation();
@@ -36,12 +42,14 @@ export default function IncomingTab() {
         appService.handleIncomingCellClick(fakeElement);
     };
 
+    /** Stops the click event and requests deletion of transfers for the date. */
     const handleDeleteColumn = (e, date) => {
         e.preventDefault();
         e.stopPropagation();
         appService.deleteIncomingColumn(date);
     };
 
+    /** Stops the click event and requests deletion of transfers for the sender. */
     const handleDeleteRow = (e, sender) => {
         e.preventDefault();
         e.stopPropagation();

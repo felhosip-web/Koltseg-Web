@@ -162,50 +162,81 @@ export const appService = {
         }
     },
 
-    /** Incoming actions */
+    /** Opens the incoming-entry form when the bound renderer is available. */
     addNewIncomingEntry() {
         if (appInstance?.incomingRenderer?.addNewEntry) {
             appInstance.incomingRenderer.addNewEntry();
         }
     },
 
+    /**
+     * Delegates a cell click when the bound incoming renderer is available.
+     * @param {HTMLElement|{dataset: Object}} element Cell or adapter containing transfer data.
+     */
     handleIncomingCellClick(element) {
         if (appInstance?.incomingRenderer?._handleCellClick) {
             appInstance.incomingRenderer._handleCellClick(element);
         }
     },
 
+    /**
+     * Requests deletion of a date column when the bound renderer is available.
+     * @param {string} date Transfer date identifying the column.
+     */
     deleteIncomingColumn(date) {
         if (appInstance?.incomingRenderer?.deleteColumn) {
             appInstance.incomingRenderer.deleteColumn(date);
         }
     },
 
+    /**
+     * Requests deletion of a sender row when the bound renderer is available.
+     * @param {string} sender Sender name identifying the row.
+     */
     deleteIncomingRow(sender) {
         if (appInstance?.incomingRenderer?.deleteRow) {
             appInstance.incomingRenderer.deleteRow(sender);
         }
     },
 
-    /** Reminder actions */
+    /**
+     * Delegates reminder creation to the bound reminders application when available.
+     * @param {Object} data Reminder title, amount, currency, due_date, and frequency.
+     * @returns {Promise<*>} The delegated result, or undefined when unavailable.
+     */
     async createReminder(data) {
         if (appInstance?.remindersApp?._handleNewReminder) {
             return await appInstance.remindersApp._handleNewReminder(data);
         }
     },
 
+    /**
+     * Delegates reminder updates to the bound reminders application when available.
+     * @param {Object} data Reminder id and edited fields.
+     * @returns {Promise<*>} The delegated result, or undefined when unavailable.
+     */
     async updateReminder(data) {
         if (appInstance?.remindersApp?._updateReminder) {
             return await appInstance.remindersApp._updateReminder(data);
         }
     },
 
+    /**
+     * Delegates reminder deletion to the bound reminders application when available.
+     * @param {string} id Identifier of the reminder to delete.
+     * @returns {Promise<*>} The delegated result, or undefined when unavailable.
+     */
     async deleteReminder(id) {
         if (appInstance?.remindersApp?._handleDeleteReminder) {
             return await appInstance.remindersApp._handleDeleteReminder(id);
         }
     },
 
+    /**
+     * Delegates reminder completion to the bound reminders application when available.
+     * @param {string} id Identifier of the reminder to complete.
+     * @returns {Promise<*>} The delegated result, or undefined when unavailable.
+     */
     async completeReminder(id) {
         if (appInstance?.remindersApp?._handleCompleteReminder) {
             return await appInstance.remindersApp._handleCompleteReminder(id);
