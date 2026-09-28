@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { JSDOM } from 'jsdom';
+import { appService } from '../src/services/appService.js';
 
 function setInputValue(input, value) {
     const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
@@ -11,7 +12,7 @@ function setInputValue(input, value) {
     input.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
-test('IncomingTab reactively consumes Zustand incomings state and calls window.app.incomingRenderer actions', async () => {
+test('IncomingTab reactively consumes Zustand incomings state and calls appService actions without window.app', async () => {
     const dom = new JSDOM('<div id="root"></div>', { url: 'http://localhost/' });
 
     globalThis.window = dom.window;
@@ -22,6 +23,8 @@ test('IncomingTab reactively consumes Zustand incomings state and calls window.a
     globalThis.HTMLInputElement = dom.window.HTMLInputElement;
     globalThis.Node = dom.window.Node;
     globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+
+    delete globalThis.window.app;
 
     const [React, { createRoot }, { useAppStore }, { default: IncomingTab }] = await Promise.all([
         import('react'),
@@ -37,13 +40,13 @@ test('IncomingTab reactively consumes Zustand incomings state and calls window.a
         useAppStore.setState({ incomings: [] });
     });
 
-    // Mock window.app with incomingRenderer
+    // Explicitly bind fakeApp to appService
     let addNewEntryCalls = 0;
     let deleteColCalls = [];
     let deleteRowCalls = [];
     let cellClickCalls = [];
 
-    window.app = {
+    const fakeApp = {
         incomingRenderer: {
             addNewEntry: () => { addNewEntryCalls++; },
             deleteColumn: (date) => { deleteColCalls.push(date); },
@@ -51,6 +54,8 @@ test('IncomingTab reactively consumes Zustand incomings state and calls window.a
             _handleCellClick: (fakeEl) => { cellClickCalls.push(fakeEl); }
         }
     };
+
+    appService.bind(fakeApp);
 
     const container = document.getElementById('root');
     const root = createRoot(container);
@@ -74,7 +79,7 @@ test('IncomingTab reactively consumes Zustand incomings state and calls window.a
     assert.ok(container.textContent.includes('Partner A'));
     assert.ok(container.textContent.includes((50000).toLocaleString('hu-HU')));
 
-    // 3. User action triggers window.app.incomingRenderer
+    // 3. User action triggers appService.addNewIncomingEntry
     const btnAdd = container.querySelector('#btnAddIncoming');
     assert.ok(btnAdd, 'Add incoming button should exist');
 
@@ -82,7 +87,7 @@ test('IncomingTab reactively consumes Zustand incomings state and calls window.a
         btnAdd.dispatchEvent(new Event('click', { bubbles: true, cancelable: true }));
     });
 
-    assert.equal(addNewEntryCalls, 1, 'btnAddIncoming click should call window.app.incomingRenderer.addNewEntry()');
+    assert.equal(addNewEntryCalls, 1, 'btnAddIncoming click should call appService delegator to fakeApp.incomingRenderer.addNewEntry()');
 
     // Test cell click
     const cell = container.querySelector('.incoming-cell');
@@ -112,11 +117,15 @@ test('IncomingTab reactively consumes Zustand incomings state and calls window.a
     });
     assert.deepEqual(deleteRowCalls, ['Partner A']);
 
+    // Confirm window.app remains completely undefined
+    assert.equal(globalThis.window.app, undefined);
+
+    appService.unbind();
     await act(async () => root.unmount());
     dom.window.close();
 });
 
-test('RemindersTab reactively consumes Zustand reminders state and calls window.app.remindersApp actions', async () => {
+test('RemindersTab reactively consumes Zustand reminders state and calls appService actions without window.app', async () => {
     const dom = new JSDOM('<div id="root"></div>', { url: 'http://localhost/' });
 
     globalThis.window = dom.window;
@@ -127,6 +136,8 @@ test('RemindersTab reactively consumes Zustand reminders state and calls window.
     globalThis.HTMLInputElement = dom.window.HTMLInputElement;
     globalThis.Node = dom.window.Node;
     globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+
+    delete globalThis.window.app;
 
     const [React, { createRoot }, { useAppStore }, { default: RemindersTab }] = await Promise.all([
         import('react'),
@@ -142,13 +153,13 @@ test('RemindersTab reactively consumes Zustand reminders state and calls window.
         useAppStore.setState({ reminders: [] });
     });
 
-    // Mock window.app with remindersApp
+    // Explicitly bind fakeApp to appService
     let newReminderCalls = [];
     let updateReminderCalls = [];
     let deleteReminderCalls = [];
     let completeReminderCalls = [];
 
-    window.app = {
+    const fakeApp = {
         remindersApp: {
             _handleNewReminder: async (data) => { newReminderCalls.push(data); },
             _updateReminder: async (data) => { updateReminderCalls.push(data); },
@@ -156,6 +167,8 @@ test('RemindersTab reactively consumes Zustand reminders state and calls window.
             _handleCompleteReminder: async (id) => { completeReminderCalls.push(id); }
         }
     };
+
+    appService.bind(fakeApp);
 
     const container = document.getElementById('root');
     const root = createRoot(container);
@@ -188,7 +201,7 @@ test('RemindersTab reactively consumes Zustand reminders state and calls window.
     assert.ok(container.textContent.includes('Insurance Payment'));
     assert.ok(container.textContent.includes((25000).toLocaleString('hu-HU')));
 
-    // 3. User action for complete click calls window.app.remindersApp._handleCompleteReminder
+    // 3. User action for complete click calls appService.completeReminder
     const btnComplete = container.querySelector('.btn-complete-reminder');
     assert.ok(btnComplete, 'Complete reminder button should exist');
 
@@ -198,7 +211,7 @@ test('RemindersTab reactively consumes Zustand reminders state and calls window.
 
     assert.deepEqual(completeReminderCalls, ['rem-101']);
 
-    // 4. User action for edit button click opens edit modal and calling update invokes _updateReminder
+    // 4. User action for edit button click opens edit modal and calling update invokes appService.updateReminder
     const btnEdit = container.querySelector('.btn-edit-reminder');
     assert.ok(btnEdit, 'Edit reminder button should exist');
 
@@ -223,12 +236,12 @@ test('RemindersTab reactively consumes Zustand reminders state and calls window.
         saveBtn.dispatchEvent(new Event('click', { bubbles: true, cancelable: true }));
     });
 
-    assert.equal(updateReminderCalls.length, 1, 'Clicking Mentés in edit modal should invoke _updateReminder');
+    assert.equal(updateReminderCalls.length, 1, 'Clicking Mentés in edit modal should invoke updateReminder');
     assert.equal(updateReminderCalls[0].id, 'rem-101');
     assert.equal(updateReminderCalls[0].title, 'Updated Insurance Payment');
     assert.equal(updateReminderCalls[0].amount, 30000);
 
-    // 5. User action for delete click calls window.app.remindersApp._handleDeleteReminder
+    // 5. User action for delete click calls appService.deleteReminder
     const btnDelete = container.querySelector('.btn-delete-reminder');
     assert.ok(btnDelete, 'Delete reminder button should exist');
 
@@ -238,7 +251,7 @@ test('RemindersTab reactively consumes Zustand reminders state and calls window.
 
     assert.deepEqual(deleteReminderCalls, ['rem-101']);
 
-    // 6. User action for form submit calls window.app.remindersApp._handleNewReminder
+    // 6. User action for form submit calls appService.createReminder
     const form = container.querySelector('#reactReminderForm');
     assert.ok(form, 'Reminder form should exist');
 
@@ -259,6 +272,10 @@ test('RemindersTab reactively consumes Zustand reminders state and calls window.
     assert.equal(newReminderCalls[0].amount, 15000);
     assert.equal(newReminderCalls[0].due_date, '2026-09-15');
 
+    // Confirm window.app remains completely undefined
+    assert.equal(globalThis.window.app, undefined);
+
+    appService.unbind();
     await act(async () => root.unmount());
     dom.window.close();
 });

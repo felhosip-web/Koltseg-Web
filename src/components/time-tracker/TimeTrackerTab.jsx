@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../../../js/db.js';
 import { useAppStore } from '../../store/useAppStore.js';
+import { appService } from '../../services/appService.js';
 
 export default function TimeTrackerTab() {
     const snapshot = useAppStore();
@@ -118,77 +119,69 @@ export default function TimeTrackerTab() {
         e.preventDefault();
         e.stopPropagation();
         if (!selectedProjectId) {
-            window.app.hmiNotif?.showToast('Kérlek válassz projektet!', 'warning');
+            appService.showToast('Kérlek válassz projektet!', 'warning');
             return;
         }
         if (!taskName) {
-            window.app.hmiNotif?.showToast('Írd be mit csinálsz!', 'warning');
+            appService.showToast('Írd be mit csinálsz!', 'warning');
             return;
         }
-        if (window.app.timeTracker) {
-            window.app.timeTracker.startTimer(selectedProjectId, taskName);
-            setTaskName(''); // Reset task input after start
-        }
+        appService.startTimeTracker(selectedProjectId, taskName);
+        setTaskName(''); // Reset task input after start
     };
 
     const handlePauseTimer = (e) => {
         e.preventDefault();
         e.stopPropagation();
-        if (window.app.timeTracker) window.app.timeTracker.pauseTimer();
+        appService.pauseTimeTracker();
     };
 
     const handleResumeTimer = (e) => {
         e.preventDefault();
         e.stopPropagation();
-        if (window.app.timeTracker) window.app.timeTracker.resumeTimer();
+        appService.resumeTimeTracker();
     };
 
     const handleStopTimer = (e) => {
         e.preventDefault();
         e.stopPropagation();
-        if (window.app.timeTracker) window.app.timeTracker.stopTimer();
+        appService.stopTimeTracker();
     };
 
     const handleNewProject = (e) => {
         e.preventDefault();
         e.stopPropagation();
-        if (window.app.timeTracker) window.app.timeTracker.showProjectModal();
+        appService.showTimeTrackerProjectModal();
     };
 
     const handleManualAdd = (e) => {
         e.preventDefault();
         e.stopPropagation();
         if (projects.length === 0) {
-            window.app.hmiNotif?.showToast('Előbb hozz létre egy projektet!', 'warning');
+            appService.showToast('Előbb hozz létre egy projektet!', 'warning');
             return;
         }
-        if (window.app.timeTracker) window.app.timeTracker.showEntryModal();
+        appService.showTimeTrackerEntryModal();
     };
 
     const handleEditEntry = async (e, id) => {
         e.preventDefault();
         e.stopPropagation();
         if (e.target.closest('.btn-delete-entry')) return; // Avoid triggering on delete
-        if (window.app.timeTracker) {
-            const entry = await db.timeEntries.get(id);
-            if (entry) window.app.timeTracker.showEntryModal(entry);
-        }
+        const entry = await db.timeEntries.get(id);
+        if (entry) appService.showTimeTrackerEntryModal(entry);
     };
 
     const handleDeleteEntry = (e, id) => {
         e.preventDefault();
         e.stopPropagation();
-        if (window.app.timeTracker && typeof window.app.timeTracker.deleteEntry === 'function') {
-            window.app.timeTracker.deleteEntry(id);
-        }
+        appService.deleteTimeTrackerEntry(id);
     };
 
     const handleDeleteProject = (e, id) => {
         e.preventDefault();
         e.stopPropagation();
-        if (window.app.timeTracker && typeof window.app.timeTracker.deleteProject === 'function') {
-            window.app.timeTracker.deleteProject(id);
-        }
+        appService.deleteTimeTrackerProject(id);
     };
 
     const activeProject = activeTimer ? projects.find(p => p.id === activeTimer.projectId) : null;

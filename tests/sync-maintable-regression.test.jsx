@@ -155,7 +155,9 @@ test('Test 2 — Sync Service updates React Zustand Store deterministically usin
         config: { eurRate: 400 },
         isBooted: true,
         timeTracker: null,
-        activeTab: 'table'
+        activeTab: 'table',
+        refreshAllTabs: () => {},
+        updateReminderStatus: () => {}
     });
 
     window.app = app;

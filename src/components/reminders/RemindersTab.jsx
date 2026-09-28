@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useAppStore } from '../../store/useAppStore';
+import { appService } from '../../services/appService';
 
 export default function RemindersTab() {
     const reminders = useAppStore(state => state.reminders || []);
@@ -34,35 +35,31 @@ export default function RemindersTab() {
         e.preventDefault();
         e.stopPropagation();
 
-        if (window.app && window.app.remindersApp) {
-            await window.app.remindersApp._handleNewReminder({
-                title: remTitle,
-                amount: parseFloat(remAmount) || 0,
-                currency: remCurrency,
-                due_date: remDate,
-                frequency: remFreq
-            });
-            // Reset form
-            setRemTitle('');
-            setRemAmount('');
-            setRemCurrency('HUF');
-            setRemDate('');
-            setRemFreq('once');
-        }
+        await appService.createReminder({
+            title: remTitle,
+            amount: parseFloat(remAmount) || 0,
+            currency: remCurrency,
+            due_date: remDate,
+            frequency: remFreq
+        });
+        // Reset form
+        setRemTitle('');
+        setRemAmount('');
+        setRemCurrency('HUF');
+        setRemDate('');
+        setRemFreq('once');
     };
 
     const handleUpdateReminder = async () => {
-        if (window.app && window.app.remindersApp) {
-            await window.app.remindersApp._updateReminder({
-                id: editRemId,
-                title: editRemTitle,
-                amount: parseFloat(editRemAmount) || 0,
-                currency: editRemCurrency,
-                due_date: editRemDate,
-                frequency: editRemFreq
-            });
-            setIsEditModalOpen(false);
-        }
+        await appService.updateReminder({
+            id: editRemId,
+            title: editRemTitle,
+            amount: parseFloat(editRemAmount) || 0,
+            currency: editRemCurrency,
+            due_date: editRemDate,
+            frequency: editRemFreq
+        });
+        setIsEditModalOpen(false);
     };
 
     const handleEditClick = (rem) => {
@@ -76,15 +73,11 @@ export default function RemindersTab() {
     };
 
     const handleDeleteClick = (id) => {
-        if (window.app && window.app.remindersApp) {
-            window.app.remindersApp._handleDeleteReminder(id);
-        }
+        appService.deleteReminder(id);
     };
 
     const handleCompleteClick = (id) => {
-        if (window.app && window.app.remindersApp) {
-            window.app.remindersApp._handleCompleteReminder(id);
-        }
+        appService.completeReminder(id);
     };
 
     const getStatusHTML = (rem, isCompleted, diffDays) => {

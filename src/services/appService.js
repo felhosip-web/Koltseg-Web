@@ -101,6 +101,98 @@ export const appService = {
         }
     },
 
+    showToast(message, type) {
+        if (appInstance?.hmiNotif?.showToast) {
+            appInstance.hmiNotif.showToast(message, type);
+        }
+    },
+
+    /** Time Tracker Actions */
+    startTimeTracker(projectId, taskName) {
+        if (appInstance?.timeTracker?.startTimer) {
+            appInstance.timeTracker.startTimer(projectId, taskName);
+        }
+    },
+
+    pauseTimeTracker() {
+        if (appInstance?.timeTracker?.pauseTimer) {
+            appInstance.timeTracker.pauseTimer();
+        }
+    },
+
+    resumeTimeTracker() {
+        if (appInstance?.timeTracker?.resumeTimer) {
+            appInstance.timeTracker.resumeTimer();
+        }
+    },
+
+    stopTimeTracker() {
+        if (appInstance?.timeTracker?.stopTimer) {
+            appInstance.timeTracker.stopTimer();
+        }
+    },
+
+    showTimeTrackerProjectModal() {
+        if (appInstance?.timeTracker?.showProjectModal) {
+            appInstance.timeTracker.showProjectModal();
+        }
+    },
+
+    showTimeTrackerEntryModal(entry = null) {
+        if (appInstance?.timeTracker?.showEntryModal) {
+            appInstance.timeTracker.showEntryModal(entry);
+        }
+    },
+
+    deleteTimeTrackerEntry(id) {
+        if (appInstance?.timeTracker?.deleteEntry) {
+            appInstance.timeTracker.deleteEntry(id);
+        }
+    },
+
+    deleteTimeTrackerProject(id) {
+        if (appInstance?.timeTracker?.deleteProject) {
+            appInstance.timeTracker.deleteProject(id);
+        }
+    },
+
+    /** Dashboard & Navigation Actions */
+    getWeatherCity() {
+        return appInstance?.config?.weatherCity || 'Budapest';
+    },
+
+    getWeatherCache() {
+        return appInstance?.weatherCache || null;
+    },
+
+    setWeatherCache(cacheEntry) {
+        if (appInstance) {
+            appInstance.weatherCache = cacheEntry;
+        }
+    },
+
+    switchTab(tab) {
+        if (appInstance?.switchTab) {
+            appInstance.switchTab(tab);
+        } else if (appInstance?.tabStateMachine?.[tab]) {
+            appInstance.tabStateMachine[tab]();
+        }
+    },
+
+    launchModule(modId) {
+        if (appInstance?.moduleManager?.launchModule) {
+            appInstance.moduleManager.launchModule(modId);
+        }
+    },
+
+    showView(view) {
+        if (appInstance?.showView) {
+            appInstance.showView(view);
+        } else if (appInstance?.tabStateMachine?.[view]) {
+            appInstance.tabStateMachine[view]();
+        }
+    },
+
     /** Export / Import / Sync / Maintenance actions */
     exportExcel() {
         if (appInstance?.uiController?.exportController?.exportExcel) {
@@ -159,6 +251,56 @@ export const appService = {
     handleQueueClick() {
         if (appInstance?.uiController?._handleQueueClick) {
             appInstance.uiController._handleQueueClick();
+        }
+    },
+
+    /** Incoming actions */
+    addNewIncomingEntry() {
+        if (appInstance?.incomingRenderer?.addNewEntry) {
+            appInstance.incomingRenderer.addNewEntry();
+        }
+    },
+
+    handleIncomingCellClick(element) {
+        if (appInstance?.incomingRenderer?._handleCellClick) {
+            appInstance.incomingRenderer._handleCellClick(element);
+        }
+    },
+
+    deleteIncomingColumn(date) {
+        if (appInstance?.incomingRenderer?.deleteColumn) {
+            appInstance.incomingRenderer.deleteColumn(date);
+        }
+    },
+
+    deleteIncomingRow(sender) {
+        if (appInstance?.incomingRenderer?.deleteRow) {
+            appInstance.incomingRenderer.deleteRow(sender);
+        }
+    },
+
+    /** Reminder actions */
+    async createReminder(data) {
+        if (appInstance?.remindersApp?._handleNewReminder) {
+            return await appInstance.remindersApp._handleNewReminder(data);
+        }
+    },
+
+    async updateReminder(data) {
+        if (appInstance?.remindersApp?._updateReminder) {
+            return await appInstance.remindersApp._updateReminder(data);
+        }
+    },
+
+    async deleteReminder(id) {
+        if (appInstance?.remindersApp?._handleDeleteReminder) {
+            return await appInstance.remindersApp._handleDeleteReminder(id);
+        }
+    },
+
+    async completeReminder(id) {
+        if (appInstance?.remindersApp?._handleCompleteReminder) {
+            return await appInstance.remindersApp._handleCompleteReminder(id);
         }
     },
 
