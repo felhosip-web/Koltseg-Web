@@ -486,5 +486,126 @@ export const appService = {
             return appInstance.syncService.onQueueChange(callback);
         }
         return null;
+    },
+
+    /** Settings & UI Controller Actions */
+    togglePanel(panelId) {
+        if (appInstance?.uiController?.togglePanel) {
+            appInstance.uiController.togglePanel(panelId);
+        }
+    },
+
+    handleGoogleClientSave() {
+        if (appInstance?.uiController?._handleGoogleClientSave) {
+            appInstance.uiController._handleGoogleClientSave();
+        }
+    },
+
+    testSupabaseConnection() {
+        if (appInstance?.uiController?._testSupabaseConnection) {
+            appInstance.uiController._testSupabaseConnection();
+        }
+    },
+
+    handleSettingsSave() {
+        if (appInstance?.uiController?._handleSettingsSave) {
+            appInstance.uiController._handleSettingsSave();
+        }
+    },
+
+    applyDarkMode(isDark) {
+        if (appInstance?.uiController?.applyDarkMode) {
+            appInstance.uiController.applyDarkMode(isDark);
+        }
+    },
+
+    applyBgTheme(theme) {
+        if (appInstance?.uiController?.applyBgTheme) {
+            appInstance.uiController.applyBgTheme(theme);
+        }
+    },
+
+    updateBgThemeSelectorUI(theme) {
+        if (appInstance?.uiController?.updateBgThemeSelectorUI) {
+            appInstance.uiController.updateBgThemeSelectorUI(theme);
+        }
+    },
+
+    /** Logging & Notifications */
+    logEvent(category, level, message) {
+        if (appInstance?.logger?.log) {
+            appInstance.logger.log(category, level, message);
+        }
+    },
+
+    exportLogsToText() {
+        if (appInstance?.logger?.exportToText) {
+            return appInstance.logger.exportToText();
+        }
+        return null;
+    },
+
+    async showConfirm(options) {
+        if (appInstance?.hmiNotif?.showConfirm) {
+            return await appInstance.hmiNotif.showConfirm(options);
+        }
+        return false;
+    },
+
+    clearLogs() {
+        if (appInstance?.logger?.clear) {
+            appInstance.logger.clear();
+        }
+    },
+
+    renderLogs() {
+        if (appInstance?.uiController?.renderLogs) {
+            appInstance.uiController.renderLogs();
+        }
+    },
+
+    /** Security Guard Actions */
+    verifyAndUpgradeToOwner(password) {
+        if (appInstance?.securityGuard?._verifyAndUpgradeToOwner) {
+            appInstance.securityGuard._verifyAndUpgradeToOwner(password);
+        }
+    },
+
+    lockApp() {
+        if (appInstance?.securityGuard?.lock) {
+            appInstance.securityGuard.lock();
+        }
+    },
+
+    saveSecuritySettings() {
+        if (appInstance?.securityGuard?.saveSettingsFromUI) {
+            appInstance.securityGuard.saveSettingsFromUI();
+        }
+    },
+
+    populateSecurityForm() {
+        if (appInstance?.securityGuard?.populateForm) {
+            appInstance.securityGuard.populateForm();
+        }
+    },
+
+    /** AI Config & Module Management */
+    setAiConfig(aiConfig) {
+        if (appInstance?.config) {
+            appInstance.config.aiConfig = aiConfig;
+        }
+    },
+
+    renderModuleSettingsUI() {
+        if (appInstance?.moduleManager?.renderModuleSettingsUI) {
+            appInstance.moduleManager.renderModuleSettingsUI();
+        }
+    },
+
+    getFuelLogModule() {
+        if (appInstance?.moduleManager?.modules?.get) {
+            return appInstance.moduleManager.modules.get('plugin_fuel_log') || appInstance.moduleManager.modules.get('plugin_fuel') || null;
+        }
+        return null;
     }
 };

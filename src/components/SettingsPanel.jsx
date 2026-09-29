@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { appService } from '../services/appService.js';
 
 /**
  * Settings panel component providing configuration options for authentication, cloud sync,
@@ -14,59 +15,59 @@ export default function SettingsPanel() {
     const handleClose = (e) => {
         e?.preventDefault();
         e?.stopPropagation();
-        window.app?.uiController?.togglePanel('settingsPanel');
+        appService.togglePanel('settingsPanel');
     };
 
     /**
      * Saves the Google OAuth client ID settings.
      */
     const handleGoogleClientSave = () => {
-        window.app?.uiController?._handleGoogleClientSave();
+        appService.handleGoogleClientSave();
     };
 
     /**
      * Tests the Supabase database connection with current settings.
      */
     const handleTestSupabaseConn = () => {
-        window.app?.uiController?._testSupabaseConnection();
+        appService.testSupabaseConnection();
     };
 
     /**
      * Opens the inline help documentation.
      */
     const handleHelpInline = () => {
-        window.app?.hmiNotif?.openHelp?.();
+        appService.openHelp();
     };
 
     /**
      * Saves general application settings including EUR rate, intervals, and weather location.
      */
     const handleSaveSettings = () => {
-        window.app?.uiController?._handleSettingsSave();
+        appService.handleSettingsSave();
     };
 
     /**
      * Resets appearance settings to default values (light mode, white background).
      */
     const handleResetAppearance = () => {
-        window.app?.uiController?.applyDarkMode(false);
-        window.app?.uiController?.applyBgTheme('white');
+        appService.applyDarkMode(false);
+        appService.applyBgTheme('white');
         localStorage.setItem('appearance_dark_mode', 'false');
         localStorage.setItem('appearance_bg_theme', 'white');
         localStorage.setItem('settings_updated_at', new Date().toISOString());
         const darkModeToggle = document.getElementById('darkModeToggle');
         if (darkModeToggle) darkModeToggle.checked = false;
-        window.app?.uiController?.updateBgThemeSelectorUI('white');
-        window.app?.hmiNotif?.showToast('Megjelenés visszaállítva alapértelmezettre!', 'info');
-        window.app?.logger?.log('Megjelenés', 'info', 'Visszaállítás alapértelmezett beállításokra');
+        appService.updateBgThemeSelectorUI('white');
+        appService.showToast('Megjelenés visszaállítva alapértelmezettre!', 'info');
+        appService.logEvent('Megjelenés', 'info', 'Visszaállítás alapértelmezett beállításokra');
     };
 
     /**
      * Exports and downloads the event log as a text file.
      */
     const handleSaveLogs = () => {
-        if (window.app?.logger) {
-            const text = window.app.logger.exportToText();
+        const text = appService.exportLogsToText();
+        if (text !== null && text !== undefined) {
             const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
@@ -76,7 +77,7 @@ export default function SettingsPanel() {
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
-            window.app?.logger?.log('system', 'info', 'Eseménynapló exportálva/letöltve.');
+            appService.logEvent('system', 'info', 'Eseménynapló exportálva/letöltve.');
         }
     };
 
@@ -84,19 +85,17 @@ export default function SettingsPanel() {
      * Clears the event log after user confirmation.
      */
     const handleClearLogs = async () => {
-        if (window.app?.logger) {
-            const confirmed = await window.app.hmiNotif?.showConfirm?.({
-                title: 'Eseménynapló törlése',
-                message: 'Biztosan törölni szeretnéd az eseménynaplót?',
-                type: 'danger',
-                confirmText: 'Törlés',
-                cancelText: 'Mégse'
-            });
-            if (confirmed) {
-                window.app.logger.clear();
-                window.app.uiController?.renderLogs();
-                window.app.hmiNotif?.showToast('Eseménynapló sikeresen törölve!', 'success');
-            }
+        const confirmed = await appService.showConfirm({
+            title: 'Eseménynapló törlése',
+            message: 'Biztosan törölni szeretnéd az eseménynaplót?',
+            type: 'danger',
+            confirmText: 'Törlés',
+            cancelText: 'Mégse'
+        });
+        if (confirmed) {
+            appService.clearLogs();
+            appService.renderLogs();
+            appService.showToast('Eseménynapló sikeresen törölve!', 'success');
         }
     };
 
@@ -106,7 +105,7 @@ export default function SettingsPanel() {
     const handleUpgradeToOwner = () => {
         const rootInput = document.getElementById('securityRootPasswordInput');
         if (rootInput) {
-            window.app?.securityGuard?._verifyAndUpgradeToOwner(rootInput.value);
+            appService.verifyAndUpgradeToOwner(rootInput.value);
         }
     };
 
@@ -132,14 +131,14 @@ export default function SettingsPanel() {
      * Manually locks the application immediately.
      */
     const handleLockAppNow = () => {
-        window.app?.securityGuard?.lock();
+        appService.lockApp();
     };
 
     /**
      * Saves security settings including lock status, auto-lock timeout, and access PINs.
      */
     const handleSaveSecuritySettings = () => {
-        window.app?.securityGuard?.saveSettingsFromUI();
+        appService.saveSecuritySettings();
     };
 
     /**
@@ -148,16 +147,14 @@ export default function SettingsPanel() {
     const handleSaveAiSettings = () => {
         const aiApiKey = document.getElementById('aiApiKey').value.trim();
         const aiModel = document.getElementById('aiModel').value;
-        if (window.app?.config) {
-            window.app.config.aiConfig = {
-                apiKey: aiApiKey,
-                model: aiModel
-            };
-        }
+        appService.setAiConfig({
+            apiKey: aiApiKey,
+            model: aiModel
+        });
         localStorage.setItem('ai_api_key', aiApiKey);
         localStorage.setItem('ai_model', aiModel);
         localStorage.setItem('settings_updated_at', new Date().toISOString());
-        window.app?.hmiNotif?.showToast('AI beállítások mentve!', 'success');
+        appService.showToast('AI beállítások mentve!', 'success');
     };
 
     /**
@@ -188,19 +185,15 @@ export default function SettingsPanel() {
         else if (targetTab === 'appearance') contentId = 'settingsContentAppearance';
         else if (targetTab === 'logs') {
             contentId = 'settingsContentLogs';
-            window.app?.uiController?.renderLogs();
+            appService.renderLogs();
         } else if (targetTab === 'ai') {
             contentId = 'settingsContentAi';
         } else if (targetTab === 'security') {
             contentId = 'settingsContentSecurity';
-            if (window.app?.securityGuard) {
-                window.app.securityGuard.populateForm();
-            }
+            appService.populateSecurityForm();
         } else if (targetTab === 'modules') {
             contentId = 'settingsContentModules';
-            if (window.app?.moduleManager) {
-                window.app.moduleManager.renderModuleSettingsUI();
-            }
+            appService.renderModuleSettingsUI();
         }
 
         const targetContent = document.getElementById(contentId);
@@ -216,11 +209,11 @@ export default function SettingsPanel() {
      */
     const handleThemeClick = (e) => {
         const theme = e.currentTarget.getAttribute('data-bg-theme');
-        window.app?.uiController?.applyBgTheme(theme);
+        appService.applyBgTheme(theme);
         localStorage.setItem('appearance_bg_theme', theme);
         localStorage.setItem('settings_updated_at', new Date().toISOString());
-        window.app?.uiController?.updateBgThemeSelectorUI(theme);
-        window.app?.logger?.log('Megjelenés', 'info', `Háttér téma módosítva: ${theme}`);
+        appService.updateBgThemeSelectorUI(theme);
+        appService.logEvent('Megjelenés', 'info', `Háttér téma módosítva: ${theme}`);
     };
 
     /**
@@ -229,10 +222,10 @@ export default function SettingsPanel() {
      */
     const handleDarkModeToggle = (e) => {
         const isDark = e.target.checked;
-        window.app?.uiController?.applyDarkMode(isDark);
+        appService.applyDarkMode(isDark);
         localStorage.setItem('appearance_dark_mode', String(isDark));
         localStorage.setItem('settings_updated_at', new Date().toISOString());
-        window.app?.logger?.log('Megjelenés', 'info', `Sötét mód ${isDark ? 'bekapcsolva' : 'kikapcsolva'}`);
+        appService.logEvent('Megjelenés', 'info', `Sötét mód ${isDark ? 'bekapcsolva' : 'kikapcsolva'}`);
     };
 
     return (
