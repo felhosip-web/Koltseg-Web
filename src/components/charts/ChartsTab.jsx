@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useAppStore } from '../../store/useAppStore.js';
+import { appService } from '../../services/appService.js';
 
 export default function ChartsTab() {
     const [stats, setStats] = useState(null);
@@ -39,12 +40,11 @@ export default function ChartsTab() {
             // Fuel mod
             let fuelLogs = [];
             let fuelEnabled = false;
-            if (window.app && window.app.moduleManager && typeof window.app.moduleManager.modules?.get === 'function') {
-                const fuelMod = window.app.moduleManager.modules.get('plugin_fuel_log') || window.app.moduleManager.modules.get('plugin_fuel');
-                if (fuelMod && fuelMod.enabled !== false) fuelEnabled = true;
-                if (!fuelMod) fuelEnabled = true; // ha nincs modul, feltételezzük, hogy lehetnek adatok
+            const fuelMod = appService.getFuelLogModule();
+            if (fuelMod) {
+                if (fuelMod.enabled !== false) fuelEnabled = true;
             } else {
-                fuelEnabled = true;
+                fuelEnabled = true; // ha nincs modul, feltételezzük, hogy lehetnek adatok
             }
 
             if (fuelEnabled && Array.isArray(snapshot.fuelLogs)) {
