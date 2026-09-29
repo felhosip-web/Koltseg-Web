@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
+import { appService } from '../services/appService.js';
 
 export default function AiEntryModal() {
     const [isOpen, setIsOpen] = useState(false);
@@ -37,17 +38,14 @@ export default function AiEntryModal() {
     }, []);
 
     const handleClose = () => {
-        if (window.app?.aiModal) {
-            window.app.aiModal.close();
-        } else {
-            setIsOpen(false);
-        }
+        appService.closeAiModal();
+        setIsOpen(false);
     };
 
     const handleAnalyze = async () => {
         const text = inputText.trim();
         if (!text) {
-            window.app?.hmiNotif?.showToast('Kérjük, írjon be egy mondatot!', 'error');
+            appService.showToast('Kérjük, írjon be egy mondatot!', 'error');
             return;
         }
 
@@ -56,16 +54,12 @@ export default function AiEntryModal() {
         setParsedData(null);
 
         try {
-            if (!window.app?.aiModal) {
-                throw new Error("AI Modul nem elérhető.");
-            }
-            const data = await window.app.aiModal.analyze(text);
-
+            const data = await appService.analyzeAiEntry(text);
             setParsedData(data);
         } catch (err) {
             console.error('[AI Parse Error]:', err);
             setError(err.message || 'Hiba történt az elemzés során.');
-            window.app?.hmiNotif?.showToast(err.message || 'Hiba történt az elemzés során!', 'error');
+            appService.showToast(err.message || 'Hiba történt az elemzés során!', 'error');
         } finally {
             setIsLoading(false);
         }
@@ -81,9 +75,7 @@ export default function AiEntryModal() {
     const handleConfirm = async () => {
         if (!parsedData) return;
         try {
-            if (window.app?.aiModal) {
-                await window.app.aiModal.confirmAndInsert(parsedData);
-            }
+            await appService.confirmAiEntry(parsedData);
             handleClose();
         } catch (err) {
             console.error(err);

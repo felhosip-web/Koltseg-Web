@@ -1,21 +1,22 @@
 import React, { useEffect, useRef } from 'react';
+import { appService } from '../services/appService.js';
 
 export default function WorkEditorModal() {
     const nameInputRef = useRef(null);
 
     const handleCancel = (e) => {
         e.preventDefault();
-        window.app?.workLogRenderer?.closeModal?.();
+        appService.closeWorkModal();
     };
 
     const handleDelete = (e) => {
         e.preventDefault();
-        window.app?.workLogRenderer?.handleDeleteWork?.();
+        appService.deleteWorkLog();
     };
 
     const handleFormSubmit = (e) => {
         e.preventDefault();
-        window.app?.workLogRenderer?.handleFormSubmit?.(e);
+        appService.submitWorkForm(e);
     };
 
     useEffect(() => {
@@ -23,20 +24,12 @@ export default function WorkEditorModal() {
         if (!modalRoot) return undefined;
 
         const openModal = () => {
-            if (window.app?.modalManager) {
-                window.app.modalManager.open('workEditorModal');
-            } else {
-                document.getElementById('workEditorModal')?.classList.remove('hidden');
-            }
+            appService.openModal('workEditorModal');
             nameInputRef.current?.focus();
         };
 
         const closeModal = () => {
-            if (window.app?.modalManager) {
-                window.app.modalManager.close('workEditorModal');
-            } else {
-                document.getElementById('workEditorModal')?.classList.add('hidden');
-            }
+            appService.closeModal('workEditorModal');
         };
 
         modalRoot.addEventListener('work-editor-open', openModal);

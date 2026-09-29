@@ -101,6 +101,42 @@ export const appService = {
         }
     },
 
+    async performInputModalSave(type, value, color) {
+        if (appInstance?.uiController?.inputModal?.performSave) {
+            return await appInstance.uiController.inputModal.performSave(type, value, color);
+        }
+        return false;
+    },
+
+    async performInputModalRename(itemId, currentName, newName) {
+        if (appInstance?.uiController?.inputModal?.performRename) {
+            return await appInstance.uiController.inputModal.performRename(itemId, currentName, newName);
+        }
+        return false;
+    },
+
+    resetAndRefreshCellModal() {
+        const controller = appInstance?.uiController?.cellModal;
+        controller?.resetForm?.();
+        controller?.refreshList?.();
+    },
+
+    openModal(modalId) {
+        if (appInstance?.modalManager?.open) {
+            appInstance.modalManager.open(modalId);
+        } else if (typeof document !== 'undefined') {
+            document.getElementById(modalId)?.classList.remove('hidden');
+        }
+    },
+
+    closeModal(modalId) {
+        if (appInstance?.modalManager?.close) {
+            appInstance.modalManager.close(modalId);
+        } else if (typeof document !== 'undefined') {
+            document.getElementById(modalId)?.classList.add('hidden');
+        }
+    },
+
     showToast(message, type) {
         if (appInstance?.hmiNotif?.showToast) {
             appInstance.hmiNotif.showToast(message, type);
@@ -308,6 +344,44 @@ export const appService = {
     openWorkModal() {
         if (appInstance?.workLogRenderer?.openModal) {
             appInstance.workLogRenderer.openModal();
+        }
+    },
+
+    closeWorkModal() {
+        if (appInstance?.workLogRenderer?.closeModal) {
+            appInstance.workLogRenderer.closeModal();
+        }
+    },
+
+    deleteWorkLog() {
+        if (appInstance?.workLogRenderer?.handleDeleteWork) {
+            appInstance.workLogRenderer.handleDeleteWork();
+        }
+    },
+
+    submitWorkForm(event) {
+        if (appInstance?.workLogRenderer?.handleFormSubmit) {
+            appInstance.workLogRenderer.handleFormSubmit(event);
+        }
+    },
+
+    /** AI Modal Actions */
+    closeAiModal() {
+        if (appInstance?.aiModal?.close) {
+            appInstance.aiModal.close();
+        }
+    },
+
+    async analyzeAiEntry(text) {
+        if (!appInstance?.aiModal?.analyze) {
+            throw new Error("AI Modul nem elérhető.");
+        }
+        return await appInstance.aiModal.analyze(text);
+    },
+
+    async confirmAiEntry(data) {
+        if (appInstance?.aiModal?.confirmAndInsert) {
+            return await appInstance.aiModal.confirmAndInsert(data);
         }
     },
 

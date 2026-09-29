@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { appService } from '../services/appService.js';
 
 const predefinedColors = [
     '#dbeafe', // Blue
@@ -56,15 +57,12 @@ export default function HmiInputModal() {
     };
 
     const handleSave = async () => {
-        const inputModal = window.app?.uiController?.inputModal;
-        if (type === 'rename' && inputModal?.performRename) {
-            await inputModal.performRename(renameItemId, currentName, value);
+        if (type === 'rename') {
+            await appService.performInputModalRename(renameItemId, currentName, value);
             handleClose();
-        } else if (inputModal?.performSave) {
-            const saved = await inputModal.performSave(type, value, color);
-            if (saved) handleClose();
         } else {
-            console.error('The requested input modal save handler is not defined');
+            const saved = await appService.performInputModalSave(type, value, color);
+            if (saved) handleClose();
         }
     };
 
