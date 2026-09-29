@@ -197,6 +197,197 @@ test('2. MainTable mounts and renders with bound appService when window.app is d
     dom.window.close();
 });
 
+test('10. HmiInputModal, CellEditorModal, WorkEditorModal, and AiEntryModal delegate actions through appService without window.app', async () => {
+    const dom = setupEnvironment();
+    delete globalThis.window.app;
+
+    const [
+        React,
+        { createRoot },
+        { default: HmiInputModal },
+        { default: CellEditorModal },
+        { default: WorkEditorModal },
+        { default: AiEntryModal }
+    ] = await Promise.all([
+        import('react'),
+        import('react-dom/client'),
+        import('../src/components/HmiInputModal.jsx'),
+        import('../src/components/CellEditorModal.jsx'),
+        import('../src/components/WorkEditorModal.jsx'),
+        import('../src/components/AiEntryModal.jsx')
+    ]);
+
+    const { act } = React;
+
+    let inputSaveCalls = [];
+    let inputRenameCalls = [];
+    let resetCellModalCalls = 0;
+    let openModalCalls = [];
+    let closeModalCalls = [];
+    let closeWorkCalls = 0;
+    let deleteWorkCalls = 0;
+    let submitWorkCalls = 0;
+    let closeAiCalls = 0;
+    let analyzeAiCalls = [];
+    let confirmAiCalls = [];
+    let toastCalls = [];
+
+    const fakeApp = {
+        uiController: {
+            inputModal: {
+                performSave: async (type, val, col) => {
+                    inputSaveCalls.push({ type, val, col });
+                    return true;
+                },
+                performRename: async (id, cur, val) => {
+                    inputRenameCalls.push({ id, cur, val });
+                    return true;
+                }
+            },
+            cellModal: {
+                resetForm: () => { resetCellModalCalls++; },
+                refreshList: () => {}
+            }
+        },
+        modalManager: {
+            open: (id) => openModalCalls.push(id),
+            close: (id) => closeModalCalls.push(id)
+        },
+        workLogRenderer: {
+            closeModal: () => { closeWorkCalls++; },
+            handleDeleteWork: () => { deleteWorkCalls++; },
+            handleFormSubmit: (e) => { submitWorkCalls++; }
+        },
+        aiModal: {
+            close: () => { closeAiCalls++; },
+            analyze: async (text) => {
+                analyzeAiCalls.push(text);
+                return { amount: 5000, currency: 'HUF', paymentMethod: 'Kártya', category: 'Élelmiszer', month: '2026-09' };
+            },
+            confirmAndInsert: async (data) => { confirmAiCalls.push(data); }
+        },
+        hmiNotif: {
+            showToast: (msg, type) => toastCalls.push({ msg, type })
+        }
+    };
+
+    appService.bind(fakeApp);
+
+    // 1. HmiInputModal
+    const hmiRoot = document.createElement('div');
+    hmiRoot.id = 'costAppHmiInputRoot';
+    document.body.appendChild(hmiRoot);
+    const root1 = createRoot(hmiRoot);
+    await act(async () => { root1.render(React.createElement(HmiInputModal)); });
+
+    await act(async () => {
+        document.dispatchEvent(new CustomEvent('hmi-input-open', { detail: { type: 'item' } }));
+    });
+    const saveBtn = Array.from(hmiRoot.querySelectorAll('button')).find(b => b.textContent.includes('Mentés'));
+    assert.ok(saveBtn, 'Save button should exist');
+
+    const hmiInput = hmiRoot.querySelector('input');
+    assert.ok(hmiInput, 'Input element should exist');
+    await act(async () => {
+        delete hmiInput._valueTracker;
+        const nativeSetter = Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value').set;
+        nativeSetter.call(hmiInput, 'Új kategória');
+        hmiInput.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+
+    await act(async () => {
+        saveBtn.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true }));
+        await new Promise(resolve => setTimeout(resolve, 50));
+    });
+    assert.equal(inputSaveCalls.length, 1);
+    assert.deepEqual(inputSaveCalls[0], { type: 'item', val: 'Új kategória', col: '#dbeafe' });
+
+    await act(async () => root1.unmount());
+
+    // 2. CellEditorModal
+    const cellRoot = document.createElement('div');
+    cellRoot.id = 'costAppCellEditorRoot';
+    document.body.appendChild(cellRoot);
+    const root2 = createRoot(cellRoot);
+    await act(async () => { root2.render(React.createElement(CellEditorModal)); });
+
+    await act(async () => {
+        cellRoot.dispatchEvent(new CustomEvent('cell-editor-open', { bubbles: true }));
+    });
+    assert.equal(resetCellModalCalls, 1);
+    assert.deepEqual(openModalCalls, ['cellEditorModal']);
+
+    await act(async () => root2.unmount());
+
+    // 3. WorkEditorModal
+    const workRoot = document.createElement('div');
+    workRoot.id = 'workAppEditorRoot';
+    document.body.appendChild(workRoot);
+    const root3 = createRoot(workRoot);
+    await act(async () => { root3.render(React.createElement(WorkEditorModal)); });
+
+    await act(async () => {
+        workRoot.dispatchEvent(new CustomEvent('work-editor-open'));
+    });
+    assert.ok(openModalCalls.includes('workEditorModal'));
+
+    const btnCancelWork = workRoot.querySelector('#btnCancelWorkModal');
+    assert.ok(btnCancelWork);
+    await act(async () => {
+        btnCancelWork.dispatchEvent(new Event('click', { bubbles: true, cancelable: true }));
+    });
+    assert.equal(closeWorkCalls, 1);
+
+    await act(async () => root3.unmount());
+
+    // 4. AiEntryModal
+    const aiRoot = document.createElement('div');
+    aiRoot.id = 'costAppAiModalRoot';
+    document.body.appendChild(aiRoot);
+    const root4 = createRoot(aiRoot);
+    await act(async () => { root4.render(React.createElement(AiEntryModal)); });
+
+    await act(async () => {
+        aiRoot.dispatchEvent(new CustomEvent('ai-modal-open'));
+    });
+
+    const aiTextarea = aiRoot.querySelector('textarea');
+    assert.ok(aiTextarea);
+    await act(async () => {
+        delete aiTextarea._valueTracker;
+        const nativeAreaSetter = Object.getOwnPropertyDescriptor(dom.window.HTMLTextAreaElement.prototype, 'value').set;
+        nativeAreaSetter.call(aiTextarea, '5000 Ft ebédre');
+        aiTextarea.dispatchEvent(new Event('input', { bubbles: true }));
+        aiTextarea.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    const btnAnalyze = Array.from(aiRoot.querySelectorAll('button')).find(b => b.textContent.includes('Költség Elemzése'));
+    assert.ok(btnAnalyze);
+    await act(async () => {
+        btnAnalyze.dispatchEvent(new Event('click', { bubbles: true, cancelable: true }));
+    });
+    await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 50));
+    });
+    assert.deepEqual(analyzeAiCalls, ['5000 Ft ebédre']);
+
+    const btnConfirm = Array.from(aiRoot.querySelectorAll('button')).find(b => b.textContent.includes('Jóváhagyás & Mentés'));
+    assert.ok(btnConfirm, 'btnConfirm should exist after analyze');
+    await act(async () => {
+        btnConfirm.dispatchEvent(new Event('click', { bubbles: true, cancelable: true }));
+    });
+    await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 50));
+    });
+    assert.equal(confirmAiCalls.length, 1);
+    assert.deepEqual(confirmAiCalls[0], { amount: 5000, currency: 'HUF', paymentMethod: 'Kártya', category: 'Élelmiszer', month: '2026-09' });
+
+    await act(async () => root4.unmount());
+
+    assert.equal(globalThis.window.app, undefined);
+    dom.window.close();
+});
+
 test('3. CostAppFooter renders without window.app and reactively consumes Zustand lastSyncTime', async () => {
     const dom = setupEnvironment();
     delete globalThis.window.app;
