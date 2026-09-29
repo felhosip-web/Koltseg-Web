@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { appService } from '../services/appService.js';
 
 export default function CellEditorModal() {
     const amountInputRef = useRef(null);
@@ -8,24 +9,12 @@ export default function CellEditorModal() {
         if (!modalRoot) return undefined;
 
         const openModal = () => {
-            const controller = window.app?.uiController?.cellModal;
-            controller?.resetForm();
-            controller?.refreshList();
-
-            if (window.app?.modalManager) {
-                window.app.modalManager.open('cellEditorModal');
-            } else {
-                document.getElementById('cellEditorModal')?.classList.remove('hidden');
-            }
-
+            appService.resetAndRefreshCellModal();
+            appService.openModal('cellEditorModal');
             amountInputRef.current?.focus();
         };
         const closeModal = () => {
-            if (window.app?.modalManager) {
-                window.app.modalManager.close('cellEditorModal');
-            } else {
-                document.getElementById('cellEditorModal')?.classList.add('hidden');
-            }
+            appService.closeModal('cellEditorModal');
         };
 
         modalRoot.addEventListener('cell-editor-open', openModal);

@@ -65,12 +65,18 @@ test('React HMI modal keeps failed creates open and supports rename', async () =
     const root = createRoot(document.getElementById('costAppHmiInputRoot'));
     await act(async () => root.render(React.createElement(HmiInputModal)));
 
+    const [{ appService }] = await Promise.all([
+        import('../src/services/appService.js')
+    ]);
+
     const inputModal = {
         performSave: async () => false,
         performRename: async (...args) => renameCalls.push(args)
     };
     const renameCalls = [];
-    window.app = { uiController: { inputModal } };
+    const fakeApp = { uiController: { inputModal } };
+    appService.bind(fakeApp);
+    delete window.app;
 
     await act(async () => {
         document.dispatchEvent(new CustomEvent('hmi-input-open', { detail: { type: 'item' } }));

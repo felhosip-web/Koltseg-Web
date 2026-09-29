@@ -15,11 +15,12 @@ test('a React-owned work form saves exactly once per submit', async () => {
     globalThis.Node = dom.window.Node;
     globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
-    const [React, { createRoot }, { WorkLogRenderer }, { default: WorkEditorModal }] = await Promise.all([
+    const [React, { createRoot }, { WorkLogRenderer }, { default: WorkEditorModal }, { appService }] = await Promise.all([
         import('react'),
         import('react-dom/client'),
         import('../js/work-log.js'),
-        import('../src/components/WorkEditorModal.jsx')
+        import('../src/components/WorkEditorModal.jsx'),
+        import('../src/services/appService.js')
     ]);
 
     const root = createRoot(document.getElementById('workAppEditorRoot'));
@@ -40,7 +41,8 @@ test('a React-owned work form saves exactly once per submit', async () => {
         }
     };
     app.workLogRenderer = new WorkLogRenderer(app, manager);
-    window.app = app;
+    appService.bind(app);
+    delete window.app;
 
     document.getElementById('workNameInput').value = 'Test work';
     document.getElementById('workDateInput').value = '2026-08-31';
