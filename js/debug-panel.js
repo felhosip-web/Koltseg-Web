@@ -1,6 +1,7 @@
 // ================================================================
 // === DEBUG CONSOLE PATCH + DEBUG PANEL (JAVÍTOTT) ===
 // ================================================================
+import { appService } from '../src/services/appService.js';
 
 /**
  * Debug konzol beállítása - console.log és console.error monkey-patch
@@ -127,10 +128,11 @@ export function initDebugPanel() {
         const srvBtn = e.target.closest('#helpOpenServicePanelBtn');
         if (srvBtn) {
             e.preventDefault();
-            if (window.app?.serviceDev) {
-                window.app.serviceDev.showMenu();
+            const targetApp = appService.getAppInstance();
+            if (targetApp?.serviceDev) {
+                targetApp.serviceDev.showMenu();
             } else {
-                console.warn('[APP] ServiceDevManager not found on window.app');
+                console.warn('[APP] ServiceDevManager not found on appInstance');
             }
         }
     });
@@ -212,14 +214,14 @@ export function initDebugPanel() {
     btnCopySQL?.addEventListener('click', () => {
         if (sqlTextarea) {
             navigator.clipboard.writeText(sqlTextarea.value);
-            window.app?.hmiNotif?.showToast('SQL séma másolva a vágólapra!', 'success');
+            appService.getAppInstance()?.hmiNotif?.showToast('SQL séma másolva a vágólapra!', 'success');
         }
     });
 
     // Supabase Ping / Kapcsolati teszt
     const btnTestSupa = document.getElementById('btnTestSupabaseConnDebug');
     btnTestSupa?.addEventListener('click', async () => {
-        const app = window.app;
+        const app = appService.getAppInstance();
         if (!app) return;
 
         const config = app.config;
@@ -272,7 +274,7 @@ export function initDebugPanel() {
     // Google Drive Kapcsolati teszt
     const btnTestGDrive = document.getElementById('btnTestGDriveConnDebug');
     btnTestGDrive?.addEventListener('click', async () => {
-        const app = window.app;
+        const app = appService.getAppInstance();
         if (!app) return;
         const clientId = app.config?.gdriveClientId;
         const resultDiv = document.getElementById('debugGDriveConnResult');
@@ -313,7 +315,7 @@ export function initDebugPanel() {
     // Supabase felhő adatbázis teljes törlése (RESET)
     const btnWipeSupa = document.getElementById('btnWipeSupabaseCloudDebug');
     btnWipeSupa?.addEventListener('click', async () => {
-        const app = window.app;
+        const app = appService.getAppInstance();
         if (!app) return;
 
         if (app.securityGuard && app.securityGuard.currentUser === 'guest') {
@@ -382,22 +384,23 @@ export function initDebugPanel() {
     // Értesítés kérése gomb
     const btnReqNotif = document.getElementById('btnRequestNotificationPerm');
     btnReqNotif?.addEventListener('click', async () => {
+        const app = appService.getAppInstance();
         try {
-            if (!window.app?.pwa?.pushManager) throw new Error("Push Manager nem elérhető");
+            if (!app?.pwa?.pushManager) throw new Error("Push Manager nem elérhető");
 
             const btnOriginalText = btnReqNotif.innerHTML;
             btnReqNotif.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Regisztráció...';
             btnReqNotif.disabled = true;
 
-            await window.app.pwa.pushManager.subscribe();
+            await app.pwa.pushManager.subscribe();
             updateNotificationPermissionStatus();
-            window.app.hmiNotif.showToast('Sikeres feliratkozás a Web Push értesítésekre!', 'success');
+            app.hmiNotif?.showToast('Sikeres feliratkozás a Web Push értesítésekre!', 'success');
 
             btnReqNotif.innerHTML = btnOriginalText;
             btnReqNotif.disabled = false;
         } catch (err) {
             console.error('[PUSH] Regisztráció hiba:', err);
-            window.app?.hmiNotif?.showToast(`Hiba: ${err.message}`, 'error');
+            app?.hmiNotif?.showToast(`Hiba: ${err.message}`, 'error');
             btnReqNotif.disabled = false;
             btnReqNotif.innerHTML = '<i class="fas fa-key"></i> Engedély Kérése';
         }
@@ -406,17 +409,18 @@ export function initDebugPanel() {
     // Értesítés teszt
     const btnTestNotif = document.getElementById('btnTriggerTestNotification');
     btnTestNotif?.addEventListener('click', async () => {
+        const app = appService.getAppInstance();
         const title = 'Költségnyilvántartó Diagnosztika';
         const body = 'Sikeresen tesztelted az értesítéseket! A határidők emlékeztetői is így fognak megjelenni.';
         const icon = 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png';
 
         // 1. Mindig futtatjuk a csodás belső szimulált Push Notification-t!
-        window.app?.hmiNotif?.showSimulatedPushNotification(title, body);
+        app?.hmiNotif?.showSimulatedPushNotification(title, body);
 
         // 2. Ha van aktív push subscription, szerveren keresztül teszteljük!
-        if (window.app?.pwa?.pushManager?.isSubscribed) {
+        if (app?.pwa?.pushManager?.isSubscribed) {
             try {
-                await window.app.pwa.pushManager.triggerPushFromServer({ title, body, icon });
+                await app.pwa.pushManager.triggerPushFromServer({ title, body, icon });
             } catch (e) {
                 console.warn('[NOTIF] Szerver oldali push sikertelen:', e);
             }
@@ -443,7 +447,7 @@ export function initDebugPanel() {
 }
 
 async function handleDebugAction(action) {
-    const app = window.app;
+    const app = appService.getAppInstance();
     if (!app) throw new Error('App nem elérhető!');
 
     switch(action) {
@@ -495,7 +499,7 @@ async function handleDebugAction(action) {
 function updateDebugStatus() {
     const el = document.getElementById('debugStatus');
     if (!el) return;
-    const app = window.app;
+    const app = appService.getAppInstance();
     if (!app) {
         el.innerHTML = '❌ App nem található!';
         return;
@@ -530,7 +534,7 @@ function updateGDriveDebugInfo() {
     const container = document.getElementById('debugGDriveContainer');
     if (!container) return;
 
-    const backupService = window.app?.gdriveBackup;
+    const backupService = appService.getAppInstance()?.gdriveBackup;
     if (!backupService) {
         container.innerHTML = '<div class="text-rose-500 font-bold p-4 bg-rose-50 rounded-xl text-xs">Google Drive modul nem elérhető.</div>';
         return;
@@ -604,7 +608,7 @@ function updateGDriveDebugInfo() {
 }
 
 function updateSupabaseDebugInfo() {
-    const app = window.app;
+    const app = appService.getAppInstance();
     if (!app) return;
 
     const config = app.config;

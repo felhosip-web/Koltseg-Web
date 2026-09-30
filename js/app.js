@@ -943,11 +943,10 @@ async function initApp() {
 
     const app = new App();
     appService.bind(app);
-    window.app = app;
     window.getVersion = () => app.getVersionInfo();
 
     window.runDbHealthCheck = async () => {
-        if (!window.app || !window.app.db) {
+        if (!app || !app.db) {
             console.error('Nincs db!');
             return;
         }
@@ -956,13 +955,13 @@ async function initApp() {
         const summary = { storeCounts: {} };
 
         for (const s of stores) {
-            const data = await window.app.db.getAll(s);
+            const data = await app.db.getAll(s);
             summary.storeCounts[s] = data.length;
         }
 
-        const entries = await window.app.db.getAll('entries');
-        const itemIds = new Set((await window.app.db.getAll('items')).map(i => i.id));
-        const monthSet = new Set((await window.app.db.getAll('months')).map(m => m.month));
+        const entries = await app.db.getAll('entries');
+        const itemIds = new Set((await app.db.getAll('items')).map(i => i.id));
+        const monthSet = new Set((await app.db.getAll('months')).map(m => m.month));
 
         let orphans = 0;
         let badCellKeys = 0;
@@ -987,8 +986,8 @@ async function initApp() {
 
         summary.consistency = { orphans, badCellKeys, missingExplicitFields };
 
-        if (window.app.syncService) {
-            summary.queueStatus = window.app.syncService.getQueueStatus();
+        if (app.syncService) {
+            summary.queueStatus = app.syncService.getQueueStatus();
         }
 
         console.table(summary.storeCounts);
@@ -1021,8 +1020,6 @@ console.log('💡 Költség Nyilvántartó v4.1 elindult');
 
 console.log('💡 Költség Nyilvántartó v4.1');
 console.log('📌 Elérhető parancsok:');
-console.log('  window.app.getVersionInfo() - Verzió információ');
-console.log('  window.app.checkVersion()   - Frissítés ellenőrzés');
-console.log('  window.app.reload()         - Adatok újratöltése');
+console.log('  appService.getAppInstance()?.getVersionInfo() - Verzió információ');
 
 console.log('  window.runDbHealthCheck()   - Adatbázis állapot ellenőrzése');

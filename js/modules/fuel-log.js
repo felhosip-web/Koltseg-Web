@@ -260,7 +260,7 @@ return {
                         if (!itemToDelete) return;
 
                         let confirmed = false;
-                        const notifier = app.hmiNotif || window.app?.hmiNotif;
+                        const notifier = app.hmiNotif;
                         if (notifier && typeof notifier.showConfirm === 'function') {
                             confirmed = await notifier.showConfirm({
                                 title: 'Tankolási tétel törlése',
@@ -347,7 +347,7 @@ return {
                 const currentMonth = new Date().toISOString().substring(0, 7);
                 let shouldAddToBudget = false;
 
-                const notifier = app.hmiNotif || window.app?.hmiNotif;
+                const notifier = app.hmiNotif;
 
                 if (notifier && typeof notifier.showConfirm === 'function') {
                     shouldAddToBudget = await notifier.showConfirm({
@@ -494,7 +494,7 @@ return {
                 }
 
                 let confirmed = false;
-                const notifier = app.hmiNotif || window.app?.hmiNotif;
+                const notifier = app.hmiNotif;
                 if (notifier && typeof notifier.showConfirm === 'function') {
                     confirmed = await notifier.showConfirm({
                         title: 'Összes tankolás törlése',

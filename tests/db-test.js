@@ -85,6 +85,7 @@ async function runTests() {
             }
         }
     };
+    syncService._app = global.window.app;
 
     const im = new ItemManager(db, syncService);
     im.items = [{id: 'itemX', name: 'Item X'}];

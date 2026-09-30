@@ -47,7 +47,7 @@ export class PwaManager {
 
             if (!currentVersion) {
                 // Ha még nincs elmentve, mentsük el a mostanit (pl. első betöltésnél ne jelezzen rögtön)
-                // Kivéve ha a window.app-ban már be van töltve (fallback)
+                // Kivéve ha az alkalmazáspéldányban már be van töltve (fallback)
                 currentVersion = this.app?.versionManager?.version || fetchedVersion;
                 localStorage.setItem('app_version', currentVersion);
             }

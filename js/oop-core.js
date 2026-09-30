@@ -68,8 +68,8 @@ export class Database {
     constructor(dbName = 'KoltsegNyilvantarto', version = 12) {  // ← verzió 12: Plugin tables
         let finalDbName = dbName;
         try {
-            const path = window.location.pathname;
-            const cleanPath = path.replace(/^\/|\/$/g, '').replace(/[^a-zA-Z0-9_-]/g, '_');
+            const path = typeof window !== 'undefined' && window.location ? window.location.pathname : '';
+            const cleanPath = path ? path.replace(/^\/|\/$/g, '').replace(/[^a-zA-Z0-9_-]/g, '_') : '';
             if (cleanPath && cleanPath !== 'index.html' && cleanPath !== 'index_html' && cleanPath !== 'src') {
                 finalDbName = `${dbName}_${cleanPath}`;
             }
@@ -458,7 +458,7 @@ export class Database {
     }
 
     async delete(storeName, key) {
-        const syncService = this.syncService || window.app?.syncService || window.app?.syncManager;
+        const syncService = this.syncService;
         const isMuted = syncService?.isMuted || syncService?.service?.isMuted;
 
         // Track deletion in tombstone table
@@ -493,7 +493,7 @@ export class Database {
                 if (this.mockStore['items']) {
                     delete this.mockStore['items'][itemId];
                 }
-                const syncService = this.syncService || window.app?.syncService || window.app?.syncManager;
+                const syncService = this.syncService;
                 const isMuted = syncService?.isMuted || syncService?.service?.isMuted;
                 if (!isMuted && this.mockStore['deleted_records']) {
                     const recId = generateUUID();
@@ -536,7 +536,7 @@ export class Database {
 
                 itemStore.delete(itemId);
 
-                const syncService = this.syncService || window.app?.syncService || window.app?.syncManager;
+                const syncService = this.syncService;
                 const isMuted = syncService?.isMuted || syncService?.service?.isMuted;
                 if (!isMuted) {
                     deletedStore.put({
@@ -551,7 +551,7 @@ export class Database {
                 const req = entryStore.getAll();
                 req.onsuccess = (e) => {
                     const entries = e.target.result || [];
-                    const syncService = this.syncService || window.app?.syncService || window.app?.syncManager;
+                    const syncService = this.syncService;
                     const isMuted = syncService?.isMuted || syncService?.service?.isMuted;
 
                     entries.forEach(entry => {
@@ -807,7 +807,11 @@ export class ItemManager {
             await this.db.deleteItemWithEntries(id);
             this.items = this.items.filter(i => i.id !== id);
 
-            const entriesToDel = (this.syncService?._app?.entries?.entries || window.app?.entries?.entries)?.filter(e => {
+            const rawEntries = Array.isArray(this.syncService?._app?.entries)
+                ? this.syncService._app.entries
+                : this.syncService?._app?.entries?.entries;
+
+            const entriesToDel = (rawEntries || []).filter(e => {
                 let tempItemId = e.itemId;
                 if (!tempItemId && e.cellKey) {
                      const parts = e.cellKey.split('_');
@@ -817,10 +821,9 @@ export class ItemManager {
                      }
                 }
                 return tempItemId === id || (e.cellKey && (e.cellKey.startsWith(`${id}_`) || e.cellKey.endsWith(`_${id}`)));
-            }) || [];
-            const appEntries = this.syncService?._app?.entries || window.app?.entries;
-            if (appEntries) {
-                appEntries.entries = appEntries.entries.filter(e => {
+            });
+
+            const filterFn = e => {
                 let tempItemId = e.itemId;
                 if (!tempItemId && e.cellKey) {
                      const parts = e.cellKey.split('_');
@@ -830,7 +833,12 @@ export class ItemManager {
                      }
                 }
                 return !(tempItemId === id || (e.cellKey && (e.cellKey.startsWith(`${id}_`) || e.cellKey.endsWith(`_${id}`))));
-            });
+            };
+
+            if (Array.isArray(this.syncService?._app?.entries)) {
+                this.syncService._app.entries = this.syncService._app.entries.filter(filterFn);
+            } else if (this.syncService?._app?.entries?.entries) {
+                this.syncService._app.entries.entries = this.syncService._app.entries.entries.filter(filterFn);
             }
 
             // Push changes
