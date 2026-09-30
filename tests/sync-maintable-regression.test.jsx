@@ -5,7 +5,6 @@ import Dexie from 'dexie';
 import 'fake-indexeddb/auto';
 import { Database, ItemManager, MonthManager, EntryManager } from '../js/oop-core.js';
 import { SyncService } from '../js/sync-service.js';
-import { useAppStore as useVanillaStore } from '../js/store.js';
 
 test('Test 1 — EntryManager.load() synthesizes cellKey when missing but preserves existing cellKey', async () => {
     const dom = new JSDOM(`<!DOCTYPE html><html><body><div id="root"></div></body></html>`, {
@@ -100,11 +99,6 @@ test('Test 2 — Sync Service updates React Zustand Store deterministically usin
             originalSetSnapshot(snapshot);
         }
     });
-    useVanillaStore.setState({
-        items: [],
-        months: [],
-        entries: []
-    });
 
     const db = new Database();
     db._enableMockDb();
@@ -191,8 +185,8 @@ test('Test 2 — Sync Service updates React Zustand Store deterministically usin
         await syncService.sync();
     });
 
-    // Verify app-data-updated event was dispatched by production updateReactStore()
-    assert.equal(eventDispatched, true);
+    // Verify app-data-updated event was NOT dispatched by production updateReactStore()
+    assert.equal(eventDispatched, false);
 
     // Verify setSnapshot was called exactly ONCE during sync (initialSetSnapshotCalls + 1)
     assert.equal(setSnapshotCalls, initialSetSnapshotCalls + 1);

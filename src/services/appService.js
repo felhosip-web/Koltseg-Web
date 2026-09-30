@@ -57,8 +57,6 @@ export const appService = {
 
                 if (typeof appInstance.updateReactStore === 'function') {
                     appInstance.updateReactStore();
-                } else if (typeof window !== 'undefined') {
-                    window.dispatchEvent(new Event('app-data-updated'));
                 }
 
                 appInstance.hmiNotif?.showToast?.('Tesztadatok létrehozva', 'success');

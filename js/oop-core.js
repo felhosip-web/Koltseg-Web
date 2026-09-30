@@ -1,6 +1,5 @@
 // js/oop-core.js - OOP HMI Core Infrastruktúra v5.0 (UUID-alapú IndexedDB)
 import { generateUUID } from './uuid-utils.js';
-import { useAppStore } from './store.js';
 import { parseCellKey, buildCellKey } from './utils/cell-key-utils.js';
 export class SecurityManager {
     static async generateChecksum(obj) {
@@ -494,6 +493,18 @@ export class Database {
                 if (this.mockStore['items']) {
                     delete this.mockStore['items'][itemId];
                 }
+                const syncService = this.syncService || window.app?.syncService || window.app?.syncManager;
+                const isMuted = syncService?.isMuted || syncService?.service?.isMuted;
+                if (!isMuted && this.mockStore['deleted_records']) {
+                    const recId = generateUUID();
+                    this.mockStore['deleted_records'][recId] = {
+                        id: recId,
+                        record_id: String(itemId),
+                        table_name: 'items',
+                        deleted_at: new Date().toISOString(),
+                        updated_at: new Date().toISOString()
+                    };
+                }
                 if (this.mockStore['entries']) {
                     const entriesToDelete = Object.values(this.mockStore['entries']).filter(e => {
                         let tempItemId = this._getTempItemId(e);
@@ -501,6 +512,16 @@ export class Database {
                     });
                     entriesToDelete.forEach(e => {
                         delete this.mockStore['entries'][e.id];
+                        if (!isMuted && this.mockStore['deleted_records']) {
+                            const recId = generateUUID();
+                            this.mockStore['deleted_records'][recId] = {
+                                id: recId,
+                                record_id: String(e.id),
+                                table_name: 'entries',
+                                deleted_at: new Date().toISOString(),
+                                updated_at: new Date().toISOString()
+                            };
+                        }
                     });
                 }
                 return resolve();
@@ -735,14 +756,7 @@ export class ItemManager {
     constructor(db, syncService) { 
         this.db = db; 
         this.syncService = syncService;
-    }
-
-    get items() {
-        return useAppStore.getState().items;
-    }
-
-    set items(val) {
-        useAppStore.setState({ items: val });
+        this.items = [];
     }
     
     async load() { 
@@ -839,14 +853,7 @@ export class MonthManager {
     constructor(db, syncService) { 
         this.db = db; 
         this.syncService = syncService;
-    }
-
-    get months() {
-        return useAppStore.getState().months;
-    }
-
-    set months(val) {
-        useAppStore.setState({ months: val });
+        this.months = [];
     }
     
     async load() { 
@@ -892,14 +899,7 @@ export class EntryManager {
     constructor(db, syncService) { 
         this.db = db; 
         this.syncService = syncService;
-    }
-
-    get entries() {
-        return useAppStore.getState().entries;
-    }
-
-    set entries(val) {
-        useAppStore.setState({ entries: val });
+        this.entries = [];
     }
     
     async load() { 

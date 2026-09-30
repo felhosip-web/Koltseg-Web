@@ -15,7 +15,6 @@ import { UIController } from './ui-controller.js';
 import { AiModalController } from './ai-modal-controller.js';
 import { RemindersRenderer, RemindersApp } from './oop-reminders.js';
 import { StorageManager } from './storage-manager.js';
-import { setGlobalDb } from './store.js';
 import { BootManager } from './boot-manager.js';
 import { BackupManager } from './backup-manager.js';
 import { PwaManager } from './pwa-manager.js';
@@ -56,7 +55,6 @@ export class App {
         // === 1. ALAP KOMPONENSEK ===
         this.config = new ConfigManager();
         this.db = new Database();
-        setGlobalDb(this.db);
         this.hmiNotif = new UIModalController();
         this.storage = new StorageManager();
         this.singletonLock = new SingletonLock(this);
@@ -432,13 +430,12 @@ export class App {
     }
 
     /**
-     * Subscribes a listener to the global app-data-updated event.
+     * Subscribes a listener to app updates (compatibility stub).
      * @param {Function} listener
      * @returns {Function} Unsubscribe function
      */
     subscribeAppData(listener) {
-        window.addEventListener('app-data-updated', listener);
-        return () => window.removeEventListener('app-data-updated', listener);
+        return () => {};
     }
 
     updateReactStore() {
@@ -446,7 +443,6 @@ export class App {
         if (typeof useReactAppStore?.getState === 'function') {
             useReactAppStore.getState().setSnapshot(snapshot);
         }
-        window.dispatchEvent(new Event('app-data-updated'));
     }
 
     // ================================================================
@@ -721,7 +717,7 @@ async reload() {
         
         this.remindersRenderer?.renderList?.();
         
-        window.dispatchEvent(new Event('app-data-updated'));
+        this.updateReactStore();
         
         if (typeof this.updateReminderStatus === 'function') {
             this.updateReminderStatus();

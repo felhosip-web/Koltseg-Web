@@ -3,13 +3,11 @@ import { useAppStore } from '../store/useAppStore.js';
 import { appService } from '../services/appService.js';
 
 /**
- * Headless component that acts as a bridge between the old Vanilla JS OOP-Core
- * and the new React Zustand store.
+ * Headless component that provides initial React Zustand store hydration
+ * upon component mount if the application is already booted.
  * 
- * It listens to the 'app-data-updated' event dispatched by Vanilla JS,
- * retrieves the data snapshot, and injects it into the Zustand store.
- * By mounting this component once at the root level, all other React components
- * can simply read from the Zustand store without worrying about Vanilla JS.
+ * Subsequent application state updates are driven deterministically by
+ * domain mutations calling App.prototype.updateReactStore().
  */
 export default function StoreSync() {
     const setSnapshot = useAppStore(state => state.setSnapshot);

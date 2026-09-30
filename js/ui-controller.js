@@ -914,7 +914,7 @@ export class UIController {
                 await this.app.items.load().catch(() => {});
                 await this.app.entries.load().catch(() => {});
 
-                window.dispatchEvent(new Event('app-data-updated'));
+                this.app.updateReactStore?.();
                 this.app.hmiNotif.showToast(`"${itemName}" sikeresen eltávolítva.`, 'success');
                 this.app.renderer?.updateFooterStatus('Sikeres fizikai törlés', false);
             } catch (error) {
@@ -954,7 +954,7 @@ export class UIController {
                 await this.app.months.load().catch(() => {});
                 await this.app.entries.load().catch(() => {});
 
-                window.dispatchEvent(new Event('app-data-updated'));
+                this.app.updateReactStore?.();
                 this.app.hmiNotif.showToast(`"${month}" hónap sikeresen eltávolítva.`, 'success');
                 this.app.renderer?.updateFooterStatus('Sikeres fizikai törlés', false);
             } catch (error) {

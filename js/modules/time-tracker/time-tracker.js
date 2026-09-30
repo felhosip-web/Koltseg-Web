@@ -221,7 +221,7 @@ export class TimeTrackerModule {
             monthEarnings
         };
 
-        window.dispatchEvent(new CustomEvent('app-data-updated'));
+        if (this.app?.updateReactStore) this.app.updateReactStore();
     }
 
     async deleteEntry(id) {

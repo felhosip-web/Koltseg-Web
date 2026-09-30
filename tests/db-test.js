@@ -97,9 +97,11 @@ async function runTests() {
     assert(db.mockStore['entries']['entry3'] === undefined, "Legacy backwards cellKey entry deleted from DB");
     assert(db.mockStore['entries']['entry4'] !== undefined, "Other entry remains in DB");
 
-    const tombstone = db.mockStore['deleted_records']['entries_entry1'];
-    assert(tombstone !== undefined && tombstone.record_id === 'entry1', "Tombstone created for explicit entry");
-    assert(db.mockStore['deleted_records']['entries_entry2'] !== undefined, "Tombstone created for legacy entry");
+    const deletedRecords = Object.values(db.mockStore['deleted_records'] || {});
+    const tombstone1 = deletedRecords.find(r => r.table_name === 'entries' && r.record_id === 'entry1');
+    const tombstone2 = deletedRecords.find(r => r.table_name === 'entries' && r.record_id === 'entry2');
+    assert(tombstone1 !== undefined && tombstone1.record_id === 'entry1', "Tombstone created for explicit entry");
+    assert(tombstone2 !== undefined && tombstone2.record_id === 'entry2', "Tombstone created for legacy entry");
 
     const syncItemDelete = syncService.queue.find(q => q.store === 'items' && q.id === 'itemX' && q.isDelete === true);
     assert(syncItemDelete !== undefined, "Item delete pushed to sync queue");
