@@ -7,6 +7,7 @@ import Dexie from 'dexie';
 import 'fake-indexeddb/auto';
 import { Database, ItemManager, MonthManager, EntryManager } from '../js/oop-core.js';
 import { WorkLogManager } from '../js/work-log.js';
+import { appService } from '../src/services/appService.js';
 
 test('P2-A — No production imports of js/store.js', () => {
     const searchDirs = ['js', 'src'];
@@ -165,6 +166,66 @@ test('P2-D — App.prototype.updateReactStore updates React Zustand store determ
     const tableEl = document.getElementById('vtTable');
     assert.ok(tableEl, 'MainTable element vtTable should exist');
     assert.ok(document.body.innerHTML.includes('Kávé'), 'Body should render category name Kávé');
+
+    await act(async () => {
+        root.unmount();
+    });
+    dom.window.close();
+});
+
+test('P2-E — WorkAppList -> appService.openWorkModal(id) -> WorkLogRenderer.openModal(id) preserves selected work ID', async () => {
+    const dom = new JSDOM(`<!DOCTYPE html><html><body><div id="root"></div></body></html>`, {
+        url: 'http://localhost/'
+    });
+
+    globalThis.window = dom.window;
+    globalThis.document = dom.window.document;
+    globalThis.localStorage = dom.window.localStorage;
+    globalThis.Event = dom.window.Event;
+    globalThis.CustomEvent = dom.window.CustomEvent;
+    globalThis.HTMLElement = dom.window.HTMLElement;
+    globalThis.Node = dom.window.Node;
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+
+    delete globalThis.window.app;
+
+    const [React, { createRoot }, { useAppStore }, { default: WorkAppList }] = await Promise.all([
+        import('react'),
+        import('react-dom/client'),
+        import('../src/store/useAppStore.js'),
+        import('../src/WorkAppList.jsx')
+    ]);
+
+    const openModalCalls = [];
+    const fakeApp = {
+        workLogRenderer: {
+            openModal: (id) => openModalCalls.push(id)
+        }
+    };
+
+    appService.bind(fakeApp);
+
+    const { act } = React;
+    act(() => {
+        useAppStore.setState({
+            works: [{ id: 'work-uuid-123', name: 'Festés', status: 'folyamatban', date: '2026-10-01', location: 'Iroda', duration: 2 }]
+        });
+    });
+
+    const root = createRoot(document.getElementById('root'));
+    await act(async () => {
+        root.render(React.createElement(WorkAppList, null));
+    });
+
+    const editBtn = document.querySelector('button.btn-edit-work');
+    assert.ok(editBtn, 'Edit button should exist in WorkAppList table row');
+
+    await act(async () => {
+        editBtn.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true }));
+    });
+
+    assert.equal(openModalCalls.length, 1);
+    assert.equal(openModalCalls[0], 'work-uuid-123');
 
     await act(async () => {
         root.unmount();

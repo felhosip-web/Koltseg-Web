@@ -100,8 +100,10 @@ async function runTests() {
     const deletedRecords = Object.values(db.mockStore['deleted_records'] || {});
     const tombstone1 = deletedRecords.find(r => r.table_name === 'entries' && r.record_id === 'entry1');
     const tombstone2 = deletedRecords.find(r => r.table_name === 'entries' && r.record_id === 'entry2');
+    const tombstone3 = deletedRecords.find(r => r.table_name === 'entries' && r.record_id === 'entry3');
     assert(tombstone1 !== undefined && tombstone1.record_id === 'entry1', "Tombstone created for explicit entry");
     assert(tombstone2 !== undefined && tombstone2.record_id === 'entry2', "Tombstone created for legacy entry");
+    assert(tombstone3 !== undefined, "Tombstone created for backwards legacy entry");
 
     const syncItemDelete = syncService.queue.find(q => q.store === 'items' && q.id === 'itemX' && q.isDelete === true);
     assert(syncItemDelete !== undefined, "Item delete pushed to sync queue");

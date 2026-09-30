@@ -339,9 +339,9 @@ export const appService = {
     },
 
     /** Work App Actions */
-    openWorkModal() {
+    openWorkModal(id = null) {
         if (appInstance?.workLogRenderer?.openModal) {
-            appInstance.workLogRenderer.openModal();
+            appInstance.workLogRenderer.openModal(id);
         }
     },
 
