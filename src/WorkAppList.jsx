@@ -3,6 +3,11 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useAppStore } from './store/useAppStore.js';
 import { appService } from './services/appService.js';
 
+/**
+ * Renders work status totals and a filterable list from the React app store,
+ * using the table or card view selected in local storage.
+ * @returns {JSX.Element} The work list with status totals and search controls.
+ */
 export default function WorkAppList() {
     const listRef = useRef(null);
     const snapshot = useAppStore();
@@ -38,6 +43,11 @@ export default function WorkAppList() {
         ? 'Módosítsa vagy törölje a szűrési feltételeket!'
         : 'Kattintson az "Új munka felvitele" gombra új tétel rögzítéséhez!';
 
+    /**
+     * Delegates a work row's modal request to the application service.
+     * @param {string} id - The selected work record's ID.
+     * @returns {void}
+     */
     const handleRowClick = (id) => {
         appService.openWorkModal(id);
     };
