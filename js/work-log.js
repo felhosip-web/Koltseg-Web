@@ -1,20 +1,12 @@
 // js/work-log.js - v5.2.0 - Munka nyilvántartó modul (UUID)
 import { UIModalController } from './ui-modal-controller.js';
 import { generateUUID } from './uuid-utils.js';
-import { useAppStore } from './store.js';
 
 export class WorkLogManager {
     constructor(db, syncService) {
         this.db = db;
         this.syncService = syncService;
-    }
-
-    get works() {
-        return useAppStore.getState().works;
-    }
-
-    set works(val) {
-        useAppStore.setState({ works: val });
+        this.works = [];
     }
 
     /**
@@ -125,14 +117,14 @@ export class WorkLogRenderer {
      * Render the table of works
      */
     renderTable() {
-        window.dispatchEvent(new Event('app-data-updated'));
+        if (this.app?.updateReactStore) this.app.updateReactStore();
     }
 
     /**
      * Update KPI counter cards
      */
     updateKpis() {
-        window.dispatchEvent(new Event('app-data-updated'));
+        if (this.app?.updateReactStore) this.app.updateReactStore();
     }
 
     /**

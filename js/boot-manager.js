@@ -1,6 +1,5 @@
 // js/boot-manager.js
 //Indítási logika
-import { setBootstrapping } from './store.js';
 
 export class BootManager {
     /**
@@ -63,7 +62,7 @@ export class BootManager {
             if (typeof this.app.renderer?.renderTable === "function") {
                 this.app.renderer?.renderTable?.();
             }
-            window.dispatchEvent(new Event('app-data-updated'));
+            this.app.updateReactStore?.();
             this.app.updateReminderStatus?.();
             this.app.workLogRenderer?.render?.();
             this.app.tabStateMachine?.[this.app.activeTab]?.();
@@ -103,7 +102,6 @@ export class BootManager {
      * @returns {Promise<void>}
      */
     async _loadAllData() {
-        setBootstrapping(true);
         try {
             await Promise.all([
                 this.app.reminderManager.load(),
@@ -118,7 +116,7 @@ export class BootManager {
             // A sikeres toast-ot kivettük, hogy ne zavarja a felhasználót induláskor,
             // de az állapotot (Minden rendszer üzemkész) a footer jelzi.
         } finally {
-            setBootstrapping(false);
+            // Data loading complete
         }
     }
 
@@ -136,7 +134,7 @@ export class BootManager {
         if (typeof this.app.renderer?.renderTable === "function") {
             this.app.renderer?.renderTable?.();
         }
-        window.dispatchEvent(new Event('app-data-updated'));
+        this.app.updateReactStore?.();
 
         this.app.updateReminderStatus?.();
         

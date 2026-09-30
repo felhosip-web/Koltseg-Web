@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 
 import { useAppStore } from './store/useAppStore.js';
+import { appService } from './services/appService.js';
 
 export default function WorkAppList() {
     const listRef = useRef(null);
@@ -21,10 +22,9 @@ export default function WorkAppList() {
         const updateViewMode = () => {
             setViewMode(localStorage.getItem('work_view_mode') || 'table');
         };
-        window.addEventListener('app-data-updated', updateViewMode);
         window.addEventListener('storage', updateViewMode);
         window.addEventListener('work-view-updated', updateViewMode);
-        return () => { window.removeEventListener('app-data-updated', updateViewMode); window.removeEventListener('storage', updateViewMode); window.removeEventListener('work-view-updated', updateViewMode); }
+        return () => { window.removeEventListener('storage', updateViewMode); window.removeEventListener('work-view-updated', updateViewMode); }
     }, []);
 
     const filteredWorks = works.filter(w => {
@@ -39,9 +39,7 @@ export default function WorkAppList() {
         : 'Kattintson az "Új munka felvitele" gombra új tétel rögzítéséhez!';
 
     const handleRowClick = (id) => {
-        if (window.app?.workLogRenderer?.openModal) {
-            window.app.workLogRenderer.openModal(id);
-        }
+        appService.openWorkModal(id);
     };
 
     const handleEditClick = (e, id) => {

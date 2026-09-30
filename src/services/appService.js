@@ -57,8 +57,6 @@ export const appService = {
 
                 if (typeof appInstance.updateReactStore === 'function') {
                     appInstance.updateReactStore();
-                } else if (typeof window !== 'undefined') {
-                    window.dispatchEvent(new Event('app-data-updated'));
                 }
 
                 appInstance.hmiNotif?.showToast?.('Tesztadatok létrehozva', 'success');
@@ -341,9 +339,9 @@ export const appService = {
     },
 
     /** Work App Actions */
-    openWorkModal() {
+    openWorkModal(id = null) {
         if (appInstance?.workLogRenderer?.openModal) {
-            appInstance.workLogRenderer.openModal();
+            appInstance.workLogRenderer.openModal(id);
         }
     },
 

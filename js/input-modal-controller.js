@@ -56,11 +56,9 @@ export class InputModalController {
             
             await this.app.items.add(val, finalColor);
             await this.app.items.load();
+            this.app.updateReactStore?.();
 
             this.app.hmiNotif.showToast(`✅ "${val}" kategória létrehozva`, 'success');
-            if (typeof window !== 'undefined' && window.dispatchEvent && typeof window.Event === 'function') {
-                window.dispatchEvent(new window.Event('app-data-updated'));           // Táblázat frissítése
-            }
 
         } else if (this.modalType === 'month') {
             // === ÚJ HÓNAP ===
@@ -84,11 +82,9 @@ export class InputModalController {
 
             await this.app.months.add(val);
             await this.app.months.load();
+            this.app.updateReactStore?.();
 
             this.app.hmiNotif.showToast(`✅ ${val} hónap megnyitva`, 'success');
-            if (typeof window !== 'undefined' && window.dispatchEvent && typeof window.Event === 'function') {
-                window.dispatchEvent(new window.Event('app-data-updated'));           // Táblázat frissítése
-            }
         } else {
             return false;
         }
@@ -103,9 +99,7 @@ export class InputModalController {
         try {
             await this.app.items.update(itemId, { name: newName });
             await this.app.items.load();
-            if (typeof window !== 'undefined' && window.dispatchEvent && typeof window.Event === 'function') {
-                window.dispatchEvent(new window.Event('app-data-updated'));
-            }
+            this.app.updateReactStore?.();
             this.app.hmiNotif.showToast('Kategória átnevezve!', 'success');
             return true;
         } catch (err) {

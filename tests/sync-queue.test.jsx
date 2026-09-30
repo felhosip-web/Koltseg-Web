@@ -5,7 +5,6 @@ import 'fake-indexeddb/auto';
 import { SyncService } from '../js/sync-service.js';
 import { WorkLogManager } from '../js/work-log.js';
 import { Database } from '../js/oop-core.js';
-import { useAppStore } from '../js/store.js';
 
 // Setup DOM environment for tests
 const dom = new JSDOM(`<!DOCTYPE html><html><body></body></html>`, {
@@ -47,7 +46,7 @@ test('SyncService.addToQueue correctly resolves customKey for months', () => {
     assert.equal(item2.customKey, 'month');
 });
 
-test('WorkLogManager updates Zustand central store on load', async () => {
+test('WorkLogManager updates works array on load', async () => {
     const mockDb = {
         getAll: async (table) => {
             if (table === 'works') {
@@ -60,7 +59,7 @@ test('WorkLogManager updates Zustand central store on load', async () => {
     const workLogManager = new WorkLogManager(mockDb, null);
     await workLogManager.load();
 
-    const storeWorks = useAppStore.getState().works;
+    const storeWorks = workLogManager.works;
     assert.equal(storeWorks.length, 1);
     assert.equal(storeWorks[0].name, 'Work 1');
 });

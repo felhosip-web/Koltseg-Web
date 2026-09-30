@@ -349,6 +349,7 @@ export class RemindersApp {
         if (this.renderer && this.renderer?.renderList) {
             this.renderer?.renderList?.();
         }
+        this.app.updateReactStore?.();
         this.app.updateReminderStatus?.();
         this.hmiNotif.showToast('Határidő rögzítve!', 'success');
     }
@@ -394,6 +395,7 @@ export class RemindersApp {
         if (this.renderer && this.renderer?.renderList) {
             this.renderer?.renderList?.();
         }
+        this.app.updateReactStore?.();
         this.app.updateReminderStatus?.();
         this.hmiNotif.showToast('Határidő frissítve!', 'success');
     }
@@ -405,6 +407,7 @@ export class RemindersApp {
         // 1. Megjelölés teljesítettnek
         await this.app.reminderManager.markAsCompleted(id);
         if (this.renderer && this.renderer?.renderList) this.renderer?.renderList?.();
+        this.app.updateReactStore?.();
         this.app.updateReminderStatus?.();
 
         // 2. Intelligens Költség-rögzítés felajánlása
@@ -482,6 +485,7 @@ export class RemindersApp {
         if (confirmed) {
             await this.app.reminderManager.delete(id);
             if (this.renderer && this.renderer?.renderList) this.renderer?.renderList?.();
+            this.app.updateReactStore?.();
             this.app.updateReminderStatus?.();
         }
     }
