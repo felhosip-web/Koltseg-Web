@@ -190,7 +190,7 @@ test('SettingsPanel renders and routes all user actions through appService when 
     dom.window.URL.createObjectURL = () => { createObjectURLCalled = true; return 'blob:test'; };
     dom.window.URL.revokeObjectURL = () => {};
     await act(async () => {
-        btnSaveLogs.dispatchEvent(new Event('click', { bubbles: true, cancelable: true }));
+        btnSaveLogs.click();
     });
     assert.equal(exportLogsCalls, 1);
     assert.ok(createObjectURLCalled);

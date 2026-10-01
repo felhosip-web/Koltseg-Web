@@ -88,7 +88,6 @@ export class InputModalController {
         } else {
             return false;
         }
-        this.app.updateReactStore?.();
         return true;
     }
 

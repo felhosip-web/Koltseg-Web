@@ -27,7 +27,7 @@ test('performSave reports validation failures and successful persistence', async
         renderer: {
             renderTable: () => calls.push(['render'])
         },
-        refreshAllTabs: async () => calls.push(['refresh'])
+        updateReactStore: () => calls.push(['update-store'])
     };
     const controller = new InputModalController(app);
 
@@ -39,7 +39,7 @@ test('performSave reports validation failures and successful persistence', async
     assert.deepEqual(calls, [
         ['add', 'New category', '#d1fae5'],
         ['load-items'],
-        ['refresh']
+        ['update-store']
     ]);
 });
 
@@ -74,7 +74,7 @@ test('React HMI modal keeps failed creates open and supports rename', async () =
         performRename: async (...args) => renameCalls.push(args)
     };
     const renameCalls = [];
-    const fakeApp = { uiController: { inputModal } };
+    const fakeApp = { inputModal, uiController: { inputModal } };
     appService.bind(fakeApp);
     delete window.app;
 
@@ -94,6 +94,9 @@ test('React HMI modal keeps failed creates open and supports rename', async () =
     globalThis.Date = class extends OriginalDate {
         constructor(...args) {
             super(...(args.length ? args : ['2026-09-01T00:30:00Z']));
+        }
+        static now() {
+            return OriginalDate.now();
         }
     };
     await act(async () => {
