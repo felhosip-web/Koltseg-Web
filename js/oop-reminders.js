@@ -201,11 +201,8 @@ export class RemindersRenderer {
                             await this.app.entries.load();
                             
                             // Fő táblázat frissítése
-                            if (this.app.renderer) {
-                                this.app.renderer?.renderTable?.();
-                                this.app.renderer?.renderSummary?.();
-                                this.app.renderer?.updateFooterStatus('Határidő teljesítve és kiadásként rögzítve!', false);
-                            }
+                            this.app.updateReactStore?.();
+                            this.app.renderer?.updateFooterStatus('Határidő teljesítve és kiadásként rögzítve!', false);
                             this.hmiNotif.showToast('Kiadás sikeresen rögzítve!', 'success');
                         }
                     }
@@ -458,11 +455,8 @@ export class RemindersApp {
                     await this.app.entries.load();
 
                     // Fő táblázat frissítése
-                    if (this.app.renderer) {
-                        this.app.renderer?.renderTable?.();
-                        this.app.renderer?.renderSummary?.();
-                        this.app.renderer?.updateFooterStatus('Határidő teljesítve és kiadásként rögzítve!', false);
-                    }
+                    this.app.updateReactStore?.();
+                    this.app.renderer?.updateFooterStatus('Határidő teljesítve és kiadásként rögzítve!', false);
                     this.hmiNotif.showToast('Kiadás sikeresen rögzítve!', 'success');
                 }
             }

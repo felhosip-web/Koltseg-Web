@@ -1222,12 +1222,8 @@ export class SyncService {
                 app.workLogManager?.load?.() || Promise.resolve()
             ]);
 
-            app.renderer?.renderTable?.();
-            app.workLogRenderer?.render?.();
-            app.renderer?.renderSummary?.();
-            app.remindersRenderer?.renderList?.();
-            app.incomingRenderer?.render?.();
-            app.refreshAllTabs?.();
+            app.updateReactStore?.();
+            app.updateReminderStatus?.();
 
             // Ha a charts tab aktív, frissítsük
             if (app.activeTab === 'charts' && app.chartsRenderer) {

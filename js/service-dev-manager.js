@@ -842,11 +842,8 @@ export class ServiceDevManager {
     }
 
     _refreshUI() {
-        this.app.refreshAllTabs?.();
-        this.app.remindersRenderer?.renderList?.();
-        this.app.workLogRenderer?.render?.();
+        this.app.updateReactStore?.();
         this.app.updateReminderStatus?.();
-        if (this.app.incomingRenderer) this.app.incomingRenderer?.render?.();
     }
 
     _triggerUnlock(method) {
@@ -1129,7 +1126,7 @@ export class ServiceDevManager {
             const renderStart = performance.now();
             const renderTime = ((performance.now() - renderStart)).toFixed(1);
             const dashStart = performance.now();
-            this.app.refreshAllTabs?.();
+            this.app.updateReactStore?.();
             const dashTime = ((performance.now() - dashStart)).toFixed(1);
             const memory = performance.memory ? (performance.memory.usedJSHeapSize / 1024 / 1024).toFixed(1) + ' MB' : 'N/A';
             resultEl.innerHTML = `

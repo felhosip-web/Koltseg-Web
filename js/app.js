@@ -11,7 +11,8 @@ import {
 } from './oop-core.js';
 import { SyncService } from './sync-service.js';
 import { UIModalController } from './ui-modal-controller.js';
-import { UIController } from './ui-controller.js';
+import { CellModalController } from './cell-modal-controller.js';
+import { InputModalController } from './input-modal-controller.js';
 import { AiModalController } from './ai-modal-controller.js';
 import { RemindersRenderer, RemindersApp } from './oop-reminders.js';
 import { StorageManager } from './storage-manager.js';
@@ -93,7 +94,8 @@ export class App {
         this.reminderManager = new ReminderManager(this.db, this.syncService);
 
         this.modalManager = new ModalManager(this);
-        this.uiController = new UIController(this);
+        this.cellModal = new CellModalController(this);
+        this.inputModal = new InputModalController(this);
         this.aiModal = new AiModalController(this);
         this.remindersRenderer = new RemindersRenderer(this, this.hmiNotif);
         this.remindersApp = new RemindersApp();
@@ -200,8 +202,6 @@ export class App {
             this.backgroundTasks.resume?.();
         }
         this.updateReminderStatus?.();
-
-        this.tabStateMachine?.[this.activeTab]?.();
 
         if (this.syncManager?.hasPendingChanges?.() && navigator.onLine) {
             this.syncManager.processPendingChanges?.().catch(() => {});
@@ -311,11 +311,6 @@ export class App {
 
             this._setupVisibilityHandling();
             this.isBooted = true;
-
-            // Dashboard alapértelmezett render
-            setTimeout(() => {
-                this.tabStateMachine?.dashboard?.();
-            }, 100);
 
             console.log('[APP] ✅ Alkalmazás sikeresen elindult!');
 
@@ -667,8 +662,8 @@ destroy() {
         if (this.backupManager && typeof this.backupManager.destroy === 'function') {
             this.backupManager.destroy();
         }
-        if (this.uiController && typeof this.uiController.destroy === 'function') {
-            this.uiController.destroy();
+        if (this.cellModal && typeof this.cellModal.destroy === 'function') {
+            this.cellModal.destroy();
         }
         if (this.singletonLock && typeof this.singletonLock.destroy === 'function') {
             this.singletonLock.destroy();
@@ -726,14 +721,6 @@ async reload() {
             this.updateReminderStatus();
         }
         
-        if (this.activeTab === 'dashboard') {
-            this.tabStateMachine?.dashboard?.();
-    }
-
-        if (this.activeTab === 'charts') { this.chartsRenderer?.renderAll?.(this.currentFilter); }
-        
-        this.incomingRenderer?.render?.();
-
         this.hmiNotif.showToast('✅ Adatok frissítve!', 'success');
         console.log('[APP] ✅ Újratöltés kész');
         
@@ -743,39 +730,178 @@ async reload() {
     }
  }
 
-/**
- * Minden tab és dashboard frissítése (adatmódosítás után)
- */
-refreshAllTabs() {
-    console.log('[APP] 🔄 UI frissítése minden tabon...');
-
-    // 1. Dashboard
-    if (this.activeTab === 'dashboard') {
-        this.tabStateMachine?.dashboard?.();
+    openSyncModal() {
+        const modal = document.getElementById('syncModal');
+        if (modal) modal.classList.remove('hidden');
     }
 
-    // 2. Táblázat (VirtualTableRenderer)
-
-
-    // 3. Kimutatások (Charts)
-    this.chartsRenderer?.renderAll?.(this.currentFilter || 'all');
-
-    // 4. Határidők
-    this.remindersRenderer?.renderList?.();
-
-    // 5. Bejövő utalások
-    this.incomingRenderer?.render?.();
-
-    // 6. Statisztika (React) & Direct React Store update
-    this.updateReactStore();
-
-    // 7. Reminder státusz (lábléc)
-    if (typeof this.updateReminderStatus === 'function') {
-        this.updateReminderStatus();
+    openDbAuditModal() {
+        const modal = document.getElementById('dbAuditModal');
+        if (modal) modal.classList.remove('hidden');
     }
 
-    console.log('[APP] ✅ UI frissítés kész');
-}
+    handleCellClick(cellElement) {
+        this.cellModal?.open(cellElement);
+    }
+
+    async handleRowDeleteSequence(itemIdStr, itemName) {
+        const itemId = itemIdStr;
+        if (!itemId) return;
+        const allEntries = this.entries.entries;
+        const associatedEntries = allEntries.filter(e => parseCellKey(e).itemId === itemId);
+
+        let confirmed = false;
+        try {
+            confirmed = await this.hmiNotif.showConfirm({
+               title: '⚠️ KRITIKUS: Kategóriasor törlése',
+               message: `Biztosan törölni szeretné a teljes "${itemName.toUpperCase()}" kategóriát az összes havi rész-tételével (${associatedEntries.length} db) együtt?`,
+              type: 'danger',
+               confirmText: 'SOR TÖRLÉSE'
+             });
+        } catch (err) {
+            console.error('[HMI PURGE ERROR] Modal hiba:', err);
+            return;
+        }
+
+        if (confirmed) {
+            try {
+                for (const entry of associatedEntries) {
+                    await this.entries.deleteEntry(entry.id).catch(e => console.warn('Entry már törölve:', entry.id));
+                }
+                await this.items.delete(itemId);
+
+                await this.items.load().catch(() => {});
+                await this.entries.load().catch(() => {});
+
+                this.updateReactStore?.();
+                this.hmiNotif.showToast(`"${itemName}" sikeresen eltávolítva.`, 'success');
+            } catch (error) {
+                console.error('[HMI PURGE CRITICAL ERROR]', error);
+                this.hmiNotif.showToast('Hiba törlés közben.', 'error');
+            }
+        }
+    }
+
+    async handleMonthDeleteSequence(month) {
+        if (!month) return;
+        const allEntries = this.entries.entries;
+        const associatedEntries = allEntries.filter(e => {
+            return parseCellKey(e).month === month;
+        });
+
+        const confirmed = await this.hmiNotif.showConfirm({
+            title: '⚠️ KRITIKUS: Hónap lezárása / törlése',
+            message: `Biztosan törölni szeretné a(z) "${month}" hónapot az összes benne lévő rész-tételével (${associatedEntries.length} db) együtt?`,
+            type: 'danger',
+            confirmText: 'HÓNAP TÖRLÉSE'
+        });
+
+        if (confirmed) {
+            try {
+                for (const entry of associatedEntries) {
+                    await this.entries.deleteEntry(entry.id).catch(e => console.warn('Entry már törölve:', entry.id));
+                }
+                await this.months.delete(month);
+
+                await this.months.load().catch(() => {});
+                await this.entries.load().catch(() => {});
+
+                this.updateReactStore?.();
+                this.hmiNotif.showToast(`"${month}" hónap sikeresen eltávolítva.`, 'success');
+            } catch (error) {
+                console.error('[HMI PURGE MONTH CRITICAL ERROR]', error);
+                this.hmiNotif.showToast('Hiba a hónap törlésekor.', 'error');
+            }
+        }
+    }
+
+    togglePanel(id) {
+        document.getElementById(id)?.classList.toggle('hidden');
+    }
+
+    applyDarkMode(isDark) {
+        const body = document.body;
+        const statusText = document.getElementById('darkModeStatusText');
+        if (isDark) {
+            body.classList.add('dark-mode');
+            if (statusText) statusText.textContent = 'Aktív állapot: Bekapcsolva (Sötét mód)';
+        } else {
+            body.classList.remove('dark-mode');
+            if (statusText) statusText.textContent = 'Aktív állapot: Kikapcsolva (Világos mód)';
+        }
+    }
+
+    applyBgTheme(theme) {
+        const body = document.body;
+        body.classList.remove('bg-theme-cream', 'bg-theme-sage', 'bg-theme-ice', 'bg-theme-lavender', 'bg-theme-slate', 'bg-theme-emerald-slate', 'theme-custom-bg');
+        if (theme !== 'white') {
+            body.classList.add('theme-custom-bg');
+            body.classList.add(`bg-theme-${theme}`);
+        }
+        if (theme === 'emerald-slate') {
+            body.classList.add('dark-mode');
+        } else {
+            const savedDarkMode = localStorage.getItem('appearance_dark_mode') === 'true';
+            if (savedDarkMode) {
+                body.classList.add('dark-mode');
+            } else {
+                body.classList.remove('dark-mode');
+            }
+        }
+    }
+
+    updateBgThemeSelectorUI(selectedTheme) {
+        const themeBgButtons = document.querySelectorAll('#themeBgSelectorContainer [data-bg-theme]');
+        themeBgButtons.forEach(btn => {
+            const theme = btn.getAttribute('data-bg-theme');
+            const checkIcon = btn.querySelector('.check-icon');
+            if (theme === selectedTheme) {
+                btn.classList.add('border-indigo-600');
+                btn.classList.remove('border-gray-200');
+                checkIcon?.classList.remove('hidden');
+            } else {
+                btn.classList.remove('border-indigo-600');
+                btn.classList.add('border-gray-200');
+                checkIcon?.classList.add('hidden');
+            }
+        });
+    }
+
+    renderLogs() {
+        const listContainer = document.getElementById('settingsLogsList');
+        if (!listContainer || !this.logger) return;
+
+        const logs = this.logger.getLogs();
+        if (logs.length === 0) {
+            listContainer.innerHTML = '<div class="text-center py-8 text-gray-400 italic">Nincsenek események rögzítve</div>';
+            return;
+        }
+
+        listContainer.innerHTML = logs.map(log => {
+            let badgeClass = 'bg-gray-100 text-gray-700';
+            if (log.level === 'error') badgeClass = 'bg-red-100 text-red-700 font-bold';
+            else if (log.level === 'warn') badgeClass = 'bg-amber-100 text-amber-700 font-bold';
+            else if (log.level === 'success') badgeClass = 'bg-emerald-100 text-emerald-700 font-bold';
+            else if (log.level === 'conflict') badgeClass = 'bg-indigo-100 text-indigo-700 font-bold border border-indigo-200';
+
+            let categoryIcon = 'fa-info-circle';
+            if (log.category === 'sync') categoryIcon = 'fa-sync';
+            else if (log.category === 'db') categoryIcon = 'fa-database';
+            else if (log.category === 'auth') categoryIcon = 'fa-user-shield';
+            else if (log.category === 'reminder') categoryIcon = 'fa-clock';
+            else if (log.category === 'conflict') categoryIcon = 'fa-code-branch';
+
+            return `
+                <div class="flex items-start gap-2.5 p-2 hover:bg-gray-100/60 rounded-xl transition-all border-b border-gray-100/50 last:border-b-0">
+                    <span class="text-[10px] text-gray-400 font-mono select-none pt-0.5 shrink-0">${log.formattedTime}</span>
+                    <span class="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${badgeClass} shrink-0 flex items-center gap-1">
+                        <i class="fas ${categoryIcon}"></i> ${log.category}
+                    </span>
+                    <span class="text-xs text-gray-700 leading-normal break-all">${log.message}</span>
+                </div>
+            `;
+        }).join('');
+    }
 
     async generateTestData(count = 30) {
         const sampleItems = ['Kávé', 'Bérlet', 'Áram', 'Internet', 'Bevásárlás', 'Benzin', 'Mozijegy'];

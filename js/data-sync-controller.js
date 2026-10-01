@@ -164,11 +164,8 @@ export class DataSyncController {
      */
     async _refreshAllUI() {
         try {
-            await Promise.allSettled([
-                this.app.refreshAllTabs?.(),
-                this.app.remindersRenderer?.renderList?.(),
-                this.app.updateReminderStatus?.()
-            ]);
+            this.app.updateReactStore?.();
+            this.app.updateReminderStatus?.();
         } catch (e) {
             console.warn('[SYNC] UI frissítési hiba:', e);
         }
