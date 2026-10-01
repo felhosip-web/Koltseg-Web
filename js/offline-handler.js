@@ -218,7 +218,7 @@ export class OfflineHandler {
                 <span class="text-xs font-mono bg-white/20 px-2 py-0.5 rounded-full">
                     ${this.getPendingCount()} függő változtatás
                 </span>
-                <button onclick="window.app?.offline?.hideBanner()" 
+                <button id="btnHideOfflineBanner"
                         class="text-white/80 hover:text-white text-sm underline px-3 py-1 rounded-lg hover:bg-white/10 transition">
                     <i class="fas fa-times"></i> Bezár
                 </button>
@@ -232,6 +232,11 @@ export class OfflineHandler {
         this._ensureStyles();
         
         container.appendChild(this.bannerElement);
+
+        const closeBtn = this.bannerElement.querySelector('#btnHideOfflineBanner');
+        if (closeBtn) {
+            closeBtn.addEventListener('click', () => this.hideBanner());
+        }
         
         // Státusz frissítése
         this._updateBannerStatus();

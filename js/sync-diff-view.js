@@ -1,7 +1,7 @@
 // sync-diff-view.js
 // Kétpaneles modal a Local vs Cloud különbségek megjelenítésére.
 
-export function showSyncDiffModal(diffs) {
+export function showSyncDiffModal(diffs, app = null) {
   // A modal létrehozása
   const overlay = document.createElement('div');
   overlay.id = 'syncDiffOverlay';
@@ -166,9 +166,9 @@ export function showSyncDiffModal(diffs) {
     executeBtn.disabled = true;
     executeBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Szinkronizálás...';
 
-    if (window.app && (window.app.dataSyncController || window.app.syncController)) {
+    const controller = app?.dataSyncController || app?.syncController;
+    if (controller) {
       try {
-        const controller = window.app.dataSyncController || window.app.syncController;
         await controller.forceSync();
 
         executeBtn.innerHTML = '<i class="fas fa-check mr-2"></i> Kész!';
@@ -301,7 +301,7 @@ export async function runAndShowSyncDiff(app, mode = 'pull') {
     const diffResult = await app.syncManager.getSyncDiff();
 
     // Jelenítsük meg a modalt
-    showSyncDiffModal(diffResult);
+    showSyncDiffModal(diffResult, app);
 
   } catch (error) {
     console.error('[SyncDiff] Hiba történt:', error);

@@ -974,10 +974,10 @@ export class SyncService {
     }
 
     /**
-     * App referenciát szerzünk (több útvonalon)
+     * App referenciát szerzünk
      */
     _getApp() {
-        return window.app || this._app || null;
+        return this._app || null;
     }
 
     /**

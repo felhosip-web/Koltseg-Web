@@ -22,6 +22,8 @@ function setupEnvironment() {
     globalThis.localStorage = dom.window.localStorage;
     globalThis.IS_REACT_ACT_ENVIRONMENT = true;
     globalThis.window.Dexie = Dexie;
+    globalThis.window.indexedDB = globalThis.indexedDB;
+    globalThis.window.IDBKeyRange = globalThis.IDBKeyRange;
 
     // Ensure window.app is deleted for pure decoupling test
     delete globalThis.window.app;
@@ -814,7 +816,10 @@ test('8. TimeTrackerTab executes time tracker actions through bound appService w
     // Confirm window.app is completely undefined
     assert.equal(globalThis.window.app, undefined);
 
-    await act(async () => root.unmount());
+    await act(async () => {
+        useAppStore.setState({ timeTracker: { projects: [], activeTimer: null } });
+        root.unmount();
+    });
     dom.window.close();
 });
 
