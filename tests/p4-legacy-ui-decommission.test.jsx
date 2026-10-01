@@ -53,7 +53,7 @@ function getJsAndSrcFiles(dir) {
     return results;
 }
 
-test('P4-A — Static Architecture Check: Zero refreshAllTabs, tabStateMachine, or VirtualTableRenderer in production code', () => {
+test('P4-A — Static Architecture Check: Zero refreshAllTabs, tabStateMachine, VirtualTableRenderer, or uiController in production code', () => {
     const jsFiles = getJsAndSrcFiles(path.resolve(process.cwd(), 'js'));
     const srcFiles = getJsAndSrcFiles(path.resolve(process.cwd(), 'src'));
     const allProdFiles = [...jsFiles, ...srcFiles];
@@ -61,6 +61,7 @@ test('P4-A — Static Architecture Check: Zero refreshAllTabs, tabStateMachine, 
     const violationsRefreshAllTabs = [];
     const violationsTabStateMachine = [];
     const violationsVirtualTableRenderer = [];
+    const violationsUiController = [];
 
     allProdFiles.forEach(file => {
         const content = fs.readFileSync(file, 'utf8');
@@ -73,11 +74,15 @@ test('P4-A — Static Architecture Check: Zero refreshAllTabs, tabStateMachine, 
         if (content.includes('VirtualTableRenderer')) {
             violationsVirtualTableRenderer.push(file);
         }
+        if (content.includes('uiController')) {
+            violationsUiController.push(file);
+        }
     });
 
     assert.deepEqual(violationsRefreshAllTabs, [], 'Production files must contain zero refreshAllTabs references');
     assert.deepEqual(violationsTabStateMachine, [], 'Production files must contain zero tabStateMachine references');
     assert.deepEqual(violationsVirtualTableRenderer, [], 'Production files must contain zero VirtualTableRenderer references');
+    assert.deepEqual(violationsUiController, [], 'Production files must contain zero uiController references');
 });
 
 test('P4-B — Static Architecture Check: Zero window.app, globalThis.app, app-data-updated, and js/store.js in production code', () => {

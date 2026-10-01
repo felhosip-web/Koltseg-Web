@@ -73,16 +73,12 @@ export const appService = {
     deleteMonthSequence(month) {
         if (appInstance?.handleMonthDeleteSequence) {
             appInstance.handleMonthDeleteSequence(month);
-        } else if (appInstance?.uiController?.handleMonthDeleteSequence) {
-            appInstance.uiController.handleMonthDeleteSequence(month);
         }
     },
 
     deleteRowSequence(itemId, itemName) {
         if (appInstance?.handleRowDeleteSequence) {
             appInstance.handleRowDeleteSequence(itemId, itemName);
-        } else if (appInstance?.uiController?.handleRowDeleteSequence) {
-            appInstance.uiController.handleRowDeleteSequence(itemId, itemName);
         }
     },
 
@@ -98,24 +94,18 @@ export const appService = {
             appInstance.handleCellClick(element);
         } else if (appInstance?.cellModal?.open) {
             appInstance.cellModal.open(element);
-        } else if (appInstance?.uiController?.handleCellClick) {
-            appInstance.uiController.handleCellClick(element);
         }
     },
 
     openInputModal(type) {
         if (appInstance?.inputModal?.open) {
             appInstance.inputModal.open(type);
-        } else if (appInstance?.uiController?.inputModal?.open) {
-            appInstance.uiController.inputModal.open(type);
         }
     },
 
     async performInputModalSave(type, value, color) {
         if (appInstance?.inputModal?.performSave) {
             return await appInstance.inputModal.performSave(type, value, color);
-        } else if (appInstance?.uiController?.inputModal?.performSave) {
-            return await appInstance.uiController.inputModal.performSave(type, value, color);
         }
         return false;
     },
@@ -123,14 +113,12 @@ export const appService = {
     async performInputModalRename(itemId, currentName, newName) {
         if (appInstance?.inputModal?.performRename) {
             return await appInstance.inputModal.performRename(itemId, currentName, newName);
-        } else if (appInstance?.uiController?.inputModal?.performRename) {
-            return await appInstance.uiController.inputModal.performRename(itemId, currentName, newName);
         }
         return false;
     },
 
     resetAndRefreshCellModal() {
-        const controller = appInstance?.cellModal || appInstance?.uiController?.cellModal;
+        const controller = appInstance?.cellModal;
         controller?.resetForm?.();
         controller?.refreshList?.();
     },
@@ -245,28 +233,28 @@ export const appService = {
 
     /** Export / Import / Sync / Maintenance actions */
     exportExcel() {
-        const controller = appInstance?.exportController || appInstance?.uiController?.exportController;
+        const controller = appInstance?.exportController;
         if (controller?.exportExcel) {
             controller.exportExcel();
         }
     },
 
     exportPdf() {
-        const controller = appInstance?.exportController || appInstance?.uiController?.exportController;
+        const controller = appInstance?.exportController;
         if (controller?.exportPdf) {
             controller.exportPdf();
         }
     },
 
     exportJson() {
-        const controller = appInstance?.exportController || appInstance?.uiController?.exportController;
+        const controller = appInstance?.exportController;
         if (controller?.exportJson) {
             controller.exportJson();
         }
     },
 
     importJson() {
-        const controller = appInstance?.exportController || appInstance?.uiController?.exportController;
+        const controller = appInstance?.exportController;
         if (controller?.importJson) {
             controller.importJson();
         }
@@ -275,13 +263,11 @@ export const appService = {
     openSyncModal() {
         if (appInstance?.openSyncModal) {
             appInstance.openSyncModal();
-        } else if (appInstance?.uiController?.openSyncModal) {
-            appInstance.uiController.openSyncModal();
         }
     },
 
     startDbAudit() {
-        const controller = appInstance?.maintenanceController || appInstance?.uiController?.maintenanceController;
+        const controller = appInstance?.maintenanceController;
         if (controller?.startDbAudit) {
             controller.startDbAudit();
         } else if (appInstance?.openDbAuditModal) {
@@ -290,7 +276,7 @@ export const appService = {
     },
 
     restoreBackup() {
-        const controller = appInstance?.maintenanceController || appInstance?.uiController?.maintenanceController;
+        const controller = appInstance?.maintenanceController;
         if (controller?.restoreFromBackup) {
             controller.restoreFromBackup();
         } else if (controller?.restoreBackup) {
@@ -299,7 +285,7 @@ export const appService = {
     },
 
     forceBackup() {
-        const controller = appInstance?.maintenanceController || appInstance?.uiController?.maintenanceController;
+        const controller = appInstance?.maintenanceController;
         if (controller?.performManualBackup) {
             controller.performManualBackup();
         } else if (controller?.forceBackup) {
@@ -308,7 +294,7 @@ export const appService = {
     },
 
     wipeDatabase() {
-        const controller = appInstance?.maintenanceController || appInstance?.uiController?.maintenanceController;
+        const controller = appInstance?.maintenanceController;
         if (controller?.wipeDatabase) {
             controller.wipeDatabase();
         }
@@ -317,8 +303,6 @@ export const appService = {
     handleQueueClick() {
         if (appInstance?.handleQueueClick) {
             appInstance.handleQueueClick();
-        } else if (appInstance?.uiController?._handleQueueClick) {
-            appInstance.uiController._handleQueueClick();
         }
     },
 
@@ -437,26 +421,26 @@ export const appService = {
     },
 
     exportWorkExcel() {
-        if (appInstance?.ui?.exportController?.exportWorkExcel) {
-            appInstance.ui.exportController.exportWorkExcel();
+        if (appInstance?.exportController?.exportWorkExcel) {
+            appInstance.exportController.exportWorkExcel();
         }
     },
 
     exportWorkPdf() {
-        if (appInstance?.ui?.exportController?.exportWorkPdf) {
-            appInstance.ui.exportController.exportWorkPdf();
+        if (appInstance?.exportController?.exportWorkPdf) {
+            appInstance.exportController.exportWorkPdf();
         }
     },
 
     exportWorkJson() {
-        if (appInstance?.ui?.exportController?.exportWorkJson) {
-            appInstance.ui.exportController.exportWorkJson();
+        if (appInstance?.exportController?.exportWorkJson) {
+            appInstance.exportController.exportWorkJson();
         }
     },
 
     importWorkJson() {
-        if (appInstance?.ui?.exportController?.importWorkJson) {
-            appInstance.ui.exportController.importWorkJson();
+        if (appInstance?.exportController?.importWorkJson) {
+            appInstance.exportController.importWorkJson();
         }
     },
 
@@ -524,55 +508,41 @@ export const appService = {
     togglePanel(panelId) {
         if (appInstance?.togglePanel) {
             appInstance.togglePanel(panelId);
-        } else if (appInstance?.uiController?.togglePanel) {
-            appInstance.uiController.togglePanel(panelId);
         }
     },
 
     handleGoogleClientSave() {
         if (appInstance?.handleGoogleClientSave) {
             appInstance.handleGoogleClientSave();
-        } else if (appInstance?.uiController?._handleGoogleClientSave) {
-            appInstance.uiController._handleGoogleClientSave();
         }
     },
 
     testSupabaseConnection() {
         if (appInstance?.testSupabaseConnection) {
             appInstance.testSupabaseConnection();
-        } else if (appInstance?.uiController?._testSupabaseConnection) {
-            appInstance.uiController._testSupabaseConnection();
         }
     },
 
     handleSettingsSave() {
         if (appInstance?.handleSettingsSave) {
             appInstance.handleSettingsSave();
-        } else if (appInstance?.uiController?._handleSettingsSave) {
-            appInstance.uiController._handleSettingsSave();
         }
     },
 
     applyDarkMode(isDark) {
         if (appInstance?.applyDarkMode) {
             appInstance.applyDarkMode(isDark);
-        } else if (appInstance?.uiController?.applyDarkMode) {
-            appInstance.uiController.applyDarkMode(isDark);
         }
     },
 
     applyBgTheme(theme) {
         if (appInstance?.applyBgTheme) {
             appInstance.applyBgTheme(theme);
-        } else if (appInstance?.uiController?.applyBgTheme) {
-            appInstance.uiController.applyBgTheme(theme);
         }
     },
 
     updateBgThemeSelectorUI(theme) {
         if (appInstance?.updateBgThemeSelectorUI) {
-            appInstance.updateBgThemeSelectorUI(theme);
-        } else if (appInstance?.uiController?.updateBgThemeSelectorUI) {
             appInstance.updateBgThemeSelectorUI(theme);
         }
     },
@@ -607,8 +577,6 @@ export const appService = {
     renderLogs() {
         if (appInstance?.renderLogs) {
             appInstance.renderLogs();
-        } else if (appInstance?.uiController?.renderLogs) {
-            appInstance.uiController.renderLogs();
         }
     },
 

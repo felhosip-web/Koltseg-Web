@@ -873,11 +873,16 @@ async reload() {
 
         const logs = this.logger.getLogs();
         if (logs.length === 0) {
-            listContainer.innerHTML = '<div class="text-center py-8 text-gray-400 italic">Nincsenek események rögzítve</div>';
+            listContainer.replaceChildren();
+            const emptyDiv = document.createElement('div');
+            emptyDiv.className = 'text-center py-8 text-gray-400 italic';
+            emptyDiv.textContent = 'Nincsenek események rögzítve';
+            listContainer.appendChild(emptyDiv);
             return;
         }
 
-        listContainer.innerHTML = logs.map(log => {
+        listContainer.replaceChildren();
+        logs.forEach(log => {
             let badgeClass = 'bg-gray-100 text-gray-700';
             if (log.level === 'error') badgeClass = 'bg-red-100 text-red-700 font-bold';
             else if (log.level === 'warn') badgeClass = 'bg-amber-100 text-amber-700 font-bold';
@@ -891,16 +896,29 @@ async reload() {
             else if (log.category === 'reminder') categoryIcon = 'fa-clock';
             else if (log.category === 'conflict') categoryIcon = 'fa-code-branch';
 
-            return `
-                <div class="flex items-start gap-2.5 p-2 hover:bg-gray-100/60 rounded-xl transition-all border-b border-gray-100/50 last:border-b-0">
-                    <span class="text-[10px] text-gray-400 font-mono select-none pt-0.5 shrink-0">${log.formattedTime}</span>
-                    <span class="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${badgeClass} shrink-0 flex items-center gap-1">
-                        <i class="fas ${categoryIcon}"></i> ${log.category}
-                    </span>
-                    <span class="text-xs text-gray-700 leading-normal break-all">${log.message}</span>
-                </div>
-            `;
-        }).join('');
+            const row = document.createElement('div');
+            row.className = 'flex items-start gap-2.5 p-2 hover:bg-gray-100/60 rounded-xl transition-all border-b border-gray-100/50 last:border-b-0';
+
+            const timeSpan = document.createElement('span');
+            timeSpan.className = 'text-[10px] text-gray-400 font-mono select-none pt-0.5 shrink-0';
+            timeSpan.textContent = log.formattedTime || '';
+
+            const badgeSpan = document.createElement('span');
+            badgeSpan.className = `px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${badgeClass} shrink-0 flex items-center gap-1`;
+            const icon = document.createElement('i');
+            icon.className = `fas ${categoryIcon}`;
+            badgeSpan.appendChild(icon);
+            badgeSpan.appendChild(document.createTextNode(` ${log.category || ''}`));
+
+            const msgSpan = document.createElement('span');
+            msgSpan.className = 'text-xs text-gray-700 leading-normal break-all';
+            msgSpan.textContent = log.message || '';
+
+            row.appendChild(timeSpan);
+            row.appendChild(badgeSpan);
+            row.appendChild(msgSpan);
+            listContainer.appendChild(row);
+        });
     }
 
     async generateTestData(count = 30) {

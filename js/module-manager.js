@@ -81,12 +81,7 @@ export class ModuleManager {
         // Bővítmények kezelése a Beállításokban
         document.getElementById('btnManageModulesFromChooser')?.addEventListener('click', () => {
             document.getElementById('moduleChooserModal')?.classList.add('hidden');
-            if (this.app.uiController && typeof this.app.uiController.openSettings === 'function') {
-                this.app.uiController.openSettings();
-                this.app.uiController.switchSettingsTab('modules');
-            } else {
-                document.getElementById('settingsPanel')?.classList.remove('hidden');
-            }
+            document.getElementById('settingsPanel')?.classList.remove('hidden');
         });
 
         // Global Module Modal bezárás

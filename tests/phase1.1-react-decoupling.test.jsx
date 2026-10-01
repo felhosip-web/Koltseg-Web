@@ -66,10 +66,8 @@ test('1. appService operates via explicit bind(fakeApp) without global window.ap
         entries: { load: async () => {} },
         updateReactStore: () => {},
         hmiNotif: { showToast: () => {} },
-        uiController: {
-            handleMonthDeleteSequence: (m) => monthSeqCalls.push(m),
-            handleCellClick: (el) => cellClickCalls.push(el)
-        }
+        handleMonthDeleteSequence: (m) => monthSeqCalls.push(m),
+        handleCellClick: (el) => cellClickCalls.push(el)
     };
 
     appService.bind(fakeApp);
@@ -119,10 +117,8 @@ test('2. MainTable mounts and renders with bound appService when window.app is d
         entries: { load: async () => {} },
         updateReactStore: () => {},
         hmiNotif: { showToast: () => {} },
-        uiController: {
-            handleMonthDeleteSequence: (m) => deleteMonthCalls.push(m),
-            handleCellClick: (el) => cellClickCalls.push(el)
-        }
+        handleMonthDeleteSequence: (m) => deleteMonthCalls.push(m),
+        handleCellClick: (el) => cellClickCalls.push(el)
     };
 
     appService.bind(fakeApp);
@@ -164,11 +160,9 @@ test('2. MainTable mounts and renders with bound appService when window.app is d
     const fakeAppCategoryModal = {
         isBooted: true,
         hmiNotif: { showCategoryActionsModal: async () => null }, // User cancels
-        uiController: {
-            handleRowDeleteSequence: (id, name) => deleteRowCalls.push(id),
-            handleMonthDeleteSequence: (m) => deleteMonthCalls.push(m),
-            handleCellClick: (el) => cellClickCalls.push(el)
-        }
+        handleRowDeleteSequence: (id, name) => deleteRowCalls.push(id),
+        handleMonthDeleteSequence: (m) => deleteMonthCalls.push(m),
+        handleCellClick: (el) => cellClickCalls.push(el)
     };
     appService.bind(fakeAppCategoryModal);
 
@@ -235,21 +229,19 @@ test('10. HmiInputModal, CellEditorModal, WorkEditorModal, and AiEntryModal dele
     let toastCalls = [];
 
     const fakeApp = {
-        uiController: {
-            inputModal: {
-                performSave: async (type, val, col) => {
-                    inputSaveCalls.push({ type, val, col });
-                    return true;
-                },
-                performRename: async (id, cur, val) => {
-                    inputRenameCalls.push({ id, cur, val });
-                    return true;
-                }
+        inputModal: {
+            performSave: async (type, val, col) => {
+                inputSaveCalls.push({ type, val, col });
+                return true;
             },
-            cellModal: {
-                resetForm: () => { resetCellModalCalls++; },
-                refreshList: () => {}
+            performRename: async (id, cur, val) => {
+                inputRenameCalls.push({ id, cur, val });
+                return true;
             }
+        },
+        cellModal: {
+            resetForm: () => { resetCellModalCalls++; },
+            refreshList: () => {}
         },
         modalManager: {
             open: (id) => openModalCalls.push(id),
@@ -446,11 +438,9 @@ test('4. CostAppHeader renders without window.app and routes actions through bou
     let syncModalCalls = 0;
 
     const fakeApp = {
-        uiController: {
-            inputModal: { open: (type) => inputModalCalls.push(type) },
-            exportController: { exportExcel: () => { exportExcelCalls++; } },
-            openSyncModal: () => { syncModalCalls++; }
-        },
+        inputModal: { open: (type) => inputModalCalls.push(type) },
+        exportController: { exportExcel: () => { exportExcelCalls++; } },
+        openSyncModal: () => { syncModalCalls++; },
         syncService: {
             getQueueStatus: () => ({ total: 0 }),
             onQueueChange: () => () => {}
@@ -849,10 +839,8 @@ test('9. DashboardTab executes navigation, weather, and quick actions through bo
         moduleManager: {
             launchModule: (modId) => launchModuleCalls.push(modId)
         },
-        uiController: {
-            inputModal: {
-                open: (type) => openInputModalCalls.push(type)
-            }
+        inputModal: {
+            open: (type) => openInputModalCalls.push(type)
         }
     };
 
