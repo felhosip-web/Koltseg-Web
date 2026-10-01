@@ -82,16 +82,14 @@ test('SettingsPanel renders and routes all user actions through appService when 
     let renderModuleSettingsCalls = 0;
 
     const fakeApp = {
-        uiController: {
-            togglePanel: (p) => togglePanelCalls.push(p),
-            _handleGoogleClientSave: () => { googleSaveCalls++; },
-            _testSupabaseConnection: () => { testSupabaseCalls++; },
-            _handleSettingsSave: () => { saveSettingsCalls++; },
-            applyDarkMode: (d) => applyDarkModeCalls.push(d),
-            applyBgTheme: (t) => applyBgThemeCalls.push(t),
-            updateBgThemeSelectorUI: (t) => updateBgThemeUiCalls.push(t),
-            renderLogs: () => { renderLogsCalls++; }
-        },
+        togglePanel: (p) => togglePanelCalls.push(p),
+        _handleGoogleClientSave: () => { googleSaveCalls++; },
+        _testSupabaseConnection: () => { testSupabaseCalls++; },
+        _handleSettingsSave: () => { saveSettingsCalls++; },
+        applyDarkMode: (d) => applyDarkModeCalls.push(d),
+        applyBgTheme: (t) => applyBgThemeCalls.push(t),
+        updateBgThemeSelectorUI: (t) => updateBgThemeUiCalls.push(t),
+        renderLogs: () => { renderLogsCalls++; },
         hmiNotif: {
             openHelp: (topic) => { openHelpCalls++; },
             showToast: (msg, type) => showToastCalls.push({ msg, type }),

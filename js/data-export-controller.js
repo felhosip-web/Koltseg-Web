@@ -281,11 +281,8 @@ export class DataExportController {
             this.app.workLogManager?.load?.()
         ]);
 
-        this.app.renderer?.renderTable?.();
-        this.app.workLogRenderer?.render?.();
-        this.app.remindersRenderer?.renderList?.();
-        this.app.incomingRenderer?.render?.();
-        this.app.refreshAllTabs?.();
+        this.app.updateReactStore?.();
+        this.app.updateReminderStatus?.();
 
         this.app.hmiNotif.showToast('✅ Backup sikeresen visszaállítva!', 'success');
     }

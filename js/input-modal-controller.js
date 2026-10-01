@@ -88,7 +88,7 @@ export class InputModalController {
         } else {
             return false;
         }
-        await this.app.refreshAllTabs();
+        this.app.updateReactStore?.();
         return true;
     }
 

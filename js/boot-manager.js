@@ -59,13 +59,9 @@ export class BootManager {
 
             console.log('[BOOT-BACKGROUND] Adatok betöltve, UI frissítése...');
             // UI frissítése az adatok betöltése után
-            if (typeof this.app.renderer?.renderTable === "function") {
-                this.app.renderer?.renderTable?.();
-            }
             this.app.updateReactStore?.();
             this.app.updateReminderStatus?.();
             this.app.workLogRenderer?.render?.();
-            this.app.tabStateMachine?.[this.app.activeTab]?.();
 
             if (typeof this.app.renderer?.updateFooterStatus === 'function') {
                 this.app.renderer?.updateFooterStatus('Adatok betöltve', false);
@@ -125,21 +121,12 @@ export class BootManager {
      * @returns {Promise<void>}
      */
     async _initUI() {
-        this.app.uiController.bindStaticEvents();
-        
         if (this.app.remindersApp) {
             await this.app.remindersApp.boot(this.app);
         }
         
-        if (typeof this.app.renderer?.renderTable === "function") {
-            this.app.renderer?.renderTable?.();
-        }
         this.app.updateReactStore?.();
-
         this.app.updateReminderStatus?.();
-        
-        // Initial Work Log rendering
-        this.app.workLogRenderer?.render?.();
 
         // Initialize Landing Page Module switcher
         this._initLandingPage();

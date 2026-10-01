@@ -424,14 +424,8 @@ return {
                             if (app.months) await app.months.load();
                             if (app.entries) await app.entries.load();
 
-                            if (typeof app.refreshAllTabs === 'function') {
-                                app.refreshAllTabs();
-                            } else if (typeof app.refreshUI === 'function') {
-                                await app.refreshUI();
-                            } else if (typeof app.renderer?.renderTable === 'function') {
-                                app.renderer?.renderTable?.();
-                            } else if (typeof app.renderer?.render === 'function') {
-                                app.renderer?.render?.();
+                            if (typeof app.updateReactStore === 'function') {
+                                app.updateReactStore();
                             }
 
                             if (existingEntries && existingEntries.length > 0) {

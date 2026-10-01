@@ -81,12 +81,7 @@ export class ModuleManager {
         // Bővítmények kezelése a Beállításokban
         document.getElementById('btnManageModulesFromChooser')?.addEventListener('click', () => {
             document.getElementById('moduleChooserModal')?.classList.add('hidden');
-            if (this.app.uiController && typeof this.app.uiController.openSettings === 'function') {
-                this.app.uiController.openSettings();
-                this.app.uiController.switchSettingsTab('modules');
-            } else {
-                document.getElementById('settingsPanel')?.classList.remove('hidden');
-            }
+            document.getElementById('settingsPanel')?.classList.remove('hidden');
         });
 
         // Global Module Modal bezárás
@@ -346,17 +341,6 @@ export class ModuleManager {
             render: config.render
         });
 
-        // Hozzáadjuk az App tab state machine-jéhez is!
-        if (this.app) {
-            if (!this.app.tabStateMachine) {
-                this.app.tabStateMachine = {};
-            }
-            this.app.tabStateMachine[tabId] = () => {
-                if (typeof config.render === 'function') {
-                    config.render(this.app);
-                }
-            };
-        }
     }
 
     /**

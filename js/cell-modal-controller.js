@@ -243,7 +243,7 @@ export class CellModalController {
 
             this.app.hmiNotif.showToast('Hiba törlés közben.', 'error');
         } finally {
-            this.app.renderer?.renderTable?.();           // Táblázat frissítése
+            this.app.updateReactStore?.();
             this.refreshList();                   // Lista frissítése
         }
     }
@@ -314,8 +314,7 @@ export class CellModalController {
         this.refreshList();
         
         // Fő táblázat és összegzés frissítése
-        this.app.renderer?.renderTable?.();
-        this.app.renderer?.renderSummary?.();   // ha létezik
+        this.app.updateReactStore?.();
         
         // Státusz frissítése a láblécben
         this.app.renderer?.updateFooterStatus('Adatok sikeresen mentve', false);

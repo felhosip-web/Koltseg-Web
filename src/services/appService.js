@@ -4,6 +4,8 @@
  * and lower-level domain services or application instances via explicit binding.
  */
 
+import { useAppStore } from '../store/useAppStore.js';
+
 let appInstance = null;
 
 export const appService = {
@@ -69,14 +71,14 @@ export const appService = {
 
     /** Table / UI actions */
     deleteMonthSequence(month) {
-        if (appInstance?.uiController?.handleMonthDeleteSequence) {
-            appInstance.uiController.handleMonthDeleteSequence(month);
+        if (appInstance?.handleMonthDeleteSequence) {
+            appInstance.handleMonthDeleteSequence(month);
         }
     },
 
     deleteRowSequence(itemId, itemName) {
-        if (appInstance?.uiController?.handleRowDeleteSequence) {
-            appInstance.uiController.handleRowDeleteSequence(itemId, itemName);
+        if (appInstance?.handleRowDeleteSequence) {
+            appInstance.handleRowDeleteSequence(itemId, itemName);
         }
     },
 
@@ -88,33 +90,35 @@ export const appService = {
     },
 
     handleCellClick(element) {
-        if (appInstance?.uiController?.handleCellClick) {
-            appInstance.uiController.handleCellClick(element);
+        if (appInstance?.handleCellClick) {
+            appInstance.handleCellClick(element);
+        } else if (appInstance?.cellModal?.open) {
+            appInstance.cellModal.open(element);
         }
     },
 
     openInputModal(type) {
-        if (appInstance?.uiController?.inputModal?.open) {
-            appInstance.uiController.inputModal.open(type);
+        if (appInstance?.inputModal?.open) {
+            appInstance.inputModal.open(type);
         }
     },
 
     async performInputModalSave(type, value, color) {
-        if (appInstance?.uiController?.inputModal?.performSave) {
-            return await appInstance.uiController.inputModal.performSave(type, value, color);
+        if (appInstance?.inputModal?.performSave) {
+            return await appInstance.inputModal.performSave(type, value, color);
         }
         return false;
     },
 
     async performInputModalRename(itemId, currentName, newName) {
-        if (appInstance?.uiController?.inputModal?.performRename) {
-            return await appInstance.uiController.inputModal.performRename(itemId, currentName, newName);
+        if (appInstance?.inputModal?.performRename) {
+            return await appInstance.inputModal.performRename(itemId, currentName, newName);
         }
         return false;
     },
 
     resetAndRefreshCellModal() {
-        const controller = appInstance?.uiController?.cellModal;
+        const controller = appInstance?.cellModal;
         controller?.resetForm?.();
         controller?.refreshList?.();
     },
@@ -208,8 +212,8 @@ export const appService = {
     switchTab(tab) {
         if (appInstance?.switchTab) {
             appInstance.switchTab(tab);
-        } else if (appInstance?.tabStateMachine?.[tab]) {
-            appInstance.tabStateMachine[tab]();
+        } else {
+            useAppStore.getState().setActiveTab(tab);
         }
     },
 
@@ -222,69 +226,83 @@ export const appService = {
     showView(view) {
         if (appInstance?.showView) {
             appInstance.showView(view);
-        } else if (appInstance?.tabStateMachine?.[view]) {
-            appInstance.tabStateMachine[view]();
+        } else {
+            useAppStore.getState().setActiveTab(view);
         }
     },
 
     /** Export / Import / Sync / Maintenance actions */
     exportExcel() {
-        if (appInstance?.uiController?.exportController?.exportExcel) {
-            appInstance.uiController.exportController.exportExcel();
+        const controller = appInstance?.exportController;
+        if (controller?.exportExcel) {
+            controller.exportExcel();
         }
     },
 
     exportPdf() {
-        if (appInstance?.uiController?.exportController?.exportPdf) {
-            appInstance.uiController.exportController.exportPdf();
+        const controller = appInstance?.exportController;
+        if (controller?.exportPdf) {
+            controller.exportPdf();
         }
     },
 
     exportJson() {
-        if (appInstance?.uiController?.exportController?.exportJson) {
-            appInstance.uiController.exportController.exportJson();
+        const controller = appInstance?.exportController;
+        if (controller?.exportJson) {
+            controller.exportJson();
         }
     },
 
     importJson() {
-        if (appInstance?.uiController?.exportController?.importJson) {
-            appInstance.uiController.exportController.importJson();
+        const controller = appInstance?.exportController;
+        if (controller?.importJson) {
+            controller.importJson();
         }
     },
 
     openSyncModal() {
-        if (appInstance?.uiController?.openSyncModal) {
-            appInstance.uiController.openSyncModal();
+        if (appInstance?.openSyncModal) {
+            appInstance.openSyncModal();
         }
     },
 
     startDbAudit() {
-        if (appInstance?.uiController?.maintenanceController?.startDbAudit) {
-            appInstance.uiController.maintenanceController.startDbAudit();
+        const controller = appInstance?.maintenanceController;
+        if (controller?.startDbAudit) {
+            controller.startDbAudit();
+        } else if (appInstance?.openDbAuditModal) {
+            appInstance.openDbAuditModal();
         }
     },
 
     restoreBackup() {
-        if (appInstance?.uiController?.maintenanceController?.restoreBackup) {
-            appInstance.uiController.maintenanceController.restoreBackup();
+        const controller = appInstance?.maintenanceController;
+        if (controller?.restoreFromBackup) {
+            controller.restoreFromBackup();
+        } else if (controller?.restoreBackup) {
+            controller.restoreBackup();
         }
     },
 
     forceBackup() {
-        if (appInstance?.uiController?.maintenanceController?.forceBackup) {
-            appInstance.uiController.maintenanceController.forceBackup();
+        const controller = appInstance?.maintenanceController;
+        if (controller?.performManualBackup) {
+            controller.performManualBackup();
+        } else if (controller?.forceBackup) {
+            controller.forceBackup();
         }
     },
 
     wipeDatabase() {
-        if (appInstance?.uiController?.maintenanceController?.wipeDatabase) {
-            appInstance.uiController.maintenanceController.wipeDatabase();
+        const controller = appInstance?.maintenanceController;
+        if (controller?.wipeDatabase) {
+            controller.wipeDatabase();
         }
     },
 
     handleQueueClick() {
-        if (appInstance?.uiController?._handleQueueClick) {
-            appInstance.uiController._handleQueueClick();
+        if (appInstance?.handleQueueClick) {
+            appInstance.handleQueueClick();
         }
     },
 
@@ -403,26 +421,26 @@ export const appService = {
     },
 
     exportWorkExcel() {
-        if (appInstance?.ui?.exportController?.exportWorkExcel) {
-            appInstance.ui.exportController.exportWorkExcel();
+        if (appInstance?.exportController?.exportWorkExcel) {
+            appInstance.exportController.exportWorkExcel();
         }
     },
 
     exportWorkPdf() {
-        if (appInstance?.ui?.exportController?.exportWorkPdf) {
-            appInstance.ui.exportController.exportWorkPdf();
+        if (appInstance?.exportController?.exportWorkPdf) {
+            appInstance.exportController.exportWorkPdf();
         }
     },
 
     exportWorkJson() {
-        if (appInstance?.ui?.exportController?.exportWorkJson) {
-            appInstance.ui.exportController.exportWorkJson();
+        if (appInstance?.exportController?.exportWorkJson) {
+            appInstance.exportController.exportWorkJson();
         }
     },
 
     importWorkJson() {
-        if (appInstance?.ui?.exportController?.importWorkJson) {
-            appInstance.ui.exportController.importWorkJson();
+        if (appInstance?.exportController?.importWorkJson) {
+            appInstance.exportController.importWorkJson();
         }
     },
 
@@ -488,44 +506,44 @@ export const appService = {
 
     /** Settings & UI Controller Actions */
     togglePanel(panelId) {
-        if (appInstance?.uiController?.togglePanel) {
-            appInstance.uiController.togglePanel(panelId);
+        if (appInstance?.togglePanel) {
+            appInstance.togglePanel(panelId);
         }
     },
 
     handleGoogleClientSave() {
-        if (appInstance?.uiController?._handleGoogleClientSave) {
-            appInstance.uiController._handleGoogleClientSave();
+        if (appInstance?.handleGoogleClientSave) {
+            appInstance.handleGoogleClientSave();
         }
     },
 
     testSupabaseConnection() {
-        if (appInstance?.uiController?._testSupabaseConnection) {
-            appInstance.uiController._testSupabaseConnection();
+        if (appInstance?.testSupabaseConnection) {
+            appInstance.testSupabaseConnection();
         }
     },
 
     handleSettingsSave() {
-        if (appInstance?.uiController?._handleSettingsSave) {
-            appInstance.uiController._handleSettingsSave();
+        if (appInstance?.handleSettingsSave) {
+            appInstance.handleSettingsSave();
         }
     },
 
     applyDarkMode(isDark) {
-        if (appInstance?.uiController?.applyDarkMode) {
-            appInstance.uiController.applyDarkMode(isDark);
+        if (appInstance?.applyDarkMode) {
+            appInstance.applyDarkMode(isDark);
         }
     },
 
     applyBgTheme(theme) {
-        if (appInstance?.uiController?.applyBgTheme) {
-            appInstance.uiController.applyBgTheme(theme);
+        if (appInstance?.applyBgTheme) {
+            appInstance.applyBgTheme(theme);
         }
     },
 
     updateBgThemeSelectorUI(theme) {
-        if (appInstance?.uiController?.updateBgThemeSelectorUI) {
-            appInstance.uiController.updateBgThemeSelectorUI(theme);
+        if (appInstance?.updateBgThemeSelectorUI) {
+            appInstance.updateBgThemeSelectorUI(theme);
         }
     },
 
@@ -557,8 +575,8 @@ export const appService = {
     },
 
     renderLogs() {
-        if (appInstance?.uiController?.renderLogs) {
-            appInstance.uiController.renderLogs();
+        if (appInstance?.renderLogs) {
+            appInstance.renderLogs();
         }
     },
 

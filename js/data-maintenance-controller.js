@@ -97,11 +97,8 @@ export class DataMaintenanceController {
                 this.app.workLogManager?.load?.()
             ]);
 
-            this.app.renderer?.renderTable?.();
-            this.app.workLogRenderer?.render?.();
-            this.app.remindersRenderer?.renderList?.();
-            this.app.incomingRenderer?.render?.();
-            this.app.refreshAllTabs?.();
+            this.app.updateReactStore?.();
+            this.app.updateReminderStatus?.();
 
             this.app.hmiNotif.showToast('🗑️ Minden helyi adat törölve!', 'error');
             this.app.renderer?.updateFooterStatus('Adatbázis kiürítve', false);
