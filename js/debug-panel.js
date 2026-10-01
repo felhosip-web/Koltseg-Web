@@ -386,13 +386,13 @@ export function initDebugPanel() {
     btnReqNotif?.addEventListener('click', async () => {
         const app = appService.getAppInstance();
         try {
-            if (!app?.pwa?.pushManager) throw new Error("Push Manager nem elérhető");
+            if (!app?.pwaManager?.pushManager) throw new Error("Push Manager nem elérhető");
 
             const btnOriginalText = btnReqNotif.innerHTML;
             btnReqNotif.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Regisztráció...';
             btnReqNotif.disabled = true;
 
-            await app.pwa.pushManager.subscribe();
+            await app.pwaManager.pushManager.subscribe();
             updateNotificationPermissionStatus();
             app.hmiNotif?.showToast('Sikeres feliratkozás a Web Push értesítésekre!', 'success');
 
@@ -418,9 +418,9 @@ export function initDebugPanel() {
         app?.hmiNotif?.showSimulatedPushNotification(title, body);
 
         // 2. Ha van aktív push subscription, szerveren keresztül teszteljük!
-        if (app?.pwa?.pushManager?.isSubscribed) {
+        if (app?.pwaManager?.pushManager?.isSubscribed) {
             try {
-                await app.pwa.pushManager.triggerPushFromServer({ title, body, icon });
+                await app.pwaManager.pushManager.triggerPushFromServer({ title, body, icon });
             } catch (e) {
                 console.warn('[NOTIF] Szerver oldali push sikertelen:', e);
             }

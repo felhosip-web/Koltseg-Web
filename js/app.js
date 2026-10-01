@@ -75,6 +75,9 @@ export class App {
         if (typeof this.syncService.setApp === 'function') {
             this.syncService.setApp(this);
         }
+        if (this.db) {
+            this.db.syncService = this.syncService;
+        }
         this.syncController = null;
         this.exportController = null;
         this.maintenanceController = null;

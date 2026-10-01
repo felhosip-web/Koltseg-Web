@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import test, { beforeEach, afterEach } from 'node:test';
 import fs from 'node:fs';
 import path from 'node:path';
 import { JSDOM } from 'jsdom';
@@ -9,6 +9,43 @@ import { Database, ItemManager, MonthManager, EntryManager } from '../js/oop-cor
 import { SyncService } from '../js/sync-service.js';
 import { WorkLogManager } from '../js/work-log.js';
 import { appService } from '../src/services/appService.js';
+
+const GLOBAL_PROPERTIES_TO_TRACK = [
+    'window',
+    'document',
+    'localStorage',
+    'Event',
+    'CustomEvent',
+    'HTMLElement',
+    'Node',
+    'IS_REACT_ACT_ENVIRONMENT'
+];
+
+let initialGlobalDescriptors = new Map();
+
+beforeEach(() => {
+    initialGlobalDescriptors.clear();
+    for (const prop of GLOBAL_PROPERTIES_TO_TRACK) {
+        const descriptor = Object.getOwnPropertyDescriptor(globalThis, prop);
+        initialGlobalDescriptors.set(prop, descriptor);
+    }
+});
+
+afterEach(() => {
+    appService.unbind();
+
+    for (const prop of GLOBAL_PROPERTIES_TO_TRACK) {
+        const initialDescriptor = initialGlobalDescriptors.get(prop);
+        if (initialDescriptor) {
+            Object.defineProperty(globalThis, prop, initialDescriptor);
+        } else {
+            const currentDescriptor = Object.getOwnPropertyDescriptor(globalThis, prop);
+            if (currentDescriptor && currentDescriptor.configurable) {
+                delete globalThis[prop];
+            }
+        }
+    }
+});
 
 test('P3-A — Static Architecture Check: Zero window.app and global aliases in production js/ and src/', () => {
     const targetDirs = ['js', 'src'];
@@ -133,6 +170,37 @@ test('P3-C — SyncService operates using explicit app reference without consult
 
     await syncService._reloadAndRender();
 
+    dom.window.close();
+});
+
+test('P3-D2 — Database deletion uses explicit SyncService and respects isMuted state without window.app', async () => {
+    const dom = new JSDOM(`<!DOCTYPE html><html><body></body></html>`, { url: 'http://localhost/' });
+    globalThis.window = dom.window;
+    globalThis.document = dom.window.document;
+
+    delete globalThis.window.app;
+
+    const db = new Database();
+    db._enableMockDb();
+
+    const syncService = new SyncService({ useSupabase: false }, { getPendingCount: () => 0 });
+    db.syncService = syncService;
+
+    // Normal deletion: creates tombstone and queues sync delete
+    await db.delete('items', 'test-item-123');
+    let tombstones = await db.getAll('deleted_records');
+    assert.equal(tombstones.length, 1, 'Tombstone created in DB when not muted');
+    assert.equal(tombstones[0].record_id, 'test-item-123');
+    assert.equal(syncService._syncQueue.length, 1, 'Sync deletion queued when not muted');
+
+    // Muted deletion: skips tombstone creation and sync queueing
+    syncService.isMuted = true;
+    await db.delete('items', 'test-item-456');
+    tombstones = await db.getAll('deleted_records');
+    assert.equal(tombstones.length, 1, 'No new tombstone created when muted');
+    assert.equal(syncService._syncQueue.length, 1, 'No new sync deletion queued when muted');
+
+    assert.equal(globalThis.window.app, undefined);
     dom.window.close();
 });
 
