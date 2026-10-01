@@ -1,6 +1,5 @@
 // sync-diff-view.js
 // Kétpaneles modal a Local vs Cloud különbségek megjelenítésére.
-import { appService } from '../src/services/appService.js';
 
 export function showSyncDiffModal(diffs, app = null) {
   // A modal létrehozása
@@ -167,8 +166,7 @@ export function showSyncDiffModal(diffs, app = null) {
     executeBtn.disabled = true;
     executeBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Szinkronizálás...';
 
-    const targetApp = app || appService.getAppInstance();
-    const controller = targetApp?.dataSyncController || targetApp?.syncController;
+    const controller = app?.dataSyncController || app?.syncController;
     if (controller) {
       try {
         await controller.forceSync();

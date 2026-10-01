@@ -236,6 +236,55 @@ test('P3-E — WorkAppList -> appService.openWorkModal(id) passes exact selected
     dom.window.close();
 });
 
+test('P3-G — ItemManager deletion with explicit EntryManager dependency purges associated entries in memory and pushes deletes', async () => {
+    const dom = new JSDOM(`<!DOCTYPE html><html><body></body></html>`, { url: 'http://localhost/' });
+    globalThis.window = dom.window;
+    globalThis.document = dom.window.document;
+
+    delete globalThis.window.app;
+
+    const db = new Database();
+    db._enableMockDb();
+
+    let pushedDeletes = [];
+    const mockSyncService = {
+        push: async (store, id, isDelete) => {
+            if (isDelete) pushedDeletes.push({ store, id });
+        }
+    };
+
+    const entryManager = new EntryManager(db, mockSyncService);
+    const itemManager = new ItemManager(db, mockSyncService, entryManager);
+
+    await itemManager.add('Kávé & Teák', '#fed7aa');
+    const item = itemManager.items[0];
+
+    const entry1 = await entryManager.saveEntry({ itemId: item.id, month: '2026-11', amount: 1500 });
+    const entry2 = await entryManager.saveEntry({ itemId: 'other-item-id', month: '2026-11', amount: 3000 });
+
+    assert.equal(itemManager.items.length, 1);
+    assert.equal(entryManager.entries.length, 2);
+
+    // Delete item via ItemManager
+    await itemManager.delete(item.id);
+
+    // ItemManager should be empty
+    assert.equal(itemManager.items.length, 0);
+
+    // Associated entry1 should be purged from EntryManager's memory array, entry2 remains
+    assert.equal(entryManager.entries.length, 1);
+    assert.equal(entryManager.entries[0].id, entry2.id);
+
+    // Sync deletes pushed for both item and associated entry
+    assert.ok(pushedDeletes.some(p => p.store === 'items' && p.id === item.id));
+    assert.ok(pushedDeletes.some(p => p.store === 'entries' && p.id === entry1.id));
+
+    // Confirm window.app remains completely undefined
+    assert.equal(globalThis.window.app, undefined);
+
+    dom.window.close();
+});
+
 test('P3-F — MainTable sync regression renders without window.app', async () => {
     const dom = new JSDOM(`<!DOCTYPE html><html><body><div id="root"></div></body></html>`, {
         url: 'http://localhost/'

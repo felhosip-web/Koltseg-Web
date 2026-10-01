@@ -83,9 +83,9 @@ export class App {
         this.cloud = this.syncService.cloud;
 
         // === 6. DOMAIN MANAGEREK ===
-        this.items = new ItemManager(this.db, this.syncService);
-        this.months = new MonthManager(this.db, this.syncService);
         this.entries = new EntryManager(this.db, this.syncService);
+        this.items = new ItemManager(this.db, this.syncService, this.entries);
+        this.months = new MonthManager(this.db, this.syncService);
         this.templates = new TemplateManager(this.db, this.syncService);
         this.reminderManager = new ReminderManager(this.db, this.syncService);
 

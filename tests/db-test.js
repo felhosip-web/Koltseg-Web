@@ -73,21 +73,17 @@ async function runTests() {
     db.mockStore['entries']['entry3'] = {id: 'entry3', cellKey: '2026-08_itemX_456'}; // backwards legacy
     db.mockStore['entries']['entry4'] = {id: 'entry4', itemId: 'itemY', month: '2026-08'}; // Should remain
 
-    global.window = {
-        app: {
-            entries: {
-                entries: [
-                    {id: 'entry1', itemId: 'itemX', month: '2026-08'},
-                    {id: 'entry2', cellKey: 'itemX_2026-08_123'},
-                    {id: 'entry3', cellKey: '2026-08_itemX_456'},
-                    {id: 'entry4', itemId: 'itemY', month: '2026-08'}
-                ]
-            }
-        }
+    const entryManager = {
+        entries: [
+            {id: 'entry1', itemId: 'itemX', month: '2026-08'},
+            {id: 'entry2', cellKey: 'itemX_2026-08_123'},
+            {id: 'entry3', cellKey: '2026-08_itemX_456'},
+            {id: 'entry4', itemId: 'itemY', month: '2026-08'}
+        ]
     };
-    syncService._app = global.window.app;
+    global.window = { app: { entries: entryManager } };
 
-    const im = new ItemManager(db, syncService);
+    const im = new ItemManager(db, syncService, entryManager);
     im.items = [{id: 'itemX', name: 'Item X'}];
 
     await im.delete('itemX');
@@ -112,8 +108,8 @@ async function runTests() {
     const syncEntryDelete = syncService.queue.find(q => q.store === 'entries' && q.id === 'entry1' && q.isDelete === true);
     assert(syncEntryDelete !== undefined, "Entry delete pushed to sync queue");
 
-    const uiMemoryRemains = window.app.entries.entries.find(e => e.id === 'entry4');
-    const uiMemoryDeleted = window.app.entries.entries.find(e => e.id === 'entry1');
+    const uiMemoryRemains = entryManager.entries.find(e => e.id === 'entry4');
+    const uiMemoryDeleted = entryManager.entries.find(e => e.id === 'entry1');
     assert(uiMemoryRemains !== undefined && uiMemoryDeleted === undefined, "In-memory app array updated correctly");
 
     console.log(`\nTests completed: ${passed} passed, ${failed} failed.`);

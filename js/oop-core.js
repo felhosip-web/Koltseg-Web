@@ -753,10 +753,15 @@ export class ItemManager {
         return tempItemId;
     }
 
-    constructor(db, syncService) { 
+    constructor(db, syncService, entryManager = null) {
         this.db = db; 
         this.syncService = syncService;
+        this.entryManager = entryManager;
         this.items = [];
+    }
+
+    setEntryManager(entryManager) {
+        this.entryManager = entryManager;
     }
     
     async load() { 
@@ -807,11 +812,9 @@ export class ItemManager {
             await this.db.deleteItemWithEntries(id);
             this.items = this.items.filter(i => i.id !== id);
 
-            const rawEntries = Array.isArray(this.syncService?._app?.entries)
-                ? this.syncService._app.entries
-                : this.syncService?._app?.entries?.entries;
+            const entries = this.entryManager?.entries || [];
 
-            const entriesToDel = (rawEntries || []).filter(e => {
+            const entriesToDel = entries.filter(e => {
                 let tempItemId = e.itemId;
                 if (!tempItemId && e.cellKey) {
                      const parts = e.cellKey.split('_');
@@ -823,22 +826,18 @@ export class ItemManager {
                 return tempItemId === id || (e.cellKey && (e.cellKey.startsWith(`${id}_`) || e.cellKey.endsWith(`_${id}`)));
             });
 
-            const filterFn = e => {
-                let tempItemId = e.itemId;
-                if (!tempItemId && e.cellKey) {
-                     const parts = e.cellKey.split('_');
-                     tempItemId = parts[0];
-                     if (!/^[0-9]+$/.test(tempItemId) && parts.length >= 2 && /^[0-9]{4}-[0-9]{2}$/.test(parts[0])) {
-                          tempItemId = parts[1];
-                     }
-                }
-                return !(tempItemId === id || (e.cellKey && (e.cellKey.startsWith(`${id}_`) || e.cellKey.endsWith(`_${id}`))));
-            };
-
-            if (Array.isArray(this.syncService?._app?.entries)) {
-                this.syncService._app.entries = this.syncService._app.entries.filter(filterFn);
-            } else if (this.syncService?._app?.entries?.entries) {
-                this.syncService._app.entries.entries = this.syncService._app.entries.entries.filter(filterFn);
+            if (this.entryManager) {
+                this.entryManager.entries = entries.filter(e => {
+                    let tempItemId = e.itemId;
+                    if (!tempItemId && e.cellKey) {
+                         const parts = e.cellKey.split('_');
+                         tempItemId = parts[0];
+                         if (!/^[0-9]+$/.test(tempItemId) && parts.length >= 2 && /^[0-9]{4}-[0-9]{2}$/.test(parts[0])) {
+                              tempItemId = parts[1];
+                         }
+                    }
+                    return !(tempItemId === id || (e.cellKey && (e.cellKey.startsWith(`${id}_`) || e.cellKey.endsWith(`_${id}`))));
+                });
             }
 
             // Push changes
