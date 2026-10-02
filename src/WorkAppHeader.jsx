@@ -95,7 +95,7 @@ export default function WorkAppHeader() {
                     </span>
                     <span
                         className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200 font-bold flex items-center gap-1 ml-1">
-                        v7.2.1
+                        v7.3.0
                     </span>
                 </div>
             </div>

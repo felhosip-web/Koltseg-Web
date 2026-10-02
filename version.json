@@ -1,8 +1,19 @@
 {
-  "version": "7.2.1",
-  "build": "2026-09-24T18:00:00.000Z",
+  "version": "7.3.0",
+  "build": "2026-10-01T18:00:00.000Z",
   "release": "stable",
   "changelog": [
+    {
+      "version": "7.3.0",
+      "date": "2026-10-01T18:00:00.000Z",
+      "changes": [
+        "🏛️ P1 — React/Zustand szétválasztás (decoupling): A közvetlen React ↔ legacy Vanilla csatolás megszűnt, felépült a transzparens 'appService' architektúrális határ, eltávolítva a közvetlen 'window.app' használatot a React komponensekből.",
+        "🏛️ P2 — Állapot architektúra (state architecture): A domain managerek közvetlenül birtokolják saját domain állapotaikat, a legacy 'js/store.js' és az 'app-data-updated' eseménybusz kivezetésre került, a determinisztikus 'updateReactStore()' szinkronizáció hajtja a React Zustand UI állapotfrissítéseket a szinkronizációs viselkedés és perszisztencia teljes megőrzése mellett.",
+        "🏛️ P3 — Globális alkalmazás-csatolás megszüntetése (global coupling removal): A globális 'window.app' futásidejű függőség teljes mértékben eltávolításra került, helyét az explicit függőség-befecskendezés (dependency injection) és az explicit App/szerviz kapcsolatok vették át felülbírált vagy vak globális fallback-ek nélkül.",
+        "🏛️ P4 — Legacy Vanilla UI és orkesztráció kivezetése (legacy UI decommissioning): Eltávolításra került a 'UIController', a 'tabStateMachine', a 'refreshAllTabs()' és a 'VirtualTableRenderer' integráció. A UI állapot és navigáció teljes mértékben áttért a React + Zustand architektúrára, miközben a non-UI domain managerek, perszisztencia, IndexedDB és Supabase szinkronizációs infrastruktúra változatlanul megőrzésre került.",
+        "🔄 Rendszer architektúrális adatáramlása: React UI → Zustand → appService → App / explicit szervizek → domain managerek / SyncService / perszisztencia → IndexedDB → Supabase."
+      ]
+    },
     {
       "version": "7.2.1",
       "date": "2026-09-24T18:00:00.000Z",
@@ -486,6 +497,12 @@
     }
   ],
   "releaseHistory": [
+    {
+      "version": "7.3.0",
+      "date": "2026-10-01",
+      "notes": "P1–P4 Architectural Migration Milestone",
+      "isMajor": false
+    },
     {
       "version": "7.0.18",
       "date": "2026-08-31",
