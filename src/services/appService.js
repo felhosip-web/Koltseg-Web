@@ -514,24 +514,18 @@ export const appService = {
     handleGoogleClientSave() {
         if (appInstance?.handleGoogleClientSave) {
             appInstance.handleGoogleClientSave();
-        } else if (appInstance?._handleGoogleClientSave) {
-            appInstance._handleGoogleClientSave();
         }
     },
 
     testSupabaseConnection() {
         if (appInstance?.testSupabaseConnection) {
             appInstance.testSupabaseConnection();
-        } else if (appInstance?._testSupabaseConnection) {
-            appInstance._testSupabaseConnection();
         }
     },
 
     handleSettingsSave() {
         if (appInstance?.handleSettingsSave) {
             appInstance.handleSettingsSave();
-        } else if (appInstance?._handleSettingsSave) {
-            appInstance._handleSettingsSave();
         }
     },
 

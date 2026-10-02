@@ -99,9 +99,7 @@ export default function TimeTrackerTab() {
             };
 
             updateTimerStr();
-            if (!activeTimer.isPaused) {
-                interval = setInterval(updateTimerStr, 1000);
-            }
+            interval = setInterval(updateTimerStr, 1000);
         } else {
             setTimerString('00:00:00');
         }

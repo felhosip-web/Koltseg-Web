@@ -188,8 +188,8 @@ test('Test 2 — Sync Service updates React Zustand Store deterministically usin
     // Verify app-data-updated event was NOT dispatched by production updateReactStore()
     assert.equal(eventDispatched, false);
 
-    // Verify setSnapshot was called during sync
-    assert.ok(setSnapshotCalls >= initialSetSnapshotCalls + 1);
+    // Verify setSnapshot was called exactly ONCE during sync (initialSetSnapshotCalls + 1)
+    assert.equal(setSnapshotCalls, initialSetSnapshotCalls + 1);
 
     // Verify React Zustand store state
     const reactState = useReactStore.getState();

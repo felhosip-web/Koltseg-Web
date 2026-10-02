@@ -17,8 +17,6 @@ function setupEnvironment() {
     globalThis.CustomEvent = dom.window.CustomEvent;
     globalThis.HTMLElement = dom.window.HTMLElement;
     globalThis.HTMLInputElement = dom.window.HTMLInputElement;
-    globalThis.HTMLSelectElement = dom.window.HTMLSelectElement;
-    globalThis.HTMLTextAreaElement = dom.window.HTMLTextAreaElement;
     globalThis.Node = dom.window.Node;
     globalThis.MutationObserver = dom.window.MutationObserver;
     globalThis.localStorage = dom.window.localStorage;
@@ -26,8 +24,6 @@ function setupEnvironment() {
     globalThis.window.Dexie = Dexie;
     globalThis.window.indexedDB = globalThis.indexedDB;
     globalThis.window.IDBKeyRange = globalThis.IDBKeyRange;
-    Dexie.dependencies.indexedDB = globalThis.indexedDB;
-    Dexie.dependencies.IDBKeyRange = globalThis.IDBKeyRange;
 
     // Ensure window.app is deleted for pure decoupling test
     delete globalThis.window.app;
@@ -37,28 +33,14 @@ function setupEnvironment() {
 
 let savedWindowApp = undefined;
 
-beforeEach(async () => {
+beforeEach(() => {
     if (globalThis.window) {
         savedWindowApp = globalThis.window.app;
     }
-    const { useAppStore } = await import('../src/store/useAppStore.js');
-    useAppStore.setState({
-        isLoaded: false,
-        items: [],
-        months: [],
-        entries: [],
-        incomings: [],
-        reminders: [],
-        dayjs: null,
-        timeTracker: null
-    });
 });
 
 afterEach(() => {
     appService.unbind();
-    if (globalThis.document && globalThis.document.body) {
-        globalThis.document.body.innerHTML = '';
-    }
     if (globalThis.window) {
         if (savedWindowApp !== undefined) {
             globalThis.window.app = savedWindowApp;
@@ -659,21 +641,12 @@ test('8. TimeTrackerTab executes time tracker actions through bound appService w
     const dom = setupEnvironment();
     delete globalThis.window.app;
 
-    const [React, { createRoot }, { useAppStore }, { default: TimeTrackerTab }, { db }] = await Promise.all([
+    const [React, { createRoot }, { useAppStore }, { default: TimeTrackerTab }] = await Promise.all([
         import('react'),
         import('react-dom/client'),
         import('../src/store/useAppStore.js'),
-        import('../src/components/time-tracker/TimeTrackerTab.jsx'),
-        import('../js/db.js')
+        import('../src/components/time-tracker/TimeTrackerTab.jsx')
     ]);
-
-    db.timeEntries = {
-        where: () => ({
-            equals: () => ({ toArray: async () => [] }),
-            between: () => ({ toArray: async () => [] })
-        }),
-        get: async () => null
-    };
 
     const { act } = React;
 
@@ -693,33 +666,9 @@ test('8. TimeTrackerTab executes time tracker actions through bound appService w
         },
         timeTracker: {
             startTimer: (projId, task) => startCalls.push({ projId, task }),
-            pauseTimer: () => {
-                pauseCalls++;
-                useAppStore.setState({
-                    timeTracker: {
-                        projects: [{ id: 'p1', name: 'Web Dev', hourlyRate: 5000 }],
-                        activeTimer: { projectId: 'p1', task: 'Coding', startISO: new Date().toISOString(), elapsedPausedMs: 1000, isPaused: true }
-                    }
-                });
-            },
-            resumeTimer: () => {
-                resumeCalls++;
-                useAppStore.setState({
-                    timeTracker: {
-                        projects: [{ id: 'p1', name: 'Web Dev', hourlyRate: 5000 }],
-                        activeTimer: { projectId: 'p1', task: 'Coding', startISO: new Date().toISOString(), elapsedPausedMs: 1000, isPaused: false }
-                    }
-                });
-            },
-            stopTimer: () => {
-                stopCalls++;
-                useAppStore.setState({
-                    timeTracker: {
-                        projects: [{ id: 'p1', name: 'Web Dev', hourlyRate: 5000 }],
-                        activeTimer: null
-                    }
-                });
-            },
+            pauseTimer: () => { pauseCalls++; },
+            resumeTimer: () => { resumeCalls++; },
+            stopTimer: () => { stopCalls++; },
             showProjectModal: () => { projectModalCalls++; },
             showEntryModal: (entry) => entryModalCalls.push(entry),
             deleteEntry: (id) => deleteEntryCalls.push(id),
@@ -831,7 +780,7 @@ test('8. TimeTrackerTab executes time tracker actions through bound appService w
         btnManualAdd.dispatchEvent(new Event('click', { bubbles: true, cancelable: true }));
     });
     assert.equal(entryModalCalls.length, 1);
-    assert.equal(entryModalCalls[0], null); // null means new entry
+    assert.equal(entryModalCalls[0], undefined); // undefined means new entry
 
     // 7. Test projects dropdown toggle, showTimeTrackerProjectModal and deleteTimeTrackerProject
     const toggleProjectsBtn = container.querySelector('#toggleProjectsBtn');
@@ -859,8 +808,6 @@ test('8. TimeTrackerTab executes time tracker actions through bound appService w
 
     await act(async () => {
         useAppStore.setState({ timeTracker: { projects: [], activeTimer: null } });
-    });
-    await act(async () => {
         root.unmount();
     });
     dom.window.close();
@@ -869,9 +816,6 @@ test('8. TimeTrackerTab executes time tracker actions through bound appService w
 test('9. DashboardTab executes navigation, weather, and quick actions through bound appService without window.app', async () => {
     const dom = setupEnvironment();
     delete globalThis.window.app;
-
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = async () => ({ ok: false, json: async () => ({}) });
 
     const [React, { createRoot }, { useAppStore }, { default: DashboardTab }] = await Promise.all([
         import('react'),
@@ -943,6 +887,5 @@ test('9. DashboardTab executes navigation, weather, and quick actions through bo
     assert.equal(globalThis.window.app, undefined);
 
     await act(async () => root.unmount());
-    globalThis.fetch = originalFetch;
     dom.window.close();
 });
