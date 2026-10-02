@@ -270,9 +270,7 @@ test('P3-E — WorkAppList -> appService.openWorkModal(id) passes exact selected
 
     const modalCalls = [];
     const fakeApp = {
-        workLogRenderer: {
-            openModal: (id) => modalCalls.push(id)
-        }
+        openWorkModal: (id) => modalCalls.push(id)
     };
 
     appService.bind(fakeApp);

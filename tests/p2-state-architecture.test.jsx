@@ -198,9 +198,7 @@ test('P2-E — WorkAppList -> appService.openWorkModal(id) -> WorkLogRenderer.op
 
     const openModalCalls = [];
     const fakeApp = {
-        workLogRenderer: {
-            openModal: (id) => openModalCalls.push(id)
-        }
+        openWorkModal: (id) => openModalCalls.push(id)
     };
 
     appService.bind(fakeApp);

@@ -24,6 +24,10 @@ function setupEnvironment() {
     globalThis.window.Dexie = Dexie;
     globalThis.window.indexedDB = globalThis.indexedDB;
     globalThis.window.IDBKeyRange = globalThis.IDBKeyRange;
+    globalThis.fetch = async () => ({
+        ok: true,
+        json: async () => ({ current_weather: { temperature: 20, weathercode: 0 } })
+    });
 
     // Ensure window.app is deleted for pure decoupling test
     delete globalThis.window.app;
@@ -247,11 +251,9 @@ test('10. HmiInputModal, CellEditorModal, WorkEditorModal, and AiEntryModal dele
             open: (id) => openModalCalls.push(id),
             close: (id) => closeModalCalls.push(id)
         },
-        workLogRenderer: {
-            closeModal: () => { closeWorkCalls++; },
-            handleDeleteWork: () => { deleteWorkCalls++; },
-            handleFormSubmit: (e) => { submitWorkCalls++; }
-        },
+        closeWorkModal: () => { closeWorkCalls++; },
+        deleteWorkLog: () => { deleteWorkCalls++; },
+        submitWorkForm: (e) => { submitWorkCalls++; },
         aiModal: {
             close: () => { closeAiCalls++; },
             analyze: async (text) => {
@@ -507,7 +509,7 @@ test('5. WorkAppHeader renders without window.app and routes actions through bou
     let workModalCalls = 0;
 
     const fakeApp = {
-        workLogRenderer: { openModal: () => { workModalCalls++; } }
+        openWorkModal: () => { workModalCalls++; }
     };
 
     appService.bind(fakeApp);
@@ -545,12 +547,11 @@ test('6. LandingApp renders without window.app and routes launch handlers throug
 
     const { act } = React;
 
-    let renderTableCalls = 0;
-    let renderWorkCalls = 0;
+    let costLaunched = false;
+    let workLaunched = false;
 
     const fakeApp = {
-        renderer: { renderTable: () => { renderTableCalls++; } },
-        workLogRenderer: { render: () => { renderWorkCalls++; } }
+        isBooted: true
     };
 
     appService.bind(fakeApp);
@@ -569,7 +570,7 @@ test('6. LandingApp renders without window.app and routes launch handlers throug
     await act(async () => {
         btnCost.dispatchEvent(new Event('click', { bubbles: true, cancelable: true }));
     });
-    assert.equal(renderTableCalls, 1);
+    assert.equal(localStorage.getItem('hmi_selected_module'), 'cost');
 
     await act(async () => root.unmount());
 
@@ -587,7 +588,7 @@ test('6. LandingApp renders without window.app and routes launch handlers throug
     await act(async () => {
         btnWork.dispatchEvent(new Event('click', { bubbles: true, cancelable: true }));
     });
-    assert.equal(renderWorkCalls, 1);
+    assert.equal(localStorage.getItem('hmi_selected_module'), 'work');
 
     await act(async () => root2.unmount());
     dom.window.close();
@@ -683,8 +684,6 @@ test('8. TimeTrackerTab executes time tracker actions through bound appService w
         startOf: () => ({ format: () => '2026-09-01' }),
         endOf: () => ({ format: () => '2026-09-30' })
     });
-
-    const fakeEntry = { id: 'entry-123', projectId: 'p1', durationMin: 60, earnings: 5000, task: 'Coding' };
 
     act(() => {
         useAppStore.setState({

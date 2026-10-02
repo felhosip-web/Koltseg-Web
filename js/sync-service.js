@@ -1225,18 +1225,6 @@ export class SyncService {
             app.updateReactStore?.();
             app.updateReminderStatus?.();
 
-            // Ha a charts tab aktív, frissítsük
-            if (app.activeTab === 'charts' && app.chartsRenderer) {
-                app.chartsRenderer.renderAll(app.currentFilter);
-            }
-
-            // Ha a statisztika tab aktív, frissítsük
-            if (app.activeTab === 'stats') {
-            }
-
-            // Reminder státusz frissítése
-            app.updateReminderStatus?.();
-
         } catch (e) {
             console.warn('[SYNC] UI frissítési hiba:', e);
         }

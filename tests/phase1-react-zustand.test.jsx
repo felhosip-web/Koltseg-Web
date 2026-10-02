@@ -47,7 +47,7 @@ test('IncomingTab reactively consumes Zustand incomings state and calls appServi
     let cellClickCalls = [];
 
     const fakeApp = {
-        incomingRenderer: {
+        incomingManager: {
             addNewEntry: () => { addNewEntryCalls++; },
             deleteColumn: (date) => { deleteColCalls.push(date); },
             deleteRow: (sender) => { deleteRowCalls.push(sender); },
