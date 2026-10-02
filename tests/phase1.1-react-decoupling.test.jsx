@@ -4,6 +4,7 @@ import { JSDOM } from 'jsdom';
 import Dexie from 'dexie';
 import 'fake-indexeddb/auto';
 import { appService } from '../src/services/appService.js';
+import { db } from '../js/db.js';
 
 function setupEnvironment() {
     const dom = new JSDOM(
@@ -17,6 +18,8 @@ function setupEnvironment() {
     globalThis.CustomEvent = dom.window.CustomEvent;
     globalThis.HTMLElement = dom.window.HTMLElement;
     globalThis.HTMLInputElement = dom.window.HTMLInputElement;
+    globalThis.HTMLSelectElement = dom.window.HTMLSelectElement;
+    globalThis.HTMLTextAreaElement = dom.window.HTMLTextAreaElement;
     globalThis.Node = dom.window.Node;
     globalThis.MutationObserver = dom.window.MutationObserver;
     globalThis.localStorage = dom.window.localStorage;
@@ -28,6 +31,15 @@ function setupEnvironment() {
         ok: true,
         json: async () => ({ current_weather: { temperature: 20, weathercode: 0 } })
     });
+
+    // Mock db.timeEntries to resolve immediately in tests
+    db.timeEntries = {
+        where: () => ({
+            between: () => ({
+                toArray: async () => []
+            })
+        })
+    };
 
     // Ensure window.app is deleted for pure decoupling test
     delete globalThis.window.app;
@@ -750,8 +762,8 @@ test('8. TimeTrackerTab executes time tracker actions through bound appService w
     const taskInput = container.querySelector('#timerTaskInput');
     assert.ok(selectProject && taskInput);
 
-    const selectSetter = Object.getOwnPropertyDescriptor(globalThis.HTMLSelectElement.prototype, 'value').set;
-    const inputSetter = Object.getOwnPropertyDescriptor(globalThis.HTMLInputElement.prototype, 'value').set;
+    const selectSetter = Object.getOwnPropertyDescriptor(dom.window.HTMLSelectElement.prototype, 'value').set;
+    const inputSetter = Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value').set;
 
     await act(async () => {
         selectSetter.call(selectProject, 'p1');

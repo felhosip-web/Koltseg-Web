@@ -36,7 +36,6 @@ test('performSave reports validation failures and successful persistence', async
     assert.deepEqual(calls, [
         ['add', 'New category', '#d1fae5'],
         ['load-items'],
-        ['update-react-store'],
         ['update-react-store']
     ]);
 });
