@@ -179,6 +179,8 @@ test('Test 2 — Sync Service updates React Zustand Store deterministically usin
     // Verify initial empty state
     assert.equal(useReactStore.getState().items.length, 0);
 
+    const initialSetSnapshotCalls = setSnapshotCalls;
+
     // Perform sync
     await act(async () => {
         await syncService.sync();
@@ -187,8 +189,8 @@ test('Test 2 — Sync Service updates React Zustand Store deterministically usin
     // Verify app-data-updated event was NOT dispatched by production updateReactStore()
     assert.equal(eventDispatched, false);
 
-    // Verify setSnapshot was called during sync
-    assert.ok(setSnapshotCalls > 0);
+    // Verify setSnapshot was called exactly twice during sync (status update & updateReactStore)
+    assert.equal(setSnapshotCalls, initialSetSnapshotCalls + 2);
 
     // Verify React Zustand store state
     const reactState = useReactStore.getState();

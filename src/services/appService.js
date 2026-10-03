@@ -346,10 +346,6 @@ export const appService = {
 
     /** Reminder actions */
     async createReminder(data) {
-        if (appInstance?.remindersApp?._handleNewReminder) {
-            return await appInstance.remindersApp._handleNewReminder(data);
-        }
-
         if (!data || !data.title || !data.title.trim()) {
             await appInstance?.hmiNotif?.showInfo?.('Hiányzó adatok', 'A határidő címe nem lehet üres!');
             return;
@@ -372,10 +368,6 @@ export const appService = {
     },
 
     async updateReminder(data) {
-        if (appInstance?.remindersApp?._updateReminder) {
-            return await appInstance.remindersApp._updateReminder(data);
-        }
-
         if (!data || !data.id) return;
         if (!data.title || !data.title.trim()) {
             await appInstance?.hmiNotif?.showInfo?.('Hiányzó adatok', 'A határidő címe nem lehet üres!');
@@ -408,10 +400,6 @@ export const appService = {
     },
 
     async deleteReminder(id) {
-        if (appInstance?.remindersApp?._handleDeleteReminder) {
-            return await appInstance.remindersApp._handleDeleteReminder(id);
-        }
-
         if (!appInstance?.reminderManager) return;
         const rem = appInstance.reminderManager.reminders.find(r => String(r.id) === String(id));
         if (!rem) return;
@@ -431,10 +419,6 @@ export const appService = {
     },
 
     async completeReminder(id) {
-        if (appInstance?.remindersApp?._handleCompleteReminder) {
-            return await appInstance.remindersApp._handleCompleteReminder(id);
-        }
-
         if (!appInstance?.reminderManager) return;
         const rem = appInstance.reminderManager.reminders.find(r => String(r.id) === String(id));
         if (!rem) return;

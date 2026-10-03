@@ -31,6 +31,7 @@ test('P5-A — Static Architecture Check: Zero obsolete Vanilla renderers in pro
         { pattern: /\bWorkLogRenderer\b/, name: 'WorkLogRenderer' },
         { pattern: /\bRemindersRenderer\b/, name: 'RemindersRenderer' },
         { pattern: /\bRemindersApp\b/, name: 'RemindersApp' },
+        { pattern: /\bremindersApp\b/, name: 'remindersApp' },
         { pattern: /\bchartsRenderer\b/, name: 'chartsRenderer' },
         { pattern: /\bapp\.renderer\b/, name: 'app.renderer' },
         { pattern: /\bincomingRenderer\b/, name: 'incomingRenderer' }

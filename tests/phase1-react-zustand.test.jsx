@@ -160,12 +160,30 @@ test('RemindersTab reactively consumes Zustand reminders state and calls appServ
     let completeReminderCalls = [];
 
     const fakeApp = {
-        remindersApp: {
-            _handleNewReminder: async (data) => { newReminderCalls.push(data); },
-            _updateReminder: async (data) => { updateReminderCalls.push(data); },
-            _handleDeleteReminder: async (id) => { deleteReminderCalls.push(id); },
-            _handleCompleteReminder: async (id) => { completeReminderCalls.push(id); }
-        }
+        reminderManager: {
+            reminders: [
+                {
+                    id: 'rem-101',
+                    title: 'Insurance Payment',
+                    amount: 25000,
+                    currency: 'HUF',
+                    due_date: '2026-10-01',
+                    frequency: 'yearly',
+                    completed: false
+                }
+            ],
+            db: { save: async (table, rem) => { updateReminderCalls.push(rem); } },
+            syncService: { push: async () => {} },
+            load: async () => {},
+            add: async (data) => { newReminderCalls.push(data); },
+            delete: async (id) => { deleteReminderCalls.push(id); },
+            markAsCompleted: async (id) => { completeReminderCalls.push(id); }
+        },
+        hmiNotif: {
+            showConfirm: async () => true,
+            showToast: () => {}
+        },
+        updateReactStore: () => {}
     };
 
     appService.bind(fakeApp);
