@@ -390,7 +390,11 @@ export const appService = {
                     updated_at: new Date().toISOString()
                 });
                 await appInstance.reminderManager.db.save('reminders', rem);
-                await appInstance.reminderManager.syncService.push('reminders', rem);
+                try {
+                    await appInstance.reminderManager.syncService.push('reminders', rem);
+                } catch (syncErr) {
+                    console.warn('[appService] Cloud push failed after local update save:', syncErr);
+                }
                 await appInstance.reminderManager.load();
                 appInstance.updateReactStore?.();
                 appInstance.updateReminderStatus?.();
