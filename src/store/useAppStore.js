@@ -15,6 +15,8 @@ export const useAppStore = create((set) => ({
     dayjs: null,
     eurRate: 400,
     lastSyncTime: null,
+    systemStatusText: 'Rendszer Online',
+    isSystemStatusError: false,
     isLoaded: false, // Segít a React-nek tudni, hogy megérkeztek-e az első adatok
 
     // UI Állapotok
@@ -29,6 +31,7 @@ export const useAppStore = create((set) => ({
     // UI Akciók
     setActiveTab: (tab) => set({ activeTab: tab }),
     setLastSyncTime: (lastSyncTime) => set({ lastSyncTime }),
+    setSystemStatus: (systemStatusText, isSystemStatusError = false) => set({ systemStatusText, isSystemStatusError }),
     generateTestData: async (count = 30) => {
         await appService.generateTestData(count);
     }

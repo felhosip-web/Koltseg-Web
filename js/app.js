@@ -14,7 +14,6 @@ import { UIModalController } from './ui-modal-controller.js';
 import { CellModalController } from './cell-modal-controller.js';
 import { InputModalController } from './input-modal-controller.js';
 import { AiModalController } from './ai-modal-controller.js';
-import { RemindersRenderer, RemindersApp } from './oop-reminders.js';
 import { StorageManager } from './storage-manager.js';
 import { BootManager } from './boot-manager.js';
 import { BackupManager } from './backup-manager.js';
@@ -33,7 +32,7 @@ import { ServiceDevManager } from './service-dev-manager.js';
 import { setupDebugConsole, initDebugPanel } from './debug-panel.js';
 import { LogManager } from './log-manager.js';
 import { SecurityGuard } from './security-guard.js';
-import { WorkLogManager, WorkLogRenderer } from './work-log.js';
+import { WorkLogManager } from './work-log.js';
 import { GoogleDriveBackup } from './gdrive-backup.js';
 import { ModalManager } from './modal-manager.js';
 import { ModuleManager } from './module-manager.js';
@@ -97,8 +96,6 @@ export class App {
         this.cellModal = new CellModalController(this);
         this.inputModal = new InputModalController(this);
         this.aiModal = new AiModalController(this);
-        this.remindersRenderer = new RemindersRenderer(this, this.hmiNotif);
-        this.remindersApp = new RemindersApp();
 
         // === 8. TOVÁBBI MENEDZSEREK ===
         this.backupManager = new BackupManager(this);
@@ -117,7 +114,6 @@ export class App {
 
         // === 9.5. MUNKA NYILVÁNTARTÁS ===
         this.workLogManager = new WorkLogManager(this.db, this.syncService);
-        this.workLogRenderer = new WorkLogRenderer(this, this.workLogManager);
 
         // === 9.6. TIME TRACKER ===
         this.timeTracker = new TimeTrackerModule(this);
@@ -150,7 +146,6 @@ export class App {
 
     async _initSyncManager() {
         try {
-        // const { SyncManager } = await import('./sync-manager.js');
             this.syncManager = new SyncManager(this);
         } catch (e) {
             console.log('[APP] SyncManager nem szükséges (csak kompatibilitás)');
@@ -190,9 +185,6 @@ export class App {
         console.log(`[VISIBILITY] Oldal rejtve → ${this.isDesktop() ? 'Desktop' : 'Mobile'} mód`);
         if (this.backgroundTasks) {
             this.backgroundTasks.pause?.();
-        }
-        if (this.isDesktop()) {
-            this.chartsRenderer?._destroyOldCharts?.();
         }
     }
 
@@ -380,6 +372,148 @@ export class App {
     }
 
     // ================================================================
+    // === SYSTEM STATUS & WORK LOG MODAL ORCHESTRATION ===
+    // ================================================================
+
+    setSystemStatus(text, isError = false) {
+        if (typeof useReactAppStore?.getState === 'function') {
+            useReactAppStore.getState().setSystemStatus(text, isError);
+        }
+    }
+
+    openWorkModal(id = null) {
+        const modal = document.getElementById('workEditorModal');
+        if (!modal) return;
+
+        const title = document.getElementById('workEditorTitle');
+        const idInput = document.getElementById('workIdInput');
+        const nameInput = document.getElementById('workNameInput');
+        const descInput = document.getElementById('workDescriptionInput');
+        const locInput = document.getElementById('workLocationInput');
+        const dateInput = document.getElementById('workDateInput');
+        const durInput = document.getElementById('workDurationInput');
+        const statusInput = document.getElementById('workStatusInput');
+        const btnDelete = document.getElementById('btnDeleteWork');
+
+        const workForm = document.getElementById('workForm');
+        if (workForm) workForm.reset();
+
+        if (id) {
+            const work = (this.workLogManager?.works || []).find(w => String(w.id) === String(id));
+            if (!work) return;
+
+            if (title) title.innerText = 'Munka bejegyzés szerkesztése';
+            if (idInput) idInput.value = work.id;
+            if (nameInput) nameInput.value = work.name || '';
+            if (descInput) descInput.value = work.description || '';
+            if (locInput) locInput.value = work.location || '';
+            if (dateInput) dateInput.value = work.date || '';
+            if (durInput) durInput.value = work.duration || 1;
+            if (statusInput) statusInput.value = work.status || 'folyamatban';
+            if (btnDelete) btnDelete.classList.remove('hidden');
+        } else {
+            if (title) title.innerText = 'Új munka rögzítése';
+            if (idInput) idInput.value = '';
+            if (dateInput) {
+                dateInput.value = new Date().toISOString().split('T')[0];
+            }
+            if (durInput) durInput.value = 1;
+            if (statusInput) statusInput.value = 'folyamatban';
+            if (btnDelete) btnDelete.classList.add('hidden');
+        }
+
+        const reactRoot = document.getElementById('workAppEditorRoot');
+        if (reactRoot) {
+            reactRoot.dispatchEvent(new CustomEvent('work-editor-open'));
+        } else {
+            modal.classList.remove('hidden');
+        }
+    }
+
+    closeWorkModal() {
+        const modal = document.getElementById('workEditorModal');
+        if (!modal) return;
+        const reactRoot = document.getElementById('workAppEditorRoot');
+        if (reactRoot) {
+            reactRoot.dispatchEvent(new CustomEvent('work-editor-close'));
+        } else {
+            modal.classList.add('hidden');
+        }
+    }
+
+    async submitWorkForm(event) {
+        if (event?.preventDefault) event.preventDefault();
+
+        const idInput = document.getElementById('workIdInput');
+        const nameInput = document.getElementById('workNameInput');
+        const descInput = document.getElementById('workDescriptionInput');
+        const locInput = document.getElementById('workLocationInput');
+        const dateInput = document.getElementById('workDateInput');
+        const durInput = document.getElementById('workDurationInput');
+        const statusInput = document.getElementById('workStatusInput');
+
+        if (!nameInput || !dateInput) {
+            this.hmiNotif?.showToast?.('❌ Hiba: Hiányzó űrlap elemek!', 'error');
+            return;
+        }
+
+        const nameValue = (nameInput.value || '').trim();
+        if (!nameValue) {
+            this.hmiNotif?.showToast?.('⚠️ Kérjük, adja meg a munka nevét!', 'warning');
+            return;
+        }
+
+        const workData = {
+            name: nameValue,
+            description: (descInput ? descInput.value : '').trim(),
+            location: (locInput ? locInput.value : '').trim(),
+            date: dateInput.value,
+            duration: Number(durInput ? durInput.value : 1) || 1,
+            status: statusInput ? statusInput.value : 'folyamatban'
+        };
+
+        if (idInput && idInput.value) {
+            workData.id = idInput.value;
+        }
+
+        try {
+            await this.workLogManager.save(workData);
+            this.updateReactStore();
+            this.closeWorkModal();
+            this.hmiNotif?.showToast?.('✅ Munka bejegyzés sikeresen mentve!', 'success');
+        } catch (err) {
+            console.error('[App] Hiba a munka mentése során:', err);
+            this.hmiNotif?.showToast?.('❌ Hiba történt a mentés során: ' + err.message, 'error');
+        }
+    }
+
+    async deleteWorkLog() {
+        const idInput = document.getElementById('workIdInput');
+        if (!idInput || !idInput.value) return;
+
+        const id = idInput.value;
+        const confirmed = await this.hmiNotif?.showConfirm?.({
+            title: '⚠️ Törlés megerősítése',
+            message: 'Biztosan törölni szeretné ezt a munka bejegyzést?',
+            type: 'danger',
+            confirmText: 'Törlés',
+            cancelText: 'Mégse'
+        });
+
+        if (!confirmed) return;
+
+        try {
+            await this.workLogManager.delete(id);
+            this.updateReactStore();
+            this.closeWorkModal();
+            this.hmiNotif?.showToast?.('🗑️ Munka bejegyzés sikeresen törölve!', 'success');
+        } catch (err) {
+            console.error('[App] Hiba a munka törlése során:', err);
+            this.hmiNotif?.showToast?.('❌ Hiba történt a törlés során: ' + err.message, 'error');
+        }
+    }
+
+    // ================================================================
     // === REACT SHARED API BRIDGE ===
     // ================================================================
 
@@ -388,11 +522,11 @@ export class App {
      * @returns {Object} Data snapshot
      */
     getAppSnapshot() {
-                const timeTracker = this.timeTracker;
-                const timeTrackerState = timeTracker ? {
-                    projects: timeTracker.projects || [],
-                    activeTimer: timeTracker.activeTimer || null
-                } : null;
+        const timeTracker = this.timeTracker;
+        const timeTrackerState = timeTracker ? {
+            projects: timeTracker.projects || [],
+            activeTimer: timeTracker.activeTimer || null
+        } : null;
         const safeJsonParse = (key, fallback = []) => {
             try {
                 const item = localStorage.getItem(key);
@@ -451,12 +585,9 @@ export class App {
         const hasInternet = isOnline && !this.isOfflineMode;
         
         const useSupabase = this.config?.useSupabase;
-        // Check if GDrive is active. A simple check is if we have gdriveBackup configured.
         const useGDrive = this.gdriveBackup && this.gdriveBackup.isConfigured && this.gdriveBackup.isConfigured();
-        
         const isLoggedIn = localStorage.getItem('googleUser') !== null;
         
-        // Update global network badges
         document.querySelectorAll('.global-network-badge').forEach(badge => {
             if (!hasInternet) {
                 badge.className = 'global-network-badge text-[10px] px-2 py-0.5 rounded-full bg-red-100 text-red-600 font-medium flex items-center gap-1 transition-colors';
@@ -480,7 +611,6 @@ export class App {
             eurLed.className = hasInternet ? 'w-3 h-3 rounded-full bg-blue-400' : 'w-3 h-3 rounded-full bg-red-400';
         }
 
-        // Update Supabase indicators
         document.querySelectorAll('.supabase-status-icon').forEach(icon => {
             if (!hasInternet) {
                 icon.className = 'supabase-status-icon w-5 h-5 flex items-center justify-center rounded-full bg-gray-100 text-gray-400 border border-transparent transition-all opacity-50';
@@ -494,7 +624,6 @@ export class App {
             }
         });
 
-        // Update GDrive indicators
         document.querySelectorAll('.gdrive-status-icon').forEach(icon => {
             if (!hasInternet) {
                 icon.className = 'gdrive-status-icon w-5 h-5 flex items-center justify-center rounded-full bg-gray-100 text-gray-400 border border-transparent transition-all opacity-50';
@@ -564,15 +693,8 @@ export class App {
         window.addEventListener('offline', this._offlineHandler);
         this._networkListenersAdded = true;
     }
-    
-// ================================================================
-// 3. RÉSZ: Tab kezelés, Dashboard render
-// ================================================================
-
-    
 
     updateReminderStatus() {
-        // Minimal fallback for reminder LED if needed, otherwise handled by React
         const reminders = this.reminderManager?.reminders || [];
         const today = dayjs();
         let overdue = 0, soon = 0;
@@ -607,21 +729,14 @@ export class App {
         }
     }
 
- // ================================================================
-// === CLEANUP (MÓDOSÍTVA) ===
-// ================================================================
-
 destroy() {
-    // === TAB KEZELÉS TAKARÍTÁSA ===
     this._cleanupTabs?.();
 
-    // === VISIBILITY HANDLER ELTÁVOLÍTÁSA ===
     if (this.visibilityHandler) {
         document.removeEventListener('visibilitychange', this.visibilityHandler);
         this.visibilityHandler = null;
     }
 
-    // === HÁLÓZATI ESEMÉNYEK ELTÁVOLÍTÁSA ===
     if (this._networkListenersAdded) {
         if (this._onlineHandler) {
             window.removeEventListener('online', this._onlineHandler);
@@ -634,11 +749,9 @@ destroy() {
         this._networkListenersAdded = false;
     }
 
-    // === SERVICE DEV MANAGER TAKARÍTÁSA ===
     if (this.serviceDev && typeof this.serviceDev.destroy === 'function') {
         console.log('[APP] 🧹 ServiceDevManager takarítása...');
         this.serviceDev.destroy();
-        // NE nullázzuk ki! this.serviceDev = null;
     }
 
     if (this.isShuttingDown) return;
@@ -647,14 +760,10 @@ destroy() {
     console.log('[APP] Alkalmazás takarítása indul...');
 
     try {
-        // Dashboard chart
         if (this._dashboardChart) {
             this._dashboardChart.destroy();
             this._dashboardChart = null;
         }
-
-        // Rendererek takarítása – NE nullázzuk ki a managereket!
-        this.chartsRenderer?.destroy?.();
 
         if (this.backgroundTasks && typeof this.backgroundTasks.destroy === 'function') {
             this.backgroundTasks.destroy();
@@ -675,19 +784,11 @@ destroy() {
     }
 }
 
-// ================================================================
-// === ÚJRATÖLTÉS (BIZTONSÁGOS VERZIÓ) ===
-// ================================================================
-
 async reload() {
     console.log('[APP] 🔄 Alkalmazás újratöltése...');
     this.hmiNotif.showToast('Újratöltés...', 'info');
     
-    // Ne hívjuk meg a destroy-t, hogy a komponensek ne nullázódjanak ki
-    // this.destroy(); // ← EZT KI KELL VENNI VAGY MÓDOSÍTANI!
-    
     try {
-        // Biztonságos betöltés – csak a létező komponenseket töltjük
         const loadPromises = [];
         
         if (this.items && typeof this.items.load === 'function') {
@@ -708,13 +809,12 @@ async reload() {
         if (this.incomingManager && typeof this.incomingManager.load === 'function') {
             loadPromises.push(this.incomingManager.load());
         }
+        if (this.workLogManager && typeof this.workLogManager.load === 'function') {
+            loadPromises.push(this.workLogManager.load());
+        }
         
         await Promise.all(loadPromises);
 
-        // UI frissítések (React kezeli)
-        
-        this.remindersRenderer?.renderList?.();
-        
         this.updateReactStore();
         
         if (typeof this.updateReminderStatus === 'function') {
@@ -1082,10 +1182,7 @@ async reload() {
 // ================================================================
 
 async function initApp() {
-    // Elsőként aktiváljuk a konzol patchelést
     setupDebugConsole();
-    
-    // Debug panel indítása
     setTimeout(initDebugPanel, 1200);
 
     const app = new App();
@@ -1113,8 +1210,6 @@ async function initApp() {
         let orphans = 0;
         let badCellKeys = 0;
         let missingExplicitFields = 0;
-
-
 
         entries.forEach(e => {
             if (!e.itemId || !e.month) missingExplicitFields++;

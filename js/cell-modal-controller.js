@@ -317,7 +317,7 @@ export class CellModalController {
         this.app.updateReactStore?.();
         
         // Státusz frissítése a láblécben
-        this.app.renderer?.updateFooterStatus('Adatok sikeresen mentve', false);
+        this.app.setSystemStatus?.('Adatok sikeresen mentve', false);
     }
 
     _normalizeColor(color) {

@@ -8,7 +8,7 @@ export class DataSyncController {
      * Teljes szinkronizáció (felhasználó által indított)
      */
     async forceSync() {
-        this.app.renderer?.updateFooterStatus('🔄 Szinkronizáció folyamatban...', false);
+        this.app.setSystemStatus?.('🔄 Szinkronizáció folyamatban...', false);
 
         const syncService = this.app.syncService || this.app.syncManager;
         const previousReport = syncService?.lastReport;
@@ -67,10 +67,10 @@ export class DataSyncController {
 
             if (result.errors && result.errors.length > 0) {
                 this.app.hmiNotif?.showToast?.(`⚠️ Részleges szinkronizáció (${result.errors.length} hiba)`, 'warning');
-                this.app.renderer?.updateFooterStatus(`⚠️ Szinkronizálva (hibákkal): ${syncTime}`);
+                this.app.setSystemStatus?.(`⚠️ Szinkronizálva (hibákkal): ${syncTime}`, false);
             } else {
                 this.app.hmiNotif?.showToast?.(`✅ Szinkronizáció sikeres! (${syncTime})`, 'success');
-                this.app.renderer?.updateFooterStatus(`✅ Szinkronizálva: ${syncTime}`);
+                this.app.setSystemStatus?.(`✅ Szinkronizálva: ${syncTime}`, false);
             }
 
             console.log('[SYNC] Sikeres szinkronizáció', result);
@@ -93,7 +93,7 @@ export class DataSyncController {
                 });
             }
 
-            this.app.renderer?.updateFooterStatus('❌ Szinkronizációs hiba!', true);
+            this.app.setSystemStatus?.('❌ Szinkronizációs hiba!', true);
             throw err;
         }
     }

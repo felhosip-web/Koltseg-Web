@@ -4,11 +4,13 @@ import { useAppStore } from './store/useAppStore.js';
 /**
  * Footer component displaying system status, save indicators, and app version.
  * Shows a save status LED, last save timestamp, and version information with debug toggle button.
- * Reads lastSyncTime reactively from the Zustand store.
+ * Reads lastSyncTime and systemStatusText reactively from the Zustand store.
  * @returns {JSX.Element} The footer component
  */
 export default function CostAppFooter() {
     const lastSyncTime = useAppStore(state => state.lastSyncTime);
+    const systemStatusText = useAppStore(state => state.systemStatusText || 'Rendszer Online');
+    const isSystemStatusError = useAppStore(state => state.isSystemStatusError || false);
 
     let formattedSave = 'Soha';
     if (lastSyncTime) {
@@ -22,14 +24,17 @@ export default function CostAppFooter() {
         }
     }
 
+    const ledBgClass = isSystemStatusError ? 'bg-red-500' : 'bg-emerald-500';
+
     return (
         <footer
             className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-4 py-2 text-xs text-gray-600 flex items-center justify-between z-40">
             <div className="flex items-center gap-2">
                 <span id="saveLed"
-                    className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-sm transition-all duration-300"></span>
-                <span id="saveStatusText" className="font-mono uppercase tracking-wider text-[10px] text-gray-500">Rendszer
-                    Online</span>
+                    className={`w-2.5 h-2.5 rounded-full ${ledBgClass} shadow-sm transition-all duration-300`}></span>
+                <span id="saveStatusText" className="font-mono uppercase tracking-wider text-[10px] text-gray-500">
+                    {systemStatusText}
+                </span>
             </div>
             <div className="font-mono text-[10px] text-gray-400">
                 Utolsó mentés: <span id="lastSaveTime">{formattedSave}</span>

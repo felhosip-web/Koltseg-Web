@@ -117,10 +117,8 @@ export class RemoteConfigManager {
         // ========================================================
         // === ÚJ: UI FRISSÍTÉS ===
         // ========================================================
-        if (this.app.renderer?.updateFooterStatus) {
-            const status = useCloud ? '☁️ Felhő: aktív' : '☁️ Felhő: kikapcsolva';
-            this.app.renderer?.updateFooterStatus(status, false);
-        }
+        const status = useCloud ? '☁️ Felhő: aktív' : '☁️ Felhő: kikapcsolva';
+        this.app.setSystemStatus?.(status, false);
         
         // Supabase státusz frissítés
         if (this.app.updateOnlineStatus) {

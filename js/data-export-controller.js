@@ -58,7 +58,7 @@ export class DataExportController {
      * @returns {Promise<void>}
      */
     async exportExcel() {
-        this.app.renderer?.updateFooterStatus('Részletes Excel generálása...', false);
+        this.app.setSystemStatus?.('Részletes Excel generálása...', false);
 
         try {
             const { entries, items, months } = this._getData();
@@ -89,12 +89,12 @@ export class DataExportController {
             XLSX.writeFile(wb, `koltseg_nyilvantartas_${new Date().toISOString().slice(0,10)}.xlsx`);
 
             this.app.hmiNotif.showToast('✅ Excel fájl letöltve!', 'success');
-            this.app.renderer?.updateFooterStatus('Excel export kész', false);
+            this.app.setSystemStatus?.('Excel export kész', false);
 
         } catch (err) {
             console.error('[EXCEL ERROR]', err);
             await this.app.hmiNotif.showInfo('❌ Excel generálási hiba', err.message || 'Ismeretlen hiba');
-            this.app.renderer?.updateFooterStatus('Excel hiba!', true);
+            this.app.setSystemStatus?.('Excel hiba!', true);
         }
     }
 
@@ -104,7 +104,7 @@ export class DataExportController {
      * @returns {Promise<void>}
      */
     async exportPdf() {
-        this.app.renderer?.updateFooterStatus('Részletes PDF generálása...', false);
+        this.app.setSystemStatus?.('Részletes PDF generálása...', false);
 
         try {
             const { entries, items, months } = this._getData();
@@ -150,12 +150,12 @@ export class DataExportController {
             doc.save(`koltseg_nyilvantartas_${new Date().toISOString().slice(0,10)}.pdf`);
 
             this.app.hmiNotif.showToast('✅ PDF fájl letöltve!', 'success');
-            this.app.renderer?.updateFooterStatus('PDF export kész', false);
+            this.app.setSystemStatus?.('PDF export kész', false);
 
         } catch (err) {
             console.error('[PDF ERROR]', err);
             await this.app.hmiNotif.showInfo('❌ PDF generálási hiba', err.message || 'Ismeretlen hiba');
-            this.app.renderer?.updateFooterStatus('PDF hiba!', true);
+            this.app.setSystemStatus?.('PDF hiba!', true);
         }
     }
 
@@ -165,7 +165,7 @@ export class DataExportController {
      * @returns {Promise<void>}
      */
     async exportJson() {
-        this.app.renderer?.updateFooterStatus('Teljes JSON backup készítése...', false);
+        this.app.setSystemStatus?.('Teljes JSON backup készítése...', false);
 
         try {
             const backupData = this._buildBackupData();
@@ -177,7 +177,7 @@ export class DataExportController {
             anchor.click();
 
             this.app.hmiNotif.showToast('✅ JSON backup letöltve!', 'success');
-            this.app.renderer?.updateFooterStatus('JSON export kész', false);
+            this.app.setSystemStatus?.('JSON export kész', false);
 
         } catch (err) {
             console.error('[JSON EXPORT ERROR]', err);
@@ -437,7 +437,7 @@ export class DataExportController {
 
     // ==================== WORK LOG EXPORT ====================
     async exportWorkExcel() {
-        this.app.renderer?.updateFooterStatus('Munka Excel generálása...', false);
+        this.app.setSystemStatus?.('Munka Excel generálása...', false);
         try {
             const entries = this.app.incomings?.entries || [];
             if (entries.length === 0) {
@@ -472,7 +472,7 @@ export class DataExportController {
             
             const dateStr = new Date().toISOString().split('T')[0];
             XLSX.writeFile(wb, `Munka_Nyilvantartas_${dateStr}.xlsx`);
-            this.app.renderer?.updateFooterStatus('Munka Excel export kész', false);
+            this.app.setSystemStatus?.('Munka Excel export kész', false);
         } catch (err) {
             console.error('Work Excel Export error:', err);
             await this.app.hmiNotif.showInfo('❌ Export hiba', err.message || 'Hiba a Munka Excel generálásakor');
@@ -480,7 +480,7 @@ export class DataExportController {
     }
 
     async exportWorkPdf() {
-        this.app.renderer?.updateFooterStatus('Munka PDF generálása...', false);
+        this.app.setSystemStatus?.('Munka PDF generálása...', false);
         try {
             const entries = this.app.incomings?.entries || [];
             if (entries.length === 0) {
@@ -530,7 +530,7 @@ export class DataExportController {
             });
 
             doc.save(`Munka_Nyilvantartas_${dateStr}.pdf`);
-            this.app.renderer?.updateFooterStatus('Munka PDF export kész', false);
+            this.app.setSystemStatus?.('Munka PDF export kész', false);
         } catch (err) {
             console.error('Work PDF Export error:', err);
             await this.app.hmiNotif.showInfo('❌ Export hiba', err.message || 'Hiba a Munka PDF generálásakor');
@@ -554,7 +554,7 @@ export class DataExportController {
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
-            this.app.renderer?.updateFooterStatus('Munka JSON export kész', false);
+            this.app.setSystemStatus?.('Munka JSON export kész', false);
         } catch (err) {
             console.error('Work JSON export error:', err);
             await this.app.hmiNotif.showInfo('❌ JSON export hiba', err.message || 'Ismeretlen hiba');
@@ -589,7 +589,7 @@ export class DataExportController {
                             }
                         }
                         await this.app.hmiNotif.showInfo('Sikeres importálás', 'Munka adatok sikeresen betöltve!');
-                        this.app.workLogRenderer?.render?.();
+                        this.app.updateReactStore?.();
                     }
                 } catch (err) {
                     console.error('Work JSON import error:', err);

@@ -715,7 +715,11 @@ export class ReminderManager {
         rem.updated_at = new Date().toISOString();
 
         await this.db.save('reminders', rem);
-        await this.syncService.push('reminders', rem);
+        try {
+            await this.syncService.push('reminders', rem);
+        } catch (syncErr) {
+            console.warn('[ReminderManager] Cloud push failed after local completion save:', syncErr);
+        }
 
         // Ha ismétlődő határidő, akkor léptetjük a dátumot a következő alkalomra
         if (rem.frequency && rem.frequency !== 'once') {
@@ -730,7 +734,11 @@ export class ReminderManager {
             rem.updated_at = new Date().toISOString();
             
             await this.db.save('reminders', rem);
-            await this.syncService.push('reminders', rem);
+            try {
+                await this.syncService.push('reminders', rem);
+            } catch (syncErr) {
+                console.warn('[ReminderManager] Cloud push failed after recurring reminder save:', syncErr);
+            }
         }
 
         this.reminders = await this.db.getAll('reminders');

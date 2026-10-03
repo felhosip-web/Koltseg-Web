@@ -5,6 +5,7 @@ import Dexie from 'dexie';
 import 'fake-indexeddb/auto';
 import { Database, ItemManager, MonthManager, EntryManager } from '../js/oop-core.js';
 import { SyncService } from '../js/sync-service.js';
+import { appService } from '../src/services/appService.js';
 
 test('Test 1 — EntryManager.load() synthesizes cellKey when missing but preserves existing cellKey', async () => {
     const dom = new JSDOM(`<!DOCTYPE html><html><body><div id="root"></div></body></html>`, {
@@ -154,7 +155,8 @@ test('Test 2 — Sync Service updates React Zustand Store deterministically usin
         updateReminderStatus: () => {}
     });
 
-    window.app = app;
+    appService.bind(app);
+    delete globalThis.window.app;
     syncService.setApp(app);
 
     // Verify production App method exists and is a function
@@ -174,11 +176,10 @@ test('Test 2 — Sync Service updates React Zustand Store deterministically usin
         );
     });
 
-    // Initial mount call count
-    const initialSetSnapshotCalls = setSnapshotCalls;
-
     // Verify initial empty state
     assert.equal(useReactStore.getState().items.length, 0);
+
+    const initialSetSnapshotCalls = setSnapshotCalls;
 
     // Perform sync
     await act(async () => {
@@ -188,8 +189,8 @@ test('Test 2 — Sync Service updates React Zustand Store deterministically usin
     // Verify app-data-updated event was NOT dispatched by production updateReactStore()
     assert.equal(eventDispatched, false);
 
-    // Verify setSnapshot was called exactly ONCE during sync (initialSetSnapshotCalls + 1)
-    assert.equal(setSnapshotCalls, initialSetSnapshotCalls + 1);
+    // Verify setSnapshot was called exactly twice during sync (status update & updateReactStore)
+    assert.equal(setSnapshotCalls, initialSetSnapshotCalls + 2);
 
     // Verify React Zustand store state
     const reactState = useReactStore.getState();

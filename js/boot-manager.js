@@ -51,9 +51,7 @@ export class BootManager {
     async _runBackgroundBootTasks() {
         console.log('[BOOT-BACKGROUND] Háttér adatbetöltés indítása...');
         try {
-            if (typeof this.app.renderer?.updateFooterStatus === 'function') {
-                this.app.renderer?.updateFooterStatus('Adatok töltődnek...', true);
-            }
+            this.app.setSystemStatus?.('Adatok töltődnek...', false);
 
             await this._loadAllData();
 
@@ -61,11 +59,8 @@ export class BootManager {
             // UI frissítése az adatok betöltése után
             this.app.updateReactStore?.();
             this.app.updateReminderStatus?.();
-            this.app.workLogRenderer?.render?.();
 
-            if (typeof this.app.renderer?.updateFooterStatus === 'function') {
-                this.app.renderer?.updateFooterStatus('Adatok betöltve', false);
-            }
+            this.app.setSystemStatus?.('Adatok betöltve', false);
 
             // További háttérfolyamatok: felhő, szinkronizáció, backup
             console.log('[BOOT-BACKGROUND] Felhő és szinkronizáció indítása...');
@@ -74,22 +69,16 @@ export class BootManager {
                 await this._syncData();
                 await this._initBackup();
 
-                if (typeof this.app.renderer?.updateFooterStatus === 'function') {
-                    this.app.renderer?.updateFooterStatus('Minden rendszer üzemkész', false);
-                }
+                this.app.setSystemStatus?.('Minden rendszer üzemkész', false);
             } catch (serviceError) {
                 console.error('[BOOT-BACKGROUND] Hiba a háttérszolgáltatások (felhő/szinkron/backup) indításakor:', serviceError);
-                if (typeof this.app.renderer?.updateFooterStatus === 'function') {
-                    this.app.renderer?.updateFooterStatus('Háttérszolgáltatási hiba', false);
-                }
+                this.app.setSystemStatus?.('Háttérszolgáltatási hiba', false);
             }
 
         } catch (error) {
             console.error('[BOOT-BACKGROUND] Hiba a háttérbetöltés során:', error);
             this.app.hmiNotif?.showToast('Az adatok betöltése nem sikerült!', 'error');
-            if (typeof this.app.renderer?.updateFooterStatus === 'function') {
-                this.app.renderer?.updateFooterStatus('Adatbetöltési hiba', false);
-            }
+            this.app.setSystemStatus?.('Adatbetöltési hiba', true);
         }
     }
 
@@ -109,8 +98,6 @@ export class BootManager {
                 this.app.pluginStorage?.init?.(),
                 this.app.workLogManager?.load?.()
             ]);
-            // A sikeres toast-ot kivettük, hogy ne zavarja a felhasználót induláskor,
-            // de az állapotot (Minden rendszer üzemkész) a footer jelzi.
         } finally {
             // Data loading complete
         }
@@ -121,10 +108,6 @@ export class BootManager {
      * @returns {Promise<void>}
      */
     async _initUI() {
-        if (this.app.remindersApp) {
-            await this.app.remindersApp.boot(this.app);
-        }
-        
         this.app.updateReactStore?.();
         this.app.updateReminderStatus?.();
 
@@ -153,7 +136,6 @@ export class BootManager {
         } else if (savedModule === 'work') {
             if (landing) landing.classList.add('hidden');
             if (workApp) workApp.classList.remove('hidden');
-            this.app.workLogRenderer?.render?.();
         }
 
         if (btnLaunchCost) {
@@ -169,7 +151,6 @@ export class BootManager {
                 if (landing) landing.classList.add('hidden');
                 if (workApp) workApp.classList.remove('hidden');
                 localStorage.setItem('hmi_selected_module', 'work');
-                this.app.workLogRenderer?.render?.();
             });
         }
 
