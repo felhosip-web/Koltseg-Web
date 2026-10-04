@@ -385,6 +385,18 @@ export class App {
         const modal = document.getElementById('workEditorModal');
         if (!modal) return;
 
+        let workToEdit = null;
+        if (id) {
+            workToEdit = (this.workLogManager?.works || []).find(w => String(w.id) === String(id));
+            if (!workToEdit) {
+                this.hmiNotif?.showToast?.('⚠️ A megadott munka bejegyzés nem található.', 'warning');
+                return;
+            }
+        }
+
+        const workForm = document.getElementById('workForm');
+        if (workForm) workForm.reset();
+
         const title = document.getElementById('workEditorTitle');
         const idInput = document.getElementById('workIdInput');
         const nameInput = document.getElementById('workNameInput');
@@ -395,21 +407,15 @@ export class App {
         const statusInput = document.getElementById('workStatusInput');
         const btnDelete = document.getElementById('btnDeleteWork');
 
-        const workForm = document.getElementById('workForm');
-        if (workForm) workForm.reset();
-
-        if (id) {
-            const work = (this.workLogManager?.works || []).find(w => String(w.id) === String(id));
-            if (!work) return;
-
+        if (workToEdit) {
             if (title) title.innerText = 'Munka bejegyzés szerkesztése';
-            if (idInput) idInput.value = work.id;
-            if (nameInput) nameInput.value = work.name || '';
-            if (descInput) descInput.value = work.description || '';
-            if (locInput) locInput.value = work.location || '';
-            if (dateInput) dateInput.value = work.date || '';
-            if (durInput) durInput.value = work.duration || 1;
-            if (statusInput) statusInput.value = work.status || 'folyamatban';
+            if (idInput) idInput.value = workToEdit.id;
+            if (nameInput) nameInput.value = workToEdit.name || '';
+            if (descInput) descInput.value = workToEdit.description || '';
+            if (locInput) locInput.value = workToEdit.location || '';
+            if (dateInput) dateInput.value = workToEdit.date || '';
+            if (durInput) durInput.value = workToEdit.duration || 1;
+            if (statusInput) statusInput.value = workToEdit.status || 'folyamatban';
             if (btnDelete) btnDelete.classList.remove('hidden');
         } else {
             if (title) title.innerText = 'Új munka rögzítése';

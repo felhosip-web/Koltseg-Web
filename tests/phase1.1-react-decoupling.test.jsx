@@ -315,7 +315,7 @@ test('10. HmiInputModal, CellEditorModal, WorkEditorModal, and AiEntryModal dele
 
     await act(async () => {
         saveBtn.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true }));
-        await new Promise(resolve => setTimeout(resolve, 50));
+        await Promise.resolve();
     });
     assert.equal(inputSaveCalls.length, 1);
     assert.deepEqual(inputSaveCalls[0], { type: 'item', val: 'Új kategória', col: '#dbeafe' });
@@ -383,9 +383,7 @@ test('10. HmiInputModal, CellEditorModal, WorkEditorModal, and AiEntryModal dele
     assert.ok(btnAnalyze);
     await act(async () => {
         btnAnalyze.dispatchEvent(new Event('click', { bubbles: true, cancelable: true }));
-    });
-    await act(async () => {
-        await new Promise(resolve => setTimeout(resolve, 50));
+        await Promise.resolve();
     });
     assert.deepEqual(analyzeAiCalls, ['5000 Ft ebédre']);
 
@@ -393,9 +391,7 @@ test('10. HmiInputModal, CellEditorModal, WorkEditorModal, and AiEntryModal dele
     assert.ok(btnConfirm, 'btnConfirm should exist after analyze');
     await act(async () => {
         btnConfirm.dispatchEvent(new Event('click', { bubbles: true, cancelable: true }));
-    });
-    await act(async () => {
-        await new Promise(resolve => setTimeout(resolve, 50));
+        await Promise.resolve();
     });
     assert.equal(confirmAiCalls.length, 1);
     assert.deepEqual(confirmAiCalls[0], { amount: 5000, currency: 'HUF', paymentMethod: 'Kártya', category: 'Élelmiszer', month: '2026-09' });
