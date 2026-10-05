@@ -173,7 +173,7 @@ test('P2-D — App.prototype.updateReactStore updates React Zustand store determ
     dom.window.close();
 });
 
-test('P2-E — WorkAppList -> appService.openWorkModal(id) -> WorkLogRenderer.openModal(id) preserves selected work ID', async () => {
+test('P2-E — WorkAppList -> appService.openWorkModal(id) -> App.openWorkModal(id) preserves selected work ID', async () => {
     const dom = new JSDOM(`<!DOCTYPE html><html><body><div id="root"></div></body></html>`, {
         url: 'http://localhost/'
     });

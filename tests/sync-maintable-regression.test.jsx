@@ -97,6 +97,7 @@ test('Test 2 — Sync Service updates React Zustand Store deterministically usin
         isLoaded: false,
         setSnapshot: (snapshot) => {
             setSnapshotCalls++;
+            console.log('[SPY setSnapshot] Call #', setSnapshotCalls, new Error().stack);
             originalSetSnapshot(snapshot);
         }
     });
