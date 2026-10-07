@@ -825,11 +825,7 @@ export class SyncService {
             console.log('[SYNC] 💾 Szelektív Helyi adatbázis frissítése...');
             await this._saveMergedToLocal(mergedData);
 
-            // === 7. MEMÓRIA ÉS UI FRISSÍTÉS ===
-            console.log('[SYNC] 🔄 Memória és UI frissítése...');
-            await this._reloadAndRender();
-
-            // === 8. QUEUE EGYEZTETÉS ÉS FELDOLGOZÁS (PUSH) ===
+            // === 7. QUEUE EGYEZTETÉS ÉS FELDOLGOZÁS (PUSH) ===
             console.log('[SYNC] 📋 Queue egyeztetése és feldolgozása (Push)...');
             this._reconcileQueueWithMergeResult(mergedData, failedTables);
 
@@ -842,7 +838,7 @@ export class SyncService {
                 results.errors.push({ operation: 'queue', error: `${queueResult.failed} elem sikertelen` });
             }
 
-            // === 8.5. SZELEKTÍV FELTÖLTÉS (Push): CSAK a helyben módosult/új adatokat töltjük fel! ===
+            // === 7.5. SZELEKTÍV FELTÖLTÉS (Push): CSAK a helyben módosult/új adatokat töltjük fel! ===
             console.log('[SYNC] ⬆️ Szelektív Push: CSAK a helyben módosult vagy új adatok feltöltése...');
             
             for (const table of tables) {
@@ -881,7 +877,7 @@ export class SyncService {
                 console.log(`[SYNC] ✅ ${table}: ${pushedCount} új/módosult elem feltöltve a felhőbe (összesen vizsgált: ${items.length})`);
             }
 
-            // === 9. BEFEJEZÉS ===
+            // === 8. BEFEJEZÉS ÉS CHECKPOINT ===
             const isFullSuccess = results.errors.length === 0;
             const completionTime = new Date();
 
@@ -892,10 +888,6 @@ export class SyncService {
                     localStorage.setItem('hmi_lastSyncTime', completionTime.toISOString());
                     this.lastSyncTime = completionTime;
                     results.checkpointUpdated = true;
-                    const appInstance = this._getApp();
-                    if (appInstance && typeof appInstance.updateReactStore === 'function') {
-                        appInstance.updateReactStore();
-                    }
                 } catch (e) {
                     console.warn('[SYNC] Nem sikerült elmenteni a hmi_lastSyncTime-ot:', e);
                     results.checkpointUpdated = false;
@@ -904,6 +896,10 @@ export class SyncService {
             } else {
                 console.warn(`[SYNC] ⚠️ Szinkronizáció befejeződött, de ${results.errors.length} hiba történt. "lastSyncTime" nem került frissítésre.`);
             }
+
+            // === 9. MEMÓRIA ÉS UI FRISSÍTÉS (SINGLE DETERMINISTIC STORE UPDATE) ===
+            console.log('[SYNC] 🔄 Memória és UI frissítése...');
+            await this._reloadAndRender();
 
             results.endTime = completionTime.toISOString();
             results.duration = (new Date(results.endTime) - new Date(results.startTime)) / 1000 + 's';
@@ -1223,18 +1219,6 @@ export class SyncService {
             ]);
 
             app.updateReactStore?.();
-            app.updateReminderStatus?.();
-
-            // Ha a charts tab aktív, frissítsük
-            if (app.activeTab === 'charts' && app.chartsRenderer) {
-                app.chartsRenderer.renderAll(app.currentFilter);
-            }
-
-            // Ha a statisztika tab aktív, frissítsük
-            if (app.activeTab === 'stats') {
-            }
-
-            // Reminder státusz frissítése
             app.updateReminderStatus?.();
 
         } catch (e) {

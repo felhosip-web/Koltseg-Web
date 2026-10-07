@@ -44,6 +44,15 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           # package.json-ban lévő "size-limit" configot használja
 
+      # Restore PR checkout if size-limit-action switched branch to main
+      - name: Restore PR branch checkout after size-limit
+        if: always()
+        run: |
+          git checkout -f ${{ github.sha }}
+          echo "=== PR CHECKOUT RESTORED ==="
+          git rev-parse HEAD
+          git status --short
+
       # Fallback a te eredeti check-ed, ha nincs size-limit config
       - name: Bundle size fallback check
         if: failure()
@@ -54,9 +63,9 @@ jobs:
             echo "::warning::Bundle larger than 5MB (${SIZE}KB)"
           fi
 
-      # --- 3. TESZT + CODECOV (ha van npm test) ---
+      # --- 3. TESZT + CODECOV ---
       - name: Tesztek futtatása coverage-el
-        run: npm test -- --coverage --watchAll=false || echo "Nincs test script, skip"
+        run: npm test -- --coverage --watchAll=false
         
       - name: Codecov feltöltés
         uses: codecov/codecov-action@v4

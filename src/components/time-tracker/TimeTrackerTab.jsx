@@ -4,7 +4,10 @@ import { useAppStore } from '../../store/useAppStore.js';
 import { appService } from '../../services/appService.js';
 
 export default function TimeTrackerTab() {
-    const snapshot = useAppStore();
+    const isLoaded = useAppStore(state => state.isLoaded);
+    const timeTracker = useAppStore(state => state.timeTracker);
+    const dayjs = useAppStore(state => state.dayjs);
+
     const [projects, setProjects] = useState([]);
     const [activeTimer, setActiveTimer] = useState(null);
     const [todayEntries, setTodayEntries] = useState([]);
@@ -23,17 +26,17 @@ export default function TimeTrackerTab() {
     const [taskName, setTaskName] = useState('');
 
     useEffect(() => {
-        if (!snapshot || !snapshot.isLoaded) return;
+        if (!isLoaded) return;
         
-        if (snapshot.timeTracker) {
-            setProjects(snapshot.timeTracker.projects || []);
-            setActiveTimer(snapshot.timeTracker.activeTimer || null);
+        if (timeTracker) {
+            setProjects(timeTracker.projects || []);
+            setActiveTimer(timeTracker.activeTimer || null);
         }
 
         const loadDbData = async () => {
-            if (snapshot.dayjs) {
+            if (dayjs) {
                 try {
-                    const today = snapshot.dayjs().format('YYYY-MM-DD');
+                    const today = dayjs().format('YYYY-MM-DD');
                     const entries = await db.timeEntries.where('date').equals(today).toArray();
 
                     let todayMinutes = 0;
@@ -43,8 +46,8 @@ export default function TimeTrackerTab() {
                         todayEarnings += e.earnings;
                     });
 
-                    const startOfWeek = snapshot.dayjs().startOf('week').format('YYYY-MM-DD');
-                    const endOfWeek = snapshot.dayjs().endOf('week').format('YYYY-MM-DD');
+                    const startOfWeek = dayjs().startOf('week').format('YYYY-MM-DD');
+                    const endOfWeek = dayjs().endOf('week').format('YYYY-MM-DD');
                     const weekEntries = await db.timeEntries.where('date').between(startOfWeek, endOfWeek, true, true).toArray();
                     let weekMinutes = 0;
                     let weekEarnings = 0;
@@ -53,8 +56,8 @@ export default function TimeTrackerTab() {
                         weekEarnings += e.earnings;
                     });
 
-                    const startOfMonth = snapshot.dayjs().startOf('month').format('YYYY-MM-DD');
-                    const endOfMonth = snapshot.dayjs().endOf('month').format('YYYY-MM-DD');
+                    const startOfMonth = dayjs().startOf('month').format('YYYY-MM-DD');
+                    const endOfMonth = dayjs().endOf('month').format('YYYY-MM-DD');
                     const monthEntries = await db.timeEntries.where('date').between(startOfMonth, endOfMonth, true, true).toArray();
                     let monthMinutes = 0;
                     let monthEarnings = 0;
@@ -79,7 +82,7 @@ export default function TimeTrackerTab() {
         };
         
         loadDbData();
-    }, [snapshot]);
+    }, [isLoaded, timeTracker, dayjs]);
 
     useEffect(() => {
         let interval;
@@ -100,6 +103,9 @@ export default function TimeTrackerTab() {
 
             updateTimerStr();
             interval = setInterval(updateTimerStr, 1000);
+            if (interval && typeof interval.unref === 'function') {
+                interval.unref();
+            }
         } else {
             setTimerString('00:00:00');
         }

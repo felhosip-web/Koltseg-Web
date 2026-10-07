@@ -44,6 +44,19 @@ export const appService = {
     },
 
     /**
+     * Updates system status in the React Zustand store and app instance.
+     * @param {string} text Status text
+     * @param {boolean} isError Whether this represents an error state
+     */
+    updateFooterStatus(text, isError = false) {
+        if (appInstance?.setSystemStatus) {
+            appInstance.setSystemStatus(text, isError);
+        } else if (typeof useAppStore?.getState === 'function') {
+            useAppStore.getState().setSystemStatus(text, isError);
+        }
+    },
+
+    /**
      * Generates test entries and updates the application store.
      * @param {number} count Number of test entries
      */
@@ -308,76 +321,193 @@ export const appService = {
 
     /** Incoming actions */
     addNewIncomingEntry() {
-        if (appInstance?.incomingRenderer?.addNewEntry) {
-            appInstance.incomingRenderer.addNewEntry();
+        if (appInstance?.incomingManager?.addNewEntry) {
+            appInstance.incomingManager.addNewEntry();
         }
     },
 
     handleIncomingCellClick(element) {
-        if (appInstance?.incomingRenderer?._handleCellClick) {
-            appInstance.incomingRenderer._handleCellClick(element);
+        if (appInstance?.incomingManager?._handleCellClick) {
+            appInstance.incomingManager._handleCellClick(element);
         }
     },
 
     deleteIncomingColumn(date) {
-        if (appInstance?.incomingRenderer?.deleteColumn) {
-            appInstance.incomingRenderer.deleteColumn(date);
+        if (appInstance?.incomingManager?.deleteColumn) {
+            appInstance.incomingManager.deleteColumn(date);
         }
     },
 
     deleteIncomingRow(sender) {
-        if (appInstance?.incomingRenderer?.deleteRow) {
-            appInstance.incomingRenderer.deleteRow(sender);
+        if (appInstance?.incomingManager?.deleteRow) {
+            appInstance.incomingManager.deleteRow(sender);
         }
     },
 
     /** Reminder actions */
     async createReminder(data) {
-        if (appInstance?.remindersApp?._handleNewReminder) {
-            return await appInstance.remindersApp._handleNewReminder(data);
+        if (!data || !data.title || !data.title.trim()) {
+            await appInstance?.hmiNotif?.showInfo?.('Hiányzó adatok', 'A határidő címe nem lehet üres!');
+            return;
+        }
+        if (isNaN(data.amount) || data.amount <= 0) {
+            await appInstance?.hmiNotif?.showInfo?.('Hiányzó adatok', 'Az összegnek nagyobbnak kell lennie nullánál!');
+            return;
+        }
+        if (!data.due_date || Number.isNaN(new Date(data.due_date).getTime())) {
+            await appInstance?.hmiNotif?.showInfo?.('Hiányzó adatok', 'Érvénytelen határidő dátum!');
+            return;
+        }
+
+        if (appInstance?.reminderManager?.add) {
+            await appInstance.reminderManager.add(data);
+            appInstance.updateReactStore?.();
+            appInstance.updateReminderStatus?.();
+            appInstance.hmiNotif?.showToast?.('Határidő rögzítve!', 'success');
         }
     },
 
     async updateReminder(data) {
-        if (appInstance?.remindersApp?._updateReminder) {
-            return await appInstance.remindersApp._updateReminder(data);
+        if (!data || !data.id) return;
+        if (!data.title || !data.title.trim()) {
+            await appInstance?.hmiNotif?.showInfo?.('Hiányzó adatok', 'A határidő címe nem lehet üres!');
+            return;
+        }
+        if (isNaN(data.amount) || data.amount <= 0) {
+            await appInstance?.hmiNotif?.showInfo?.('Hiányzó adatok', 'Az összegnek nagyobbnak kell lennie nullánál!');
+            return;
+        }
+
+        if (appInstance?.reminderManager) {
+            const rem = appInstance.reminderManager.reminders.find(r => String(r.id) === String(data.id));
+            if (rem) {
+                Object.assign(rem, {
+                    title: data.title.trim(),
+                    amount: data.amount,
+                    currency: data.currency || 'HUF',
+                    due_date: data.due_date,
+                    frequency: data.frequency || 'once',
+                    updated_at: new Date().toISOString()
+                });
+                await appInstance.reminderManager.db.save('reminders', rem);
+                try {
+                    await appInstance.reminderManager.syncService.push('reminders', rem);
+                } catch (syncErr) {
+                    console.warn('[appService] Cloud push failed after local update save:', syncErr);
+                }
+                await appInstance.reminderManager.load();
+                appInstance.updateReactStore?.();
+                appInstance.updateReminderStatus?.();
+                appInstance.hmiNotif?.showToast?.('Határidő frissítve!', 'success');
+            }
         }
     },
 
     async deleteReminder(id) {
-        if (appInstance?.remindersApp?._handleDeleteReminder) {
-            return await appInstance.remindersApp._handleDeleteReminder(id);
+        if (!appInstance?.reminderManager) return;
+        const rem = appInstance.reminderManager.reminders.find(r => String(r.id) === String(id));
+        if (!rem) return;
+
+        const confirmed = await appInstance.hmiNotif?.showConfirm?.({
+            title: 'Határidő törlése',
+            message: `Biztosan törli a "${rem.title}" határidőt?`,
+            type: 'warning',
+            confirmText: 'Törlés'
+        });
+
+        if (confirmed) {
+            await appInstance.reminderManager.delete(id);
+            appInstance.updateReactStore?.();
+            appInstance.updateReminderStatus?.();
         }
     },
 
     async completeReminder(id) {
-        if (appInstance?.remindersApp?._handleCompleteReminder) {
-            return await appInstance.remindersApp._handleCompleteReminder(id);
+        if (!appInstance?.reminderManager) return;
+        const rem = appInstance.reminderManager.reminders.find(r => String(r.id) === String(id));
+        if (!rem) return;
+
+        await appInstance.reminderManager.markAsCompleted(id);
+        appInstance.updateReactStore?.();
+        appInstance.updateReminderStatus?.();
+
+        const logAsExpense = await appInstance.hmiNotif?.showConfirm?.({
+            title: '💸 Kiadás rögzítése?',
+            message: `Szeretnéd a(z) "${rem.title}" (${rem.amount.toLocaleString('hu-HU')} ${rem.currency || 'HUF'}) határidőt kiadásként is automatikusan rögzíteni a táblázatban?`,
+            type: 'success',
+            confirmText: 'Igen, rögzítsük',
+            cancelText: 'Nem szükséges'
+        });
+
+        if (logAsExpense) {
+            const categories = appInstance.items?.items || [];
+            if (categories.length === 0) {
+                appInstance.hmiNotif?.showToast?.('Nincsenek kategóriák rögzítve az adatlapon!', 'error');
+                return;
+            }
+
+            const categoryNames = categories.map(c => c.name);
+            const selectedCatName = await appInstance.hmiNotif?.showSelectModal?.({
+                title: 'Válaszd ki a kategóriát',
+                options: categoryNames,
+                placeholder: 'Kategória kiválasztása...'
+            });
+
+            if (selectedCatName) {
+                const selectedCat = categories.find(c => c.name === selectedCatName);
+                if (selectedCat) {
+                    const month = rem.due_date.substring(0, 7);
+                    const cellBaseKey = `${selectedCat.id}_${month}`;
+                    const cellKey = `${cellBaseKey}_${Date.now()}`;
+
+                    const entryData = {
+                        cellKey,
+                        itemId: selectedCat.id,
+                        month: month,
+                        amount: rem.amount,
+                        currency: rem.currency || 'HUF',
+                        paymentMethod: 'Kártya',
+                        note: rem.title,
+                        color: 'transparent',
+                        timestamp: new Date().toISOString(),
+                        updated_at: new Date().toISOString()
+                    };
+
+                    await appInstance.entries.saveEntry(entryData);
+                    await appInstance.entries.load();
+
+                    appInstance.updateReactStore?.();
+                    this.updateFooterStatus('Határidő teljesítve és kiadásként rögzítve!', false);
+                    appInstance.hmiNotif?.showToast?.('Kiadás sikeresen rögzítve!', 'success');
+                }
+            }
+        } else {
+            appInstance.hmiNotif?.showToast?.('Határidő teljesítettnek jelölve!', 'success');
         }
     },
 
     /** Work App Actions */
     openWorkModal(id = null) {
-        if (appInstance?.workLogRenderer?.openModal) {
-            appInstance.workLogRenderer.openModal(id);
+        if (appInstance?.openWorkModal) {
+            appInstance.openWorkModal(id);
         }
     },
 
     closeWorkModal() {
-        if (appInstance?.workLogRenderer?.closeModal) {
-            appInstance.workLogRenderer.closeModal();
+        if (appInstance?.closeWorkModal) {
+            appInstance.closeWorkModal();
         }
     },
 
     deleteWorkLog() {
-        if (appInstance?.workLogRenderer?.handleDeleteWork) {
-            appInstance.workLogRenderer.handleDeleteWork();
+        if (appInstance?.deleteWorkLog) {
+            appInstance.deleteWorkLog();
         }
     },
 
     submitWorkForm(event) {
-        if (appInstance?.workLogRenderer?.handleFormSubmit) {
-            appInstance.workLogRenderer.handleFormSubmit(event);
+        if (appInstance?.submitWorkForm) {
+            appInstance.submitWorkForm(event);
         }
     },
 
@@ -453,9 +583,6 @@ export const appService = {
         if (typeof localStorage !== 'undefined') {
             localStorage.setItem('hmi_selected_module', 'cost');
         }
-        if (appInstance?.renderer?.renderTable) {
-            appInstance.renderer.renderTable();
-        }
     },
 
     launchWorkApp() {
@@ -465,9 +592,6 @@ export const appService = {
         }
         if (typeof localStorage !== 'undefined') {
             localStorage.setItem('hmi_selected_module', 'work');
-        }
-        if (appInstance?.workLogRenderer?.render) {
-            appInstance.workLogRenderer.render();
         }
     },
 
