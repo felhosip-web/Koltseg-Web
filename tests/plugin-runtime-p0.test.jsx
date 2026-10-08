@@ -112,7 +112,7 @@ test('PLG0 — Security Boundary: Scoped storage and plugin context do NOT expos
     assert.equal(capturedContext.storage.app, undefined);
 });
 
-test('PLG0 — Local Persistence & Reload: Scoped plugin records survive reload', async () => {
+test('PLG0 — Local Persistence & Reload: Scoped plugin records survive reload (Anonymous / Local Mode)', async () => {
     const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', { url: 'http://localhost/' });
     globalThis.window = dom.window;
     globalThis.document = dom.window.document;
@@ -327,21 +327,52 @@ test('PLG0 — App Lifecycle Wiring: App connects PluginStorageService and Plugi
     dom.window.close();
 });
 
-test('PLG0 — Supabase Schema & RLS Policy Contract Verification', () => {
+test('PLG0 — Supabase Schema & RLS Policy Contract: Strict Authenticated Ownership; No Anonymous Cloud Access Policy', () => {
     const sqlPath = path.resolve(process.cwd(), 'supabase/migrations/20261007000000_add_plugin_records.sql');
     assert.ok(fs.existsSync(sqlPath), 'Supabase migration file for plugin_records must exist');
 
     const sqlContent = fs.readFileSync(sqlPath, 'utf8');
 
-    // Verify user_id column
+    // 1. Verify user_id column
     assert.ok(sqlContent.includes('user_id'), 'plugin_records table must include user_id column');
 
-    // Verify ENABLE ROW LEVEL SECURITY
+    // 2. Verify ENABLE ROW LEVEL SECURITY
     assert.ok(sqlContent.includes('ALTER TABLE plugin_records ENABLE ROW LEVEL SECURITY;'), 'RLS must be enabled on plugin_records');
 
-    // Verify strict authenticated policy
+    // 3. Verify strict authenticated policy enforcing user_id ownership
     assert.ok(sqlContent.includes('auth.uid() = user_id'), 'RLS policy must enforce auth.uid() = user_id');
+    assert.ok(sqlContent.includes('TO authenticated'), 'RLS policy must apply TO authenticated users');
 
-    // Verify NO un-sandboxed FOR ALL USING (true) policy
+    // 4. Verify NO un-sandboxed FOR ALL USING (true) or anonymous TO anon cloud access policies exist
     assert.ok(!sqlContent.includes('WITH CHECK (true)'), 'RLS policy must NOT use WITH CHECK (true)');
+    assert.ok(!sqlContent.includes('TO anon'), 'RLS policy must NOT grant anonymous cloud access');
+    assert.ok(!sqlContent.includes('USING (user_id IS NULL)'), 'RLS policy must NOT grant access to a shared user_id IS NULL namespace');
+});
+
+test('PLG0 — Simulated RLS Ownership Boundary: User A cannot access User B plugin_records; Anonymous receives zero cloud records', () => {
+    const userA = { uid: 'user-uuid-A' };
+    const userB = { uid: 'user-uuid-B' };
+
+    const records = [
+        { id: 'p1', plugin_id: 'p', collection: 'c', record_key: 'k1', user_id: 'user-uuid-A', data: { val: 'User A Secret' } },
+        { id: 'p2', plugin_id: 'p', collection: 'c', record_key: 'k2', user_id: 'user-uuid-B', data: { val: 'User B Secret' } }
+    ];
+
+    // RLS Policy Simulation: TO authenticated USING (auth.uid() = user_id)
+    const rlsSelect = (currentUser, dataset) => {
+        if (!currentUser || !currentUser.uid) return [];
+        return dataset.filter(r => r.user_id === currentUser.uid);
+    };
+
+    const userARecords = rlsSelect(userA, records);
+    assert.equal(userARecords.length, 1);
+    assert.equal(userARecords[0].data.val, 'User A Secret');
+
+    const userBRecords = rlsSelect(userB, records);
+    assert.equal(userBRecords.length, 1);
+    assert.equal(userBRecords[0].data.val, 'User B Secret');
+
+    // Unauthenticated anonymous user simulation (auth.uid() is null) -> 0 records accessible in cloud
+    const anonRecords = rlsSelect(null, records);
+    assert.equal(anonRecords.length, 0, 'Anonymous users must receive zero records from cloud table');
 });

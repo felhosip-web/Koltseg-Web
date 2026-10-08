@@ -18,7 +18,11 @@ CREATE INDEX IF NOT EXISTS idx_plugin_records_user_id ON plugin_records(user_id)
 
 ALTER TABLE plugin_records ENABLE ROW LEVEL SECURITY;
 
--- Strict policy for authenticated users: User A cannot access or mutate User B records
+-- Drop legacy/insecure policies if they exist
+DROP POLICY IF EXISTS "Anon fallback access for user_id IS NULL" ON plugin_records;
+DROP POLICY IF EXISTS "Mindenki elérheti" ON plugin_records;
+
+-- Strict policy for authenticated users ONLY: User A cannot access or mutate User B records
 DROP POLICY IF EXISTS "Users can only access their own plugin records" ON plugin_records;
 CREATE POLICY "Users can only access their own plugin records"
 ON plugin_records
@@ -26,12 +30,3 @@ FOR ALL
 TO authenticated
 USING (auth.uid() = user_id)
 WITH CHECK (auth.uid() = user_id);
-
--- Fallback policy for unauthenticated/anon BYOK sessions (where user_id IS NULL)
-DROP POLICY IF EXISTS "Anon fallback access for user_id IS NULL" ON plugin_records;
-CREATE POLICY "Anon fallback access for user_id IS NULL"
-ON plugin_records
-FOR ALL
-TO anon
-USING (user_id IS NULL)
-WITH CHECK (user_id IS NULL);
