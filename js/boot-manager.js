@@ -96,6 +96,7 @@ export class BootManager {
                 this.app.templates.load(),
                 this.app.incomingManager?.load?.(),
                 this.app.pluginStorage?.init?.(),
+                this.app.pluginStorageService?.load?.(),
                 this.app.workLogManager?.load?.()
             ]);
         } finally {

@@ -20,6 +20,8 @@ import { BackupManager } from './backup-manager.js';
 import { PwaManager } from './pwa-manager.js';
 import { RemoteConfigManager } from './remote-config-manager.js';
 import { PluginStorage } from './plugin-storage.js';
+import { PluginStorageService } from '../src/services/plugin/PluginStorageService.js';
+import { PluginRuntime } from '../src/services/plugin/PluginRuntime.js';
 import { OfflineHandler } from './offline-handler.js';
 import { getVersionManager } from './version-manager.js';
 import { MESSAGES, formatMessage } from './messages.js';
@@ -107,7 +109,9 @@ export class App {
         this.serviceDev = new ServiceDevManager(this);
         this.securityGuard = new SecurityGuard(this);
         this.moduleManager = new ModuleManager(this);
-        this.pluginStorage = new PluginStorage(this);
+        this.pluginStorage = new PluginStorage(this); // legacy compatibility
+        this.pluginStorageService = new PluginStorageService(this.db, this.syncService);
+        this.pluginRuntime = new PluginRuntime(this.pluginStorageService, appService);
 
         // === 9. BEJÖVŐ UTALÁSOK ===
         this.incomingManager = new IncomingManager(this.db, this.syncService);

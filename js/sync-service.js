@@ -631,7 +631,7 @@ export class SyncService {
 
             // === 2. PULL: ADATOK LETÖLTÉSE A FELHŐBŐL ===
             console.log('[SYNC] ⬇️ Pull: Adatok letöltése a felhőből...');
-            const tables = ['items', 'months', 'entries', 'templates', 'reminders', 'incomings', 'incoming_senders', 'works', 'deleted_records'];
+            const tables = ['items', 'months', 'entries', 'templates', 'reminders', 'incomings', 'incoming_senders', 'works', 'plugin_records', 'deleted_records'];
             const cloudData = {};
             const failedTables = new Set();
 
@@ -664,6 +664,7 @@ export class SyncService {
                 incomings: this._getLocalData('incomings'),
                 incoming_senders: this._getLocalData('incoming_senders'),
                 works: this._getLocalData('works'),
+                plugin_records: this._getLocalData('plugin_records'),
                 deleted_records: localDeletedRecords
             };
 
@@ -965,6 +966,7 @@ export class SyncService {
             case 'incomings': return app.incomingManager?.incomings || [];
             case 'incoming_senders': return app.incomingManager?.senders || [];
             case 'works': return app.workLogManager?.works || [];
+            case 'plugin_records': return app.pluginStorageService?.getAllRecords() || app.pluginRecords || (app.db?.isMock ? Object.values(app.db.mockStore.plugin_records || {}) : []);
             default: return [];
         }
     }
@@ -1144,7 +1146,8 @@ export class SyncService {
             { name: 'reminders', key: 'id' },
             { name: 'incomings', key: 'id' },
             { name: 'incoming_senders', key: 'id' },
-            { name: 'works', key: 'id' }
+            { name: 'works', key: 'id' },
+            { name: 'plugin_records', key: 'id' }
         ];
 
         for (const { name, key: keyField } of tableDefs) {
@@ -1215,7 +1218,8 @@ export class SyncService {
                 app.templates?.load?.() || Promise.resolve(),
                 app.reminderManager?.load?.() || Promise.resolve(),
                 app.incomingManager?.load?.() || Promise.resolve(),
-                app.workLogManager?.load?.() || Promise.resolve()
+                app.workLogManager?.load?.() || Promise.resolve(),
+                app.pluginStorageService?.load?.() || Promise.resolve()
             ]);
 
             app.updateReactStore?.();
@@ -1479,6 +1483,7 @@ export class SyncService {
             case 'incomings': return 'Bejövő utalások';
             case 'incoming_senders': return 'Partnerek';
             case 'works': return 'Munkák';
+            case 'plugin_records': return 'Bővítmény Adatok';
             default: return table;
         }
     }
