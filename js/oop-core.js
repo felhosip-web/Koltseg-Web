@@ -45,6 +45,10 @@ export class SecurityManager {
                 return typeof data.id === 'string' && typeof data.dist === 'number';
             case 'plugin_calc_history':
                 return typeof data.id === 'string' && typeof data.expr === 'string';
+            case 'plugin_records':
+                return typeof data.id === 'string' &&
+                    typeof data.plugin_id === 'string' &&
+                    typeof data.collection === 'string';
             default:
                 return true;
         }
@@ -92,7 +96,8 @@ export class Database {
             incomings: {},
             incoming_senders: {},
             deleted_records: {},
-            works: {}
+            works: {},
+            plugin_records: {}
         };
         this.mockIdCounter = {};
         console.log('[DB] ℹ️ Memóriabeli adatbázis sikeresen inicializálva.');
@@ -330,6 +335,20 @@ export class Database {
             _migrateStoreToUUID('works');
         }
 
+
+        // === Shared Plugin Records Table (PLG0) ===
+        if (!db.objectStoreNames.contains('plugin_records')) {
+            const store = db.createObjectStore('plugin_records', { keyPath: 'id' });
+            try {
+                store.createIndex('plugin_id', 'plugin_id', { unique: false });
+                store.createIndex('plugin_id_collection', ['plugin_id', 'collection'], { unique: false });
+                store.createIndex('plugin_id_collection_key', ['plugin_id', 'collection', 'record_key'], { unique: false });
+                store.createIndex('updated_at', 'updated_at', { unique: false });
+            } catch (e) {
+                console.warn('[DB] plugin_records index creation warning:', e);
+            }
+            console.log('[DB] plugin_records tábla sikeresen létrehozva');
+        }
 
         // === Plugin Tables (v12) ===
         const pluginTables = [
@@ -1224,7 +1243,7 @@ export class CloudSync {
             console.log(`[CLOUD] ${storeName} egyedi törlés sikeres (${customKey}: ${keyValue})`);
         } catch (err) {
             if (err.code === '42P01' || (err.message && (err.message.includes('relation') || err.message.includes('does not exist')))) {
-                if (['items', 'months', 'entries', 'templates', 'reminders', 'incomings', 'incoming_senders', 'works', 'deleted_records', 'app_settings'].includes(storeName)) {
+                if (['items', 'months', 'entries', 'templates', 'reminders', 'incomings', 'incoming_senders', 'works', 'plugin_records', 'deleted_records', 'app_settings'].includes(storeName)) {
                     this.tablesMissing = true;
                 }
             }
@@ -1407,7 +1426,7 @@ export class CloudSync {
      * Pull minden táblából
      */
     async pullAll() {
-        const tables = ['items', 'months', 'entries', 'templates', 'reminders', 'incomings', 'incoming_senders', 'works'];
+        const tables = ['items', 'months', 'entries', 'templates', 'reminders', 'incomings', 'incoming_senders', 'works', 'plugin_records'];
         const result = {};
 
         this.tablesMissing = false;
@@ -1469,6 +1488,7 @@ export class CloudSync {
             { name: 'incomings', key: 'id', type: 'text' },
             { name: 'incoming_senders', key: 'id', type: 'text' },
             { name: 'works', key: 'id', type: 'text' },
+            { name: 'plugin_records', key: 'id', type: 'text' },
             { name: 'deleted_records', key: 'id', type: 'text' }
         ];
 
