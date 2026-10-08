@@ -138,7 +138,7 @@ export class PluginStorageService {
                     },
 
                     /**
-                     * Deletes a record from this collection.
+                     * Deletes a record from this collection following tombstone deletion semantics.
                      * @param {string} recordKey
                      */
                     async delete(recordKey) {
@@ -151,19 +151,21 @@ export class PluginStorageService {
 
                         if (recIndex !== -1) {
                             const rec = service.records[recIndex];
-                            rec.deleted_at = new Date().toISOString();
-                            rec.updated_at = rec.deleted_at;
 
                             // Remove from active in-memory cache
                             service.records.splice(recIndex, 1);
 
+                            // Delete via db.delete which writes tombstone to deleted_records and enqueues high-priority delete
                             if (service.db) {
-                                await service.db.delete('plugin_records', rec.id);
-                            }
-
-                            if (service.syncService && !service.syncService.isMuted) {
+                                if (typeof service.db.delete === 'function') {
+                                    await service.db.delete('plugin_records', rec.id);
+                                } else if (typeof service.db._directDelete === 'function') {
+                                    await service.db._directDelete('plugin_records', rec.id);
+                                }
+                            } else if (service.syncService && !service.syncService.isMuted) {
                                 service.syncService.addToQueue('delete', { id: rec.id }, 'plugin_records', 'high', 'id');
                             }
+
                             return true;
                         }
                         return false;

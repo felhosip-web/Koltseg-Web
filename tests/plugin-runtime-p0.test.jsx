@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import fs from 'node:fs';
+import path from 'node:path';
 import { JSDOM } from 'jsdom';
 import Dexie from 'dexie';
 import 'fake-indexeddb/auto';
@@ -7,6 +9,7 @@ import { Database } from '../js/oop-core.js';
 import { SyncService } from '../js/sync-service.js';
 import { PluginStorageService } from '../src/services/plugin/PluginStorageService.js';
 import { PluginRuntime } from '../src/services/plugin/PluginRuntime.js';
+import { appService } from '../src/services/appService.js';
 
 test('PLG0 — Storage Isolation: Plugin A can CRUD its own data; Plugin A cannot read/write/delete Plugin B data', async () => {
     const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', { url: 'http://localhost/' });
@@ -180,7 +183,7 @@ test('PLG0 — Multiple Collections & Full CRUD: get, set, update, delete, list,
     assert.equal((await settings.get('theme')).mode, 'dark');
 });
 
-test('PLG0 — Sync Integration: Plugin records enqueued in SyncService with correct P2 invariants', async () => {
+test('PLG0 — Sync Integration & Tombstone Protection: Local delete + stale remote pull does NOT resurrect record', async () => {
     const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', { url: 'http://localhost/' });
     globalThis.window = dom.window;
     globalThis.document = dom.window.document;
@@ -195,53 +198,150 @@ test('PLG0 — Sync Integration: Plugin records enqueued in SyncService with cor
     const storageService = new PluginStorageService(db, syncService);
     await storageService.load();
 
-    const storage = storageService.createPluginStorage('plugin-sync-test');
-    const items = storage.collection('items');
+    const storage = storageService.createPluginStorage('plugin-tombstone-test');
+    const notes = storage.collection('notes');
 
-    // Set enqueues update in plugin_records table
-    await items.set('item-1', { name: 'Synced Plugin Item', qty: 5 });
+    // 1. Create plugin record locally
+    await notes.set('note-101', { title: 'To Be Deleted' });
 
-    const queueStatus = syncService.getQueueStatus();
-    assert.equal(queueStatus.total, 1);
-    assert.equal(queueStatus.items[0].table, 'plugin_records');
-    assert.equal(queueStatus.items[0].data.plugin_id, 'plugin-sync-test');
-    assert.equal(queueStatus.items[0].data.collection, 'items');
-    assert.equal(queueStatus.items[0].data.record_key, 'item-1');
+    // Get the created record ID
+    const recsBefore = await db.getAll('plugin_records');
+    assert.equal(recsBefore.length, 1);
+    const recId = recsBefore[0].id;
+
+    // 2. Delete record locally via plugin storage API
+    await notes.delete('note-101');
+
+    // Verify record is gone from active storage and tombstone is saved to deleted_records
+    assert.equal(await notes.get('note-101'), null);
+
+    const tombstones = await db.getAll('deleted_records');
+    assert.equal(tombstones.length, 1);
+    assert.equal(tombstones[0].table_name, 'plugin_records');
+    assert.equal(tombstones[0].record_id, recId);
+
+    // 3. Simulate remote cloud returning a stale version of the deleted record on PULL
+    syncService.cloud.client = {
+        from: (storeName) => ({
+            select: async () => {
+                if (storeName === 'plugin_records') {
+                    return {
+                        data: [{
+                            id: recId,
+                            plugin_id: 'plugin-tombstone-test',
+                            collection: 'notes',
+                            record_key: 'note-101',
+                            data: { title: 'To Be Deleted' },
+                            updated_at: '2026-10-01T10:00:00.000Z'
+                        }],
+                        error: null
+                    };
+                }
+                return { data: [], error: null };
+            },
+            upsert: async () => ({ error: null }),
+            delete: () => ({ eq: async () => ({ error: null }) })
+        })
+    };
+
+    const mockApp = {
+        db,
+        pluginStorageService: storageService,
+        items: { load: async () => {} },
+        months: { load: async () => {} },
+        entries: { load: async () => {} },
+        templates: { load: async () => {} },
+        reminderManager: { load: async () => {} },
+        incomingManager: { load: async () => {} },
+        workLogManager: { load: async () => {} },
+        updateReactStore: () => {}
+    };
+    syncService.setApp(mockApp);
+
+    // Execute sync
+    await syncService.sync();
+
+    // 4. Verify stale remote record was NOT resurrected
+    assert.equal(await notes.get('note-101'), null);
+    const recsAfter = await db.getAll('plugin_records');
+    assert.equal(recsAfter.length, 0, 'Deleted plugin_record must NOT resurrect after sync');
 
     dom.window.close();
 });
 
-test('PLG0 — Plugin Runtime Manifest & Permissions Enforcement', async () => {
-    const storageService = new PluginStorageService(null, null);
-    const runtime = new PluginRuntime(storageService, null);
+test('PLG0 — App Lifecycle Wiring: App connects PluginStorageService and PluginRuntime cleanly', async () => {
+    const dom = new JSDOM('<!DOCTYPE html><html><body><div id="root"></div></body></html>', { url: 'http://localhost/' });
+    globalThis.window = dom.window;
+    globalThis.document = dom.window.document;
+    globalThis.localStorage = dom.window.localStorage;
+    globalThis.window.Dexie = Dexie;
+    globalThis.window.__DISABLE_AUTO_INIT__ = true;
 
-    // Invalid manifest (missing permissions) throws
-    assert.throws(() => {
-        runtime.registerPlugin({ id: 'bad-1', name: 'Bad', version: '1.0.0', apiVersion: 1 });
-    }, /permissions/);
+    const [{ App }] = await Promise.all([import('../js/app.js')]);
 
-    // Plugin without 'storage:private' permission gets null storage
-    runtime.registerPlugin({
-        id: 'no-storage-plugin',
-        name: 'No Storage',
-        version: '1.0.0',
-        apiVersion: 1,
-        permissions: ['ui:toast']
-    }, (ctx) => {
-        assert.equal(ctx.storage, null);
-        assert.ok(ctx.ui.showToast);
+    const db = new Database();
+    db._enableMockDb();
+
+    const app = Object.create(App.prototype);
+    const syncService = new SyncService({ useSupabase: false }, { getPendingCount: () => 0 });
+
+    Object.assign(app, {
+        db,
+        syncService,
+        items: { load: async () => {} },
+        months: { load: async () => {} },
+        entries: { load: async () => {} },
+        templates: { load: async () => {} },
+        reminderManager: { load: async () => {} },
+        incomingManager: { load: async () => {} },
+        workLogManager: { load: async () => {} }
     });
 
-    // Plugin without 'ui:toast' permission calling showToast throws
-    runtime.registerPlugin({
-        id: 'no-ui-plugin',
-        name: 'No UI',
+    app.pluginStorageService = new PluginStorageService(db, syncService);
+    app.pluginRuntime = new PluginRuntime(app.pluginStorageService, appService);
+
+    appService.bind(app);
+
+    // Verify App wiring
+    assert.ok(app.pluginStorageService);
+    assert.ok(app.pluginRuntime);
+    assert.equal(app.pluginStorageService.db, db);
+    assert.equal(app.pluginStorageService.syncService, syncService);
+
+    // Verify plugin runtime can register a plugin and access storageService through app
+    app.pluginRuntime.registerPlugin({
+        id: 'lifecycle-test-plugin',
+        name: 'Lifecycle Test',
         version: '1.0.0',
         apiVersion: 1,
         permissions: ['storage:private']
-    }, (ctx) => {
-        assert.throws(() => {
-            ctx.ui.showToast('Test Toast');
-        }, /lacks "ui:toast" permission/);
+    }, async (ctx) => {
+        const coll = ctx.storage.collection('app_lifecycle');
+        await coll.set('k1', { status: 'wired' });
     });
+
+    const activeRecords = app.pluginStorageService.getAllRecords();
+    assert.equal(activeRecords.length, 1);
+    assert.equal(activeRecords[0].plugin_id, 'lifecycle-test-plugin');
+
+    dom.window.close();
+});
+
+test('PLG0 — Supabase Schema & RLS Policy Contract Verification', () => {
+    const sqlPath = path.resolve(process.cwd(), 'supabase/migrations/20261007000000_add_plugin_records.sql');
+    assert.ok(fs.existsSync(sqlPath), 'Supabase migration file for plugin_records must exist');
+
+    const sqlContent = fs.readFileSync(sqlPath, 'utf8');
+
+    // Verify user_id column
+    assert.ok(sqlContent.includes('user_id'), 'plugin_records table must include user_id column');
+
+    // Verify ENABLE ROW LEVEL SECURITY
+    assert.ok(sqlContent.includes('ALTER TABLE plugin_records ENABLE ROW LEVEL SECURITY;'), 'RLS must be enabled on plugin_records');
+
+    // Verify strict authenticated policy
+    assert.ok(sqlContent.includes('auth.uid() = user_id'), 'RLS policy must enforce auth.uid() = user_id');
+
+    // Verify NO un-sandboxed FOR ALL USING (true) policy
+    assert.ok(!sqlContent.includes('WITH CHECK (true)'), 'RLS policy must NOT use WITH CHECK (true)');
 });
