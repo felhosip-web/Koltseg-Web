@@ -165,6 +165,113 @@ test('PLG1 — PluginRegistry: Registration, Duplicate ID rejection, and query o
     assert.equal(registry.list().length, 1);
 });
 
+test('PLG1 Promise Contract — Invalid plugin ID returns a Promise rejection', async () => {
+    const registry = new PluginRegistry();
+    const res = registry.initialize(null);
+    assert.ok(res instanceof Promise, 'initialize() must return a Promise');
+    await assert.rejects(res, /Valid pluginId is required for initialize/);
+});
+
+test('PLG1 Promise Contract — Unknown plugin ID returns a Promise rejection', async () => {
+    const registry = new PluginRegistry();
+    const res = registry.initialize('non.existent.plugin');
+    assert.ok(res instanceof Promise, 'initialize() must return a Promise');
+    await assert.rejects(res, /Cannot initialize unregistered plugin/);
+});
+
+test('PLG1 Promise Contract — Initializing a disposed plugin returns a Promise rejection', async () => {
+    const registry = new PluginRegistry();
+    registry.register({
+        id: 'disposed.contract.plugin',
+        name: 'Disposed Plugin',
+        version: '1.0.0',
+        apiVersion: '1',
+        permissions: ['ui:toast']
+    });
+    registry.dispose('disposed.contract.plugin');
+
+    const res = registry.initialize('disposed.contract.plugin');
+    assert.ok(res instanceof Promise, 'initialize() must return a Promise');
+    await assert.rejects(res, /Cannot initialize disposed plugin/);
+});
+
+test('PLG1 Promise Contract — Context creation failure is exposed as a Promise rejection', async () => {
+    const failingStorageService = {
+        createPluginStorage() {
+            throw new Error('Storage service unavailable during context creation');
+        }
+    };
+    const registry = new PluginRegistry(failingStorageService);
+    registry.register({
+        id: 'corrupted.context.plugin',
+        name: 'Corrupted Context Plugin',
+        version: '1.0.0',
+        apiVersion: '1',
+        permissions: ['storage:private']
+    });
+
+    const res = registry.initialize('corrupted.context.plugin');
+    assert.ok(res instanceof Promise, 'initialize() must return a Promise');
+    await assert.rejects(res, /Storage service unavailable during context creation/);
+});
+
+test('PLG1 Promise Contract — Initialization with no setup function reaches active and clears initPromise', async () => {
+    const registry = new PluginRegistry();
+    registry.register({
+        id: 'no.setup.plugin',
+        name: 'No Setup Plugin',
+        version: '1.0.0',
+        apiVersion: '1',
+        permissions: ['ui:toast']
+    });
+
+    const rec = await registry.initialize('no.setup.plugin');
+    assert.equal(rec.state, 'active');
+    assert.equal(rec.initPromise, null, 'initPromise must be cleared after initialization with no setup');
+});
+
+test('PLG1 Promise Contract — Successful setup clears initPromise', async () => {
+    const registry = new PluginRegistry();
+    registry.register({
+        id: 'successful.setup.plugin',
+        name: 'Successful Setup Plugin',
+        version: '1.0.0',
+        apiVersion: '1',
+        permissions: ['ui:toast']
+    }, async (ctx) => {
+        await new Promise(r => setTimeout(r, 10));
+    });
+
+    const rec = await registry.initialize('successful.setup.plugin');
+    assert.equal(rec.state, 'active');
+    assert.equal(rec.initPromise, null, 'initPromise must be cleared after successful setup');
+});
+
+test('PLG1 Promise Contract — Failed setup clears initPromise and preserves rollback behavior', async () => {
+    const registry = new PluginRegistry();
+    const setupError = new Error('Setup failed intentionally');
+
+    registry.register({
+        id: 'failed.setup.plugin',
+        name: 'Failed Setup Plugin',
+        version: '1.0.0',
+        apiVersion: '1',
+        permissions: ['storage:private']
+    }, () => {
+        throw setupError;
+    });
+
+    await assert.rejects(async () => {
+        await registry.initialize('failed.setup.plugin');
+    }, (err) => err === setupError);
+
+    const rec = registry.get('failed.setup.plugin');
+    assert.equal(rec.state, 'registered');
+    assert.equal(rec.context, null);
+    assert.equal(rec.error, setupError);
+    assert.equal(rec.initPromise, null, 'initPromise must be cleared after failed setup');
+});
+
 test('PLG1 — Sync Setup Lifecycle: Successful synchronous setup resolves and activates plugin', async () => {
     let setupRan = false;
     const registry = new PluginRegistry();
@@ -342,9 +449,6 @@ test('PLG1 — Concurrent Initialization: Simultaneous calls execute setup exact
     // Invoke initialize simultaneously twice
     const p1 = registry.initialize('concurrent.plugin');
     const p2 = registry.initialize('concurrent.plugin');
-
-    // Both calls return the exact same in-flight Promise
-    assert.equal(p1, p2);
 
     resolveSetupPromise();
 
