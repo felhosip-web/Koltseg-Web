@@ -33,10 +33,11 @@ export class PluginRuntime {
      * Registers and initializes a plugin in one step (PLG0 compatibility wrapper over PluginRegistry).
      * @param {Object} manifest - Declarative plugin manifest contract
      * @param {Function} setupFn - Optional setup function receiving restricted context
+     * @returns {Promise<Object>}
      */
-    registerPlugin(manifest, setupFn = null) {
+    async registerPlugin(manifest, setupFn = null) {
         this.registry.register(manifest, setupFn);
-        const record = this.registry.initialize(manifest.id);
+        const record = await this.registry.initialize(manifest.id);
         console.log(`[PluginRuntime] 🔌 Plugin successfully registered & activated: ${manifest.name} (${manifest.id})`);
         return record;
     }

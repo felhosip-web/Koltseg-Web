@@ -165,79 +165,200 @@ test('PLG1 — PluginRegistry: Registration, Duplicate ID rejection, and query o
     assert.equal(registry.list().length, 1);
 });
 
-test('PLG1 — Plugin Lifecycle: register -> initialize -> active -> dispose', () => {
+test('PLG1 — Sync Setup Lifecycle: Successful synchronous setup resolves and activates plugin', async () => {
     let setupRan = false;
     const registry = new PluginRegistry();
 
     const manifest = {
-        id: 'lifecycle.plugin',
-        name: 'Lifecycle Plugin',
+        id: 'sync.plugin',
+        name: 'Sync Plugin',
         version: '1.0.0',
         apiVersion: '1',
         permissions: ['ui:toast']
     };
 
-    // 1. Register
     registry.register(manifest, (ctx) => {
         setupRan = true;
         assert.ok(ctx.ui);
     });
 
-    const regRecord = registry.get('lifecycle.plugin');
+    const regRecord = registry.get('sync.plugin');
     assert.equal(regRecord.state, 'registered');
 
-    // 2. Initialize -> Active
-    const initRecord = registry.initialize('lifecycle.plugin');
+    const initRecord = await registry.initialize('sync.plugin');
     assert.equal(setupRan, true);
     assert.equal(initRecord.state, 'active');
-
-    // Re-initialization on active plugin returns active record cleanly
-    assert.equal(registry.initialize('lifecycle.plugin').state, 'active');
-
-    // 3. Dispose -> Disposed
-    assert.equal(registry.dispose('lifecycle.plugin'), true);
-    assert.equal(registry.get('lifecycle.plugin').state, 'disposed');
-
-    // Double dispose is idempotent
-    assert.equal(registry.dispose('lifecycle.plugin'), true);
-    assert.equal(registry.get('lifecycle.plugin').state, 'disposed');
-
-    // Cannot initialize disposed plugin
-    assert.throws(() => {
-        registry.initialize('lifecycle.plugin');
-    }, /Cannot initialize disposed plugin/);
 });
 
-test('PLG1 — Plugin Lifecycle: Setup failure is deterministic and leaves no half-initialized state', () => {
+test('PLG1 — Async Setup Lifecycle: Successful asynchronous setup waits for setup to finish before becoming active', async () => {
+    let asyncCompleted = false;
     const registry = new PluginRegistry();
 
     const manifest = {
-        id: 'failing.plugin',
-        name: 'Failing Setup Plugin',
+        id: 'async.plugin',
+        name: 'Async Plugin',
         version: '1.0.0',
         apiVersion: '1',
         permissions: ['storage:private']
     };
 
-    registry.register(manifest, () => {
-        throw new Error('Plugin initialization failed due to missing configuration');
+    registry.register(manifest, async (ctx) => {
+        await new Promise(r => setTimeout(r, 30));
+        asyncCompleted = true;
     });
 
-    // Attempt initialize
-    assert.throws(() => {
-        registry.initialize('failing.plugin');
-    }, /Plugin initialization failed due to missing configuration/);
+    const initPromise = registry.initialize('async.plugin');
 
-    // Verify registry state is consistent and plugin state rolled back to 'registered'
-    const record = registry.get('failing.plugin');
-    assert.ok(record);
-    assert.equal(record.state, 'registered');
-    assert.equal(record.context, null);
-    assert.ok(record.error);
-    assert.equal(record.error.message, 'Plugin initialization failed due to missing configuration');
+    // Before promise resolves, state is 'initialized' (in-flight), not 'active'
+    const recordBefore = registry.get('async.plugin');
+    assert.equal(recordBefore.state, 'initialized');
+    assert.equal(asyncCompleted, false);
+
+    // Await completion
+    const recordAfter = await initPromise;
+    assert.equal(asyncCompleted, true);
+    assert.equal(recordAfter.state, 'active');
 });
 
-test('PLG1 — Permission Enforcement & Context Security: Capabilities strictly granted per manifest', () => {
+test('PLG1 — Sync & Async Failure Rollback: Synchronous setup failure rolls back state to registered and preserves error', async () => {
+    const registry = new PluginRegistry();
+
+    const manifest = {
+        id: 'sync.failing.plugin',
+        name: 'Sync Failing Plugin',
+        version: '1.0.0',
+        apiVersion: '1',
+        permissions: ['storage:private']
+    };
+
+    const syncError = new Error('Sync setup exception');
+    registry.register(manifest, () => {
+        throw syncError;
+    });
+
+    await assert.rejects(async () => {
+        await registry.initialize('sync.failing.plugin');
+    }, (err) => err === syncError);
+
+    const record = registry.get('sync.failing.plugin');
+    assert.equal(record.state, 'registered');
+    assert.equal(record.context, null);
+    assert.equal(record.error, syncError);
+});
+
+test('PLG1 — Sync & Async Failure Rollback: Asynchronous setup rejection rolls back state to registered and preserves error', async () => {
+    const registry = new PluginRegistry();
+
+    const manifest = {
+        id: 'async.failing.plugin',
+        name: 'Async Failing Plugin',
+        version: '1.0.0',
+        apiVersion: '1',
+        permissions: ['storage:private']
+    };
+
+    const asyncError = new Error('Async network failure during plugin init');
+    registry.register(manifest, async () => {
+        await new Promise(r => setTimeout(r, 20));
+        throw asyncError;
+    });
+
+    await assert.rejects(async () => {
+        await registry.initialize('async.failing.plugin');
+    }, (err) => err === asyncError);
+
+    const record = registry.get('async.failing.plugin');
+    assert.equal(record.state, 'registered');
+    assert.equal(record.context, null);
+    assert.equal(record.error, asyncError);
+});
+
+test('PLG1 — Repeated Initialization: Already-active plugin is not re-initialized', async () => {
+    let setupCount = 0;
+    const registry = new PluginRegistry();
+
+    const manifest = {
+        id: 'repeated.plugin',
+        name: 'Repeated Plugin',
+        version: '1.0.0',
+        apiVersion: '1',
+        permissions: ['ui:toast']
+    };
+
+    registry.register(manifest, () => {
+        setupCount++;
+    });
+
+    const rec1 = await registry.initialize('repeated.plugin');
+    assert.equal(setupCount, 1);
+    assert.equal(rec1.state, 'active');
+
+    const rec2 = await registry.initialize('repeated.plugin');
+    assert.equal(setupCount, 1, 'Setup must NOT run again for active plugin');
+    assert.equal(rec2.state, 'active');
+});
+
+test('PLG1 — Concurrent Initialization: Simultaneous calls execute setup exactly once and return same result', async () => {
+    let setupExecutions = 0;
+    const registry = new PluginRegistry();
+
+    const manifest = {
+        id: 'concurrent.plugin',
+        name: 'Concurrent Plugin',
+        version: '1.0.0',
+        apiVersion: '1',
+        permissions: ['storage:private']
+    };
+
+    registry.register(manifest, async (ctx) => {
+        setupExecutions++;
+        await new Promise(r => setTimeout(r, 40));
+    });
+
+    // Invoke initialize simultaneously twice
+    const p1 = registry.initialize('concurrent.plugin');
+    const p2 = registry.initialize('concurrent.plugin');
+
+    // Both calls return the exact same in-flight Promise
+    assert.equal(p1, p2);
+
+    const [rec1, rec2] = await Promise.all([p1, p2]);
+
+    assert.equal(setupExecutions, 1, 'Concurrent initialization must execute setup exactly once');
+    assert.equal(rec1.state, 'active');
+    assert.equal(rec2.state, 'active');
+});
+
+test('PLG1 — Dispose Behavior: Idempotent disposal and prohibition of initializing disposed plugin', async () => {
+    const registry = new PluginRegistry();
+
+    const manifest = {
+        id: 'dispose.plugin',
+        name: 'Dispose Plugin',
+        version: '1.0.0',
+        apiVersion: '1',
+        permissions: ['ui:toast']
+    };
+
+    registry.register(manifest);
+
+    await registry.initialize('dispose.plugin');
+
+    // Dispose
+    assert.equal(registry.dispose('dispose.plugin'), true);
+    assert.equal(registry.get('dispose.plugin').state, 'disposed');
+
+    // Double dispose is idempotent
+    assert.equal(registry.dispose('dispose.plugin'), true);
+    assert.equal(registry.get('dispose.plugin').state, 'disposed');
+
+    // Cannot initialize disposed plugin
+    await assert.rejects(async () => {
+        await registry.initialize('dispose.plugin');
+    }, /Cannot initialize disposed plugin/);
+});
+
+test('PLG1 — Permission Enforcement & Context Security: Capabilities strictly granted per manifest', async () => {
     let toastCalled = false;
     const mockAppService = {
         showToast: (msg, type) => {
@@ -262,7 +383,7 @@ test('PLG1 — Permission Enforcement & Context Security: Capabilities strictly 
 
     let ctx1 = null;
     registry.register(manifest1, (ctx) => { ctx1 = ctx; });
-    registry.initialize('perm.plugin1');
+    await registry.initialize('perm.plugin1');
 
     // Storage is provided
     assert.ok(ctx1.storage);
@@ -287,7 +408,7 @@ test('PLG1 — Permission Enforcement & Context Security: Capabilities strictly 
 
     let ctx2 = null;
     registry.register(manifest2, (ctx) => { ctx2 = ctx; });
-    registry.initialize('perm.plugin2');
+    await registry.initialize('perm.plugin2');
 
     // Storage is null when permission missing
     assert.equal(ctx2.storage, null);
@@ -344,8 +465,8 @@ test('PLG1 — Storage Isolation: Scoped plugin storage prevents cross-plugin da
         permissions: ['storage:private']
     }, (ctx) => { storageB = ctx.storage; });
 
-    registry.initialize('plugin.a');
-    registry.initialize('plugin.b');
+    await registry.initialize('plugin.a');
+    await registry.initialize('plugin.b');
 
     const collA = storageA.collection('shared_name');
     const collB = storageB.collection('shared_name');
@@ -398,15 +519,13 @@ test('PLG1 — First-Party Test Plugin Example', async () => {
         testPluginOutput = await notes.get('n1');
     });
 
-    // Initialize test plugin
-    const record = registry.initialize('firstparty.test.plugin');
+    // Initialize test plugin and wait for completion promise
+    const record = await registry.initialize('firstparty.test.plugin');
 
     assert.equal(record.state, 'active');
     assert.equal(mockAppService.toastLog.length, 1);
     assert.equal(mockAppService.toastLog[0].msg, 'Test plugin initialized');
 
-    // Wait briefly for async setup operations in test callback
-    await new Promise(r => setTimeout(r, 20));
     assert.ok(testPluginOutput);
     assert.equal(testPluginOutput.content, 'First-party note');
 

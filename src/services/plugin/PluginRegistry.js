@@ -51,6 +51,7 @@ export class PluginRegistry {
             state: 'registered', // 'registered' | 'initialized' | 'active' | 'disposed'
             context: null,
             error: null,
+            initPromise: null,
             registeredAt: new Date().toISOString()
         };
 
@@ -59,10 +60,11 @@ export class PluginRegistry {
     }
 
     /**
-     * Initializes a registered plugin, executes setup with restricted PluginContext, and transitions to "active".
-     * On setup failure, rolls back state cleanly to "registered" without leaving a half-initialized state.
+     * Initializes a registered plugin, executes setup (sync or async) with restricted PluginContext, and transitions to "active".
+     * On setup failure (sync throw or async rejection), rolls back state cleanly to "registered" without leaving a half-initialized state.
+     * Concurrent calls to initialize() return the same in-flight Promise to prevent running setup multiple times.
      * @param {string} pluginId
-     * @returns {Object} Plugin record
+     * @returns {Promise<Object>} Plugin record promise
      */
     initialize(pluginId) {
         if (!pluginId || typeof pluginId !== 'string') {
@@ -79,7 +81,12 @@ export class PluginRegistry {
         }
 
         if (record.state === 'active') {
-            return record;
+            return Promise.resolve(record);
+        }
+
+        // Handle concurrent initialization: return in-flight promise
+        if (record.initPromise) {
+            return record.initPromise;
         }
 
         // 1. Build restricted PluginContext based on manifest permissions
@@ -88,26 +95,30 @@ export class PluginRegistry {
             appService: this.appService
         });
 
-        // 2. Run setup function if defined
-        if (record.setup) {
-            record.state = 'initialized';
+        // 2. Mark as initialized and start async setup tracking
+        record.state = 'initialized';
+
+        record.initPromise = (async () => {
             try {
-                record.setup(context);
+                if (record.setup) {
+                    await record.setup(context);
+                }
+                record.context = context;
+                record.state = 'active';
+                record.error = null;
+                return record;
             } catch (err) {
-                // Setup failure rollback: ensure no half-initialized state remains
+                // Setup failure rollback: ensure no half-initialized or half-active state remains
                 record.state = 'registered';
                 record.context = null;
                 record.error = err;
                 throw err;
+            } finally {
+                record.initPromise = null;
             }
-        }
+        })();
 
-        // 3. Mark as active on successful setup completion
-        record.context = context;
-        record.state = 'active';
-        record.error = null;
-
-        return record;
+        return record.initPromise;
     }
 
     /**
@@ -127,6 +138,7 @@ export class PluginRegistry {
 
         record.state = 'disposed';
         record.context = null;
+        record.initPromise = null;
         return true;
     }
 
