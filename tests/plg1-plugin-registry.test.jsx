@@ -192,6 +192,12 @@ test('PLG1 — Sync Setup Lifecycle: Successful synchronous setup resolves and a
 
 test('PLG1 — Async Setup Lifecycle: Successful asynchronous setup waits for setup to finish before becoming active', async () => {
     let asyncCompleted = false;
+    let resolveSetupPromise;
+
+    const deferredSetupPromise = new Promise(resolve => {
+        resolveSetupPromise = resolve;
+    });
+
     const registry = new PluginRegistry();
 
     const manifest = {
@@ -203,16 +209,19 @@ test('PLG1 — Async Setup Lifecycle: Successful asynchronous setup waits for se
     };
 
     registry.register(manifest, async (ctx) => {
-        await new Promise(r => setTimeout(r, 30));
+        await deferredSetupPromise;
         asyncCompleted = true;
     });
 
     const initPromise = registry.initialize('async.plugin');
 
-    // Before promise resolves, state is 'initialized' (in-flight), not 'active'
+    // Deterministic state check before setup completes: state is 'initialized', not 'active'
     const recordBefore = registry.get('async.plugin');
     assert.equal(recordBefore.state, 'initialized');
     assert.equal(asyncCompleted, false);
+
+    // Resolve deferred promise
+    resolveSetupPromise();
 
     // Await completion
     const recordAfter = await initPromise;
@@ -247,6 +256,11 @@ test('PLG1 — Sync & Async Failure Rollback: Synchronous setup failure rolls ba
 });
 
 test('PLG1 — Sync & Async Failure Rollback: Asynchronous setup rejection rolls back state to registered and preserves error', async () => {
+    let rejectSetupPromise;
+    const deferredRejectPromise = new Promise((_, reject) => {
+        rejectSetupPromise = reject;
+    });
+
     const registry = new PluginRegistry();
 
     const manifest = {
@@ -259,12 +273,16 @@ test('PLG1 — Sync & Async Failure Rollback: Asynchronous setup rejection rolls
 
     const asyncError = new Error('Async network failure during plugin init');
     registry.register(manifest, async () => {
-        await new Promise(r => setTimeout(r, 20));
-        throw asyncError;
+        await deferredRejectPromise;
     });
 
+    const initPromise = registry.initialize('async.failing.plugin');
+
+    // Reject the setup promise deterministically
+    rejectSetupPromise(asyncError);
+
     await assert.rejects(async () => {
-        await registry.initialize('async.failing.plugin');
+        await initPromise;
     }, (err) => err === asyncError);
 
     const record = registry.get('async.failing.plugin');
@@ -300,6 +318,12 @@ test('PLG1 — Repeated Initialization: Already-active plugin is not re-initiali
 
 test('PLG1 — Concurrent Initialization: Simultaneous calls execute setup exactly once and return same result', async () => {
     let setupExecutions = 0;
+    let resolveSetupPromise;
+
+    const deferredPromise = new Promise(resolve => {
+        resolveSetupPromise = resolve;
+    });
+
     const registry = new PluginRegistry();
 
     const manifest = {
@@ -312,7 +336,7 @@ test('PLG1 — Concurrent Initialization: Simultaneous calls execute setup exact
 
     registry.register(manifest, async (ctx) => {
         setupExecutions++;
-        await new Promise(r => setTimeout(r, 40));
+        await deferredPromise;
     });
 
     // Invoke initialize simultaneously twice
@@ -322,11 +346,60 @@ test('PLG1 — Concurrent Initialization: Simultaneous calls execute setup exact
     // Both calls return the exact same in-flight Promise
     assert.equal(p1, p2);
 
+    resolveSetupPromise();
+
     const [rec1, rec2] = await Promise.all([p1, p2]);
 
     assert.equal(setupExecutions, 1, 'Concurrent initialization must execute setup exactly once');
     assert.equal(rec1.state, 'active');
     assert.equal(rec2.state, 'active');
+});
+
+test('PLG1 — Disposal During Pending Initialization: Disposal during pending setup prevents reactivation and preserves disposed state', async () => {
+    let resolveSetupPromise;
+    const deferredPromise = new Promise(resolve => {
+        resolveSetupPromise = resolve;
+    });
+
+    const registry = new PluginRegistry();
+
+    const manifest = {
+        id: 'disposal.pending.plugin',
+        name: 'Disposal Pending Plugin',
+        version: '1.0.0',
+        apiVersion: '1',
+        permissions: ['storage:private']
+    };
+
+    registry.register(manifest, async (ctx) => {
+        await deferredPromise;
+    });
+
+    const initPromise = registry.initialize('disposal.pending.plugin');
+
+    // Plugin is currently in 'initialized' state
+    assert.equal(registry.get('disposal.pending.plugin').state, 'initialized');
+
+    // Call dispose while initialization is pending
+    registry.dispose('disposal.pending.plugin');
+
+    // State is now 'disposed' and context is null
+    const recordDisposed = registry.get('disposal.pending.plugin');
+    assert.equal(recordDisposed.state, 'disposed');
+    assert.equal(recordDisposed.context, null);
+
+    // Resolve pending setup
+    resolveSetupPromise();
+
+    // The in-flight initialization promise rejects because plugin was disposed
+    await assert.rejects(async () => {
+        await initPromise;
+    }, /was disposed during initialization/);
+
+    // Verify plugin NEVER reactivated and remains 'disposed' with context null
+    const finalRecord = registry.get('disposal.pending.plugin');
+    assert.equal(finalRecord.state, 'disposed');
+    assert.equal(finalRecord.context, null);
 });
 
 test('PLG1 — Dispose Behavior: Idempotent disposal and prohibition of initializing disposed plugin', async () => {
@@ -519,7 +592,7 @@ test('PLG1 — First-Party Test Plugin Example', async () => {
         testPluginOutput = await notes.get('n1');
     });
 
-    // Initialize test plugin and wait for completion promise
+    // Initialize test plugin and await real initialization promise without arbitrary sleep
     const record = await registry.initialize('firstparty.test.plugin');
 
     assert.equal(record.state, 'active');

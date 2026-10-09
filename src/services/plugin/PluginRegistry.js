@@ -63,6 +63,7 @@ export class PluginRegistry {
      * Initializes a registered plugin, executes setup (sync or async) with restricted PluginContext, and transitions to "active".
      * On setup failure (sync throw or async rejection), rolls back state cleanly to "registered" without leaving a half-initialized state.
      * Concurrent calls to initialize() return the same in-flight Promise to prevent running setup multiple times.
+     * Disposal during pending initialization is handled safely and prevents reactivation.
      * @param {string} pluginId
      * @returns {Promise<Object>} Plugin record promise
      */
@@ -98,27 +99,39 @@ export class PluginRegistry {
         // 2. Mark as initialized and start async setup tracking
         record.state = 'initialized';
 
-        record.initPromise = (async () => {
+        let initPromise;
+        initPromise = (async () => {
             try {
                 if (record.setup) {
                     await record.setup(context);
                 }
+
+                // Check if plugin was disposed during setup execution
+                if (record.state === 'disposed') {
+                    throw new Error(`[PluginRegistry] Plugin "${pluginId}" was disposed during initialization.`);
+                }
+
                 record.context = context;
                 record.state = 'active';
                 record.error = null;
                 return record;
             } catch (err) {
-                // Setup failure rollback: ensure no half-initialized or half-active state remains
-                record.state = 'registered';
-                record.context = null;
-                record.error = err;
+                // Setup failure or disposal during setup rollback
+                if (record.state !== 'disposed') {
+                    record.state = 'registered';
+                    record.context = null;
+                    record.error = err;
+                }
                 throw err;
             } finally {
-                record.initPromise = null;
+                if (record.initPromise === initPromise) {
+                    record.initPromise = null;
+                }
             }
         })();
 
-        return record.initPromise;
+        record.initPromise = initPromise;
+        return initPromise;
     }
 
     /**
