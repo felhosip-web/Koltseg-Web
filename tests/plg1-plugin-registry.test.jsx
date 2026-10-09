@@ -231,6 +231,11 @@ test('PLG1 Promise Contract — Initialization with no setup function reaches ac
 });
 
 test('PLG1 Promise Contract — Successful setup clears initPromise', async () => {
+    let resolveSetup;
+    const deferredPromise = new Promise(resolve => {
+        resolveSetup = resolve;
+    });
+
     const registry = new PluginRegistry();
     registry.register({
         id: 'successful.setup.plugin',
@@ -239,10 +244,13 @@ test('PLG1 Promise Contract — Successful setup clears initPromise', async () =
         apiVersion: '1',
         permissions: ['ui:toast']
     }, async (ctx) => {
-        await new Promise(r => setTimeout(r, 10));
+        await deferredPromise;
     });
 
-    const rec = await registry.initialize('successful.setup.plugin');
+    const initPromise = registry.initialize('successful.setup.plugin');
+    resolveSetup();
+
+    const rec = await initPromise;
     assert.equal(rec.state, 'active');
     assert.equal(rec.initPromise, null, 'initPromise must be cleared after successful setup');
 });
@@ -450,6 +458,9 @@ test('PLG1 — Concurrent Initialization: Simultaneous calls execute setup exact
     const p1 = registry.initialize('concurrent.plugin');
     const p2 = registry.initialize('concurrent.plugin');
 
+    // Assert exact reference equality
+    assert.strictEqual(p1, p2, 'Concurrent initialize() calls MUST return the exact same in-flight Promise object');
+
     resolveSetupPromise();
 
     const [rec1, rec2] = await Promise.all([p1, p2]);
@@ -457,6 +468,10 @@ test('PLG1 — Concurrent Initialization: Simultaneous calls execute setup exact
     assert.equal(setupExecutions, 1, 'Concurrent initialization must execute setup exactly once');
     assert.equal(rec1.state, 'active');
     assert.equal(rec2.state, 'active');
+
+    // Verify initPromise is cleared after completion
+    const record = registry.get('concurrent.plugin');
+    assert.equal(record.initPromise, null, 'initPromise must be cleared after concurrent initialization completes');
 });
 
 test('PLG1 — Disposal During Pending Initialization: Disposal during pending setup prevents reactivation and preserves disposed state', async () => {

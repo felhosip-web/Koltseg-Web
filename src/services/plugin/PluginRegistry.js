@@ -62,87 +62,85 @@ export class PluginRegistry {
     /**
      * Initializes a registered plugin, executes setup (sync or async) with restricted PluginContext, and transitions to "active".
      * Returns a Promise for ALL code paths (including validation, unregistered, disposed, context creation, setup, and errors).
+     * Concurrent calls to initialize() return the exact same in-flight Promise object (p1 === p2).
      * On setup failure (sync throw or async rejection), rolls back state cleanly to "registered" without leaving a half-initialized state.
-     * Concurrent calls to initialize() return a Promise resolving to the same in-flight setup operation to prevent duplicate execution.
      * Disposal during pending initialization is handled safely and prevents reactivation.
      * @param {string} pluginId
      * @returns {Promise<Object>} Plugin record promise
      */
     initialize(pluginId) {
-        return new Promise((resolve, reject) => {
-            try {
-                if (!pluginId || typeof pluginId !== 'string') {
-                    throw new Error('[PluginRegistry] Valid pluginId is required for initialize.');
-                }
-
-                const record = this.plugins.get(pluginId);
-                if (!record) {
-                    throw new Error(`[PluginRegistry] Cannot initialize unregistered plugin "${pluginId}".`);
-                }
-
-                if (record.state === 'disposed') {
-                    throw new Error(`[PluginRegistry] Cannot initialize disposed plugin "${pluginId}".`);
-                }
-
-                if (record.state === 'active') {
-                    return resolve(record);
-                }
-
-                // Handle concurrent initialization: return in-flight promise
-                if (record.initPromise) {
-                    return resolve(record.initPromise);
-                }
-
-                // 1. Build restricted PluginContext based on manifest permissions
-                const context = createPluginContext(record.manifest, {
-                    storageService: this.storageService,
-                    appService: this.appService
-                });
-
-                // 2. Mark as initialized and start async setup tracking
-                record.state = 'initialized';
-
-                let initPromiseRef;
-                const initPromise = (async () => {
-                    // Yield microtask tick so initPromise is assigned to record.initPromise before setup/finally runs
-                    await Promise.resolve();
-                    try {
-                        if (record.setup) {
-                            await record.setup(context);
-                        }
-
-                        // Check if plugin was disposed during setup execution
-                        if (record.state === 'disposed') {
-                            throw new Error(`[PluginRegistry] Plugin "${pluginId}" was disposed during initialization.`);
-                        }
-
-                        record.context = context;
-                        record.state = 'active';
-                        record.error = null;
-                        return record;
-                    } catch (err) {
-                        // Setup failure or disposal during setup rollback
-                        if (record.state !== 'disposed') {
-                            record.state = 'registered';
-                            record.context = null;
-                            record.error = err;
-                        }
-                        throw err;
-                    } finally {
-                        if (record.initPromise === initPromiseRef) {
-                            record.initPromise = null;
-                        }
-                    }
-                })();
-
-                initPromiseRef = initPromise;
-                record.initPromise = initPromise;
-
-                resolve(initPromise);
-            } catch (syncErr) {
-                reject(syncErr);
+        try {
+            if (!pluginId || typeof pluginId !== 'string') {
+                return Promise.reject(new Error('[PluginRegistry] Valid pluginId is required for initialize.'));
             }
-        });
+
+            const record = this.plugins.get(pluginId);
+            if (!record) {
+                return Promise.reject(new Error(`[PluginRegistry] Cannot initialize unregistered plugin "${pluginId}".`));
+            }
+
+            if (record.state === 'disposed') {
+                return Promise.reject(new Error(`[PluginRegistry] Cannot initialize disposed plugin "${pluginId}".`));
+            }
+
+            if (record.state === 'active') {
+                return Promise.resolve(record);
+            }
+
+            // Handle concurrent initialization: return the EXACT same in-flight Promise object
+            if (record.initPromise) {
+                return record.initPromise;
+            }
+
+            // 1. Build restricted PluginContext based on manifest permissions
+            const context = createPluginContext(record.manifest, {
+                storageService: this.storageService,
+                appService: this.appService
+            });
+
+            // 2. Mark as initialized and start async setup tracking
+            record.state = 'initialized';
+
+            let initPromiseRef;
+            const initPromise = (async () => {
+                // Yield microtask tick so initPromise is assigned to record.initPromise before setup/finally runs
+                await Promise.resolve();
+                try {
+                    if (record.setup) {
+                        await record.setup(context);
+                    }
+
+                    // Check if plugin was disposed during setup execution
+                    if (record.state === 'disposed') {
+                        throw new Error(`[PluginRegistry] Plugin "${pluginId}" was disposed during initialization.`);
+                    }
+
+                    record.context = context;
+                    record.state = 'active';
+                    record.error = null;
+                    return record;
+                } catch (err) {
+                    // Setup failure or disposal during setup rollback
+                    if (record.state !== 'disposed') {
+                        record.state = 'registered';
+                        record.context = null;
+                        record.error = err;
+                    }
+                    throw err;
+                } finally {
+                    if (record.initPromise === initPromiseRef) {
+                        record.initPromise = null;
+                    }
+                }
+            })();
+
+            initPromiseRef = initPromise;
+            record.initPromise = initPromise;
+
+            return initPromise;
+        } catch (syncErr) {
+            return Promise.reject(syncErr);
+        }
     }
 
     /**
