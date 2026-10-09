@@ -165,6 +165,73 @@ test('PLG1 — PluginRegistry: Registration, Duplicate ID rejection, and query o
     assert.equal(registry.list().length, 1);
 });
 
+test('PLG1 Security — Deep Freeze Immutability: Post-registration permission mutation attempts fail and cannot grant unauthorized capabilities', async () => {
+    const mockAppService = {
+        getAppInstance: () => ({
+            items: { items: [{ id: 'i1', name: 'Coffee' }] }
+        })
+    };
+
+    const storageService = new PluginStorageService(null, null);
+    const registry = new PluginRegistry(storageService, mockAppService);
+    const runtime = new PluginRuntime(storageService, mockAppService);
+
+    // Manifest originally registered with ONLY 'ui:toast' (lacks 'expenses:read' and 'storage:private')
+    const originalManifest = {
+        id: 'immutable.perm.plugin',
+        name: 'Immutable Perm Plugin',
+        version: '1.0.0',
+        apiVersion: '1',
+        permissions: ['ui:toast']
+    };
+
+    // 1. Register plugin
+    const regRecord = registry.register(originalManifest);
+
+    // Verify manifest permissions array is deeply frozen
+    assert.ok(Object.isFrozen(regRecord.manifest));
+    assert.ok(Object.isFrozen(regRecord.manifest.permissions));
+
+    // Attempt 1: Try to push unapproved permission through register() returned record
+    assert.throws(() => {
+        regRecord.manifest.permissions.push('expenses:read');
+    }, TypeError);
+
+    // Attempt 2: Try to push unapproved permission through registry.get()
+    const getRecord = registry.get('immutable.perm.plugin');
+    assert.throws(() => {
+        getRecord.manifest.permissions.push('expenses:read');
+    }, TypeError);
+
+    // Attempt 3: Try to mutate permissions through registry.list()
+    const listResult = registry.list();
+    assert.throws(() => {
+        listResult[0].manifest.permissions.push('expenses:read');
+    }, TypeError);
+
+    // Attempt 4: Try to mutate permissions through PluginRuntime.listPlugins()
+    await runtime.registerPlugin({
+        id: 'runtime.immutable.plugin',
+        name: 'Runtime Immutable Plugin',
+        version: '1.0.0',
+        apiVersion: '1',
+        permissions: ['ui:toast']
+    });
+    const runtimeList = runtime.listPlugins();
+    const runtimeItem = runtimeList.find(p => p.id === 'runtime.immutable.plugin');
+    assert.throws(() => {
+        runtimeItem.permissions.push('expenses:read');
+    }, TypeError);
+
+    // Initialize the plugin and verify unapproved 'expenses:read' capability remains DENIED
+    const activeRecord = await registry.initialize('immutable.perm.plugin');
+
+    assert.equal(activeRecord.state, 'active');
+    assert.throws(() => {
+        activeRecord.context.api.getCategoryList();
+    }, /lacks "expenses:read" permission/);
+});
+
 test('PLG1 Promise Contract — Invalid plugin ID returns a Promise rejection', async () => {
     const registry = new PluginRegistry();
     const res = registry.initialize(null);

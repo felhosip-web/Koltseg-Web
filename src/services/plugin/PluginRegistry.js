@@ -4,6 +4,23 @@
 import { validatePluginManifest } from './PluginManifestValidator.js';
 import { createPluginContext } from './PluginCapabilityFactory.js';
 
+/**
+ * Recursively freezes an object and all nested objects/arrays to guarantee immutability.
+ * @param {Object} obj
+ * @returns {Object} Deeply frozen object
+ */
+function deepFreeze(obj) {
+    if (obj && typeof obj === 'object') {
+        Object.freeze(obj);
+        for (const prop of Object.getOwnPropertyNames(obj)) {
+            if (obj[prop] !== null && (typeof obj[prop] === 'object' || typeof obj[prop] === 'function') && !Object.isFrozen(obj[prop])) {
+                deepFreeze(obj[prop]);
+            }
+        }
+    }
+    return obj;
+}
+
 export class PluginRegistry {
     /**
      * @param {Object} storageService - PluginStorageService instance
@@ -27,6 +44,7 @@ export class PluginRegistry {
 
     /**
      * Registers a plugin in the registry with state "registered".
+     * Stored manifest contract is deeply frozen to prevent post-validation permission mutations.
      * @param {Object} manifest - Declarative plugin manifest contract
      * @param {Function|null} setup - Optional setup function receiving restricted context
      * @returns {Object} Plugin record
@@ -45,8 +63,11 @@ export class PluginRegistry {
             throw new Error(`[PluginRegistry] Plugin with ID "${manifest.id}" is already registered.`);
         }
 
+        // Deep copy and deeply freeze manifest to enforce strict permission immutability
+        const frozenManifest = deepFreeze(JSON.parse(JSON.stringify(manifest)));
+
         const pluginRecord = {
-            manifest: Object.freeze(JSON.parse(JSON.stringify(manifest))),
+            manifest: frozenManifest,
             setup: setup || null,
             state: 'registered', // 'registered' | 'initialized' | 'active' | 'disposed'
             context: null,
@@ -92,7 +113,7 @@ export class PluginRegistry {
                 return record.initPromise;
             }
 
-            // 1. Build restricted PluginContext based on manifest permissions
+            // 1. Build restricted PluginContext based on validated, immutable manifest permissions
             const context = createPluginContext(record.manifest, {
                 storageService: this.storageService,
                 appService: this.appService
