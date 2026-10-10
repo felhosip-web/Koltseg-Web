@@ -23,21 +23,33 @@ function deepFreeze(obj) {
 
 /**
  * Creates an immutable, deeply frozen public DTO snapshot of a plugin record.
- * Encapsulates internal registry references (setup callback, context, initPromise).
+ * Encapsulates internal registry references (setup callback, context, initPromise) and formats errors safely.
  * @param {Object|null} record
  * @returns {Object|null} Deeply frozen DTO snapshot
  */
 function createRecordSnapshot(record) {
     if (!record) return null;
+
+    let safeError = null;
+    if (record.error) {
+        safeError = Object.freeze({
+            name: record.error.name || 'Error',
+            message: record.error.message || String(record.error)
+        });
+    }
+
     return deepFreeze({
         manifest: record.manifest, // deeply frozen manifest contract
         state: record.state,
-        error: record.error || null,
+        error: safeError,
         registeredAt: record.registeredAt
     });
 }
 
 export class PluginRegistry {
+    /** @type {Map<string, Object>} Private internal plugin records storage */
+    #plugins = new Map();
+
     /**
      * @param {Object} storageService - PluginStorageService instance
      * @param {Object} appService - AppService / Host interface instance
@@ -45,7 +57,6 @@ export class PluginRegistry {
     constructor(storageService = null, appService = null) {
         this.storageService = storageService;
         this.appService = appService;
-        this.plugins = new Map();
     }
 
     /**
@@ -76,7 +87,7 @@ export class PluginRegistry {
         }
 
         // 3. Prevent duplicate plugin IDs
-        if (this.plugins.has(manifest.id)) {
+        if (this.#plugins.has(manifest.id)) {
             throw new Error(`[PluginRegistry] Plugin with ID "${manifest.id}" is already registered.`);
         }
 
@@ -93,7 +104,7 @@ export class PluginRegistry {
             registeredAt: new Date().toISOString()
         };
 
-        this.plugins.set(manifest.id, pluginRecord);
+        this.#plugins.set(manifest.id, pluginRecord);
         return createRecordSnapshot(pluginRecord);
     }
 
@@ -112,7 +123,7 @@ export class PluginRegistry {
                 return Promise.reject(new Error('[PluginRegistry] Valid pluginId is required for initialize.'));
             }
 
-            const record = this.plugins.get(pluginId);
+            const record = this.#plugins.get(pluginId);
             if (!record) {
                 return Promise.reject(new Error(`[PluginRegistry] Cannot initialize unregistered plugin "${pluginId}".`));
             }
@@ -189,7 +200,7 @@ export class PluginRegistry {
     dispose(pluginId) {
         if (!pluginId || typeof pluginId !== 'string') return false;
 
-        const record = this.plugins.get(pluginId);
+        const record = this.#plugins.get(pluginId);
         if (!record) return false;
 
         if (record.state === 'disposed') {
@@ -209,9 +220,9 @@ export class PluginRegistry {
      */
     unregister(pluginId) {
         if (!pluginId || typeof pluginId !== 'string') return false;
-        if (this.plugins.has(pluginId)) {
+        if (this.#plugins.has(pluginId)) {
             this.dispose(pluginId);
-            this.plugins.delete(pluginId);
+            this.#plugins.delete(pluginId);
             return true;
         }
         return false;
@@ -224,7 +235,7 @@ export class PluginRegistry {
      */
     get(pluginId) {
         if (!pluginId || typeof pluginId !== 'string') return null;
-        const record = this.plugins.get(pluginId);
+        const record = this.#plugins.get(pluginId);
         return createRecordSnapshot(record);
     }
 
@@ -235,7 +246,7 @@ export class PluginRegistry {
      */
     has(pluginId) {
         if (!pluginId || typeof pluginId !== 'string') return false;
-        return this.plugins.has(pluginId);
+        return this.#plugins.has(pluginId);
     }
 
     /**
@@ -243,6 +254,6 @@ export class PluginRegistry {
      * @returns {Array<Object>} List of immutable plugin DTO summaries
      */
     list() {
-        return Array.from(this.plugins.values()).map(createRecordSnapshot);
+        return Array.from(this.#plugins.values()).map(createRecordSnapshot);
     }
 }

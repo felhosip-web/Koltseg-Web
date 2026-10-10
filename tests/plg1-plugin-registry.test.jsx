@@ -165,7 +165,7 @@ test('PLG1 — PluginRegistry: Registration, Duplicate ID rejection, and query o
     assert.equal(registry.list().length, 1);
 });
 
-test('PLG1 Security — Encapsulation & Immutability: Public DTOs prevent internal record and manifest mutation', async () => {
+test('PLG1 Security — Registry Private Field & DTO Hardening: #plugins Map is genuinely private and errors are safe DTOs', async () => {
     const mockAppService = {
         getAppInstance: () => ({
             items: { items: [{ id: 'i1', name: 'Coffee' }] }
@@ -186,6 +186,9 @@ test('PLG1 Security — Encapsulation & Immutability: Public DTOs prevent intern
         apiVersion: '1',
         permissions: ['ui:toast']
     };
+
+    // Verify registry.plugins is undefined and private #plugins cannot be accessed externally
+    assert.equal(registry.plugins, undefined, 'Public registry.plugins property must be undefined');
 
     // 1. Register plugin
     const regDto = registry.register(originalManifest, (ctx) => {
@@ -331,7 +334,7 @@ test('PLG1 Promise Contract — Successful setup clears initPromise', async () =
     assert.equal(rec.state, 'active');
 });
 
-test('PLG1 Promise Contract — Failed setup clears initPromise and preserves rollback behavior', async () => {
+test('PLG1 Promise Contract — Failed setup clears initPromise and preserves rollback behavior with safe error DTO', async () => {
     const registry = new PluginRegistry();
     const setupError = new Error('Setup failed intentionally');
 
@@ -351,7 +354,10 @@ test('PLG1 Promise Contract — Failed setup clears initPromise and preserves ro
 
     const rec = registry.get('failed.setup.plugin');
     assert.equal(rec.state, 'registered');
-    assert.equal(rec.error, setupError);
+    assert.ok(rec.error);
+    assert.equal(rec.error.message, setupError.message);
+    assert.equal(rec.error.name, 'Error');
+    assert.ok(Object.isFrozen(rec.error));
 });
 
 test('PLG1 — Sync Setup Lifecycle: Successful synchronous setup resolves and activates plugin', async () => {
@@ -418,7 +424,7 @@ test('PLG1 — Async Setup Lifecycle: Successful asynchronous setup waits for se
     assert.equal(recordAfter.state, 'active');
 });
 
-test('PLG1 — Sync & Async Failure Rollback: Synchronous setup failure rolls back state to registered and preserves error', async () => {
+test('PLG1 — Sync & Async Failure Rollback: Synchronous setup failure rolls back state to registered and preserves error in DTO', async () => {
     const registry = new PluginRegistry();
 
     const manifest = {
@@ -440,10 +446,10 @@ test('PLG1 — Sync & Async Failure Rollback: Synchronous setup failure rolls ba
 
     const record = registry.get('sync.failing.plugin');
     assert.equal(record.state, 'registered');
-    assert.equal(record.error, syncError);
+    assert.equal(record.error.message, syncError.message);
 });
 
-test('PLG1 — Sync & Async Failure Rollback: Asynchronous setup rejection rolls back state to registered and preserves error', async () => {
+test('PLG1 — Sync & Async Failure Rollback: Asynchronous setup rejection rolls back state to registered and preserves error in DTO', async () => {
     let rejectSetupPromise;
     const deferredRejectPromise = new Promise((_, reject) => {
         rejectSetupPromise = reject;
@@ -475,7 +481,7 @@ test('PLG1 — Sync & Async Failure Rollback: Asynchronous setup rejection rolls
 
     const record = registry.get('async.failing.plugin');
     assert.equal(record.state, 'registered');
-    assert.equal(record.error, asyncError);
+    assert.equal(record.error.message, asyncError.message);
 });
 
 test('PLG1 — Repeated Initialization: Already-active plugin is not re-initialized', async () => {
