@@ -256,4 +256,19 @@ export class PluginRegistry {
     list() {
         return Array.from(this.#plugins.values()).map(createRecordSnapshot);
     }
+
+    /**
+     * Retrieves the active PluginContext instance for a plugin.
+     * Guarantees context lifecycle consistency across setup and UI rendering.
+     * @param {string} pluginId
+     * @returns {Object|null} Restricted PluginContext if plugin is active, else null
+     */
+    getContext(pluginId) {
+        if (!pluginId || typeof pluginId !== 'string') return null;
+        const record = this.#plugins.get(pluginId);
+        if (record && record.state === 'active') {
+            return record.context;
+        }
+        return null;
+    }
 }

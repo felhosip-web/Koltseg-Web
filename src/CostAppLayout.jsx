@@ -8,10 +8,14 @@ import ChartsTab from './components/charts/ChartsTab.jsx';
 import RemindersTab from './components/reminders/RemindersTab.jsx';
 import IncomingTab from './components/incoming/IncomingTab.jsx';
 import StatsTab from './components/stats/StatsTab.jsx';
+import PluginHost from './components/plugin/PluginHost.jsx';
 import { useAppStore } from './store/useAppStore.js';
 
 export default function CostAppLayout() {
     const activeTab = useAppStore(state => state.activeTab);
+
+    const isPluginTab = activeTab && activeTab.startsWith('plugin:');
+    const pluginId = isPluginTab ? activeTab.slice(7) : null;
 
     return (
         <div className="flex flex-col w-full">
@@ -32,6 +36,7 @@ export default function CostAppLayout() {
                 {activeTab === 'reminders' && <RemindersTab />}
                 {activeTab === 'stats' && <StatsTab />}
                 {activeTab === 'incoming' && <IncomingTab />}
+                {isPluginTab && <PluginHost pluginId={pluginId} />}
             </div>
         </div>
     );

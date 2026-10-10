@@ -1,18 +1,26 @@
 import React from 'react';
 import { useAppStore } from './store/useAppStore.js';
+import { usePluginUIList } from './services/plugin/PluginUIRegistry.js';
+import { appService } from './services/appService.js';
 
 /**
  * Tab navigation component for switching between different views in the cost tracking app.
- * Provides tabs for dashboard, table, time tracking, charts, reminders, incoming transfers, and stats.
+ * Provides tabs for dashboard, table, time tracking, charts, reminders, incoming transfers, stats,
+ * and dynamically registered trusted first-party plugin UIs.
+ * @param {Object} [props]
+ * @param {Object} [props.uiRegistry] - Optional custom PluginUIRegistry instance
  * @returns {JSX.Element} The tab navigation component
  */
-export default function CostAppTabs() {
-
+export default function CostAppTabs({ uiRegistry: customUIRegistry }) {
     const activeTab = useAppStore(state => state.activeTab);
     const setActiveTab = useAppStore(state => state.setActiveTab);
 
+    const uiRegistry = customUIRegistry || appService.getPluginUIRegistry();
+    const pluginUIList = usePluginUIList(uiRegistry);
+    const registeredPluginsUI = pluginUIList.filter(p => p.hasUI && p.component);
+
     const getTabClass = (tabId) => {
-        const base = "tab-btn px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all ";
+        const base = "tab-btn px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all shrink-0 ";
         if (activeTab === tabId) {
             return base + "bg-blue-600 text-white shadow-md";
         }
@@ -56,6 +64,17 @@ export default function CostAppTabs() {
                 onClick={() => setActiveTab('stats')}>
                 <i className="fas fa-calculator mr-1"></i> Részletek
             </button>
+            {registeredPluginsUI.map(ui => {
+                const tabId = `plugin:${ui.pluginId}`;
+                return (
+                    <button
+                        key={ui.pluginId}
+                        className={getTabClass(tabId)}
+                        onClick={() => setActiveTab(tabId)}>
+                        <i className={`${ui.icon || 'fas fa-plug'} mr-1`}></i> {ui.title}
+                    </button>
+                );
+            })}
         </div>
     );
 }
