@@ -5,11 +5,42 @@
  * Integrates with PLG1 PluginRegistry without introducing a parallel lifecycle.
  */
 
+import { useSyncExternalStore } from 'react';
 import { validatePluginUIContract, createPluginUIDTO } from './PluginUIContract.js';
 
 export class PluginUIRegistry {
     /** @type {Map<string, Object>} Private internal map of pluginId -> UI DTO */
     #uiEntries = new Map();
+    /** @type {Set<Function>} Private listeners set */
+    #listeners = new Set();
+    /** @type {Array<Object>} Private cached list snapshot for useSyncExternalStore immutability */
+    #cachedList = [];
+
+    /**
+     * Subscribes a listener to UI registry changes (registration / unregistration).
+     * @param {Function} listener
+     * @returns {Function} Unsubscribe function
+     */
+    subscribe(listener) {
+        if (typeof listener === 'function') {
+            this.#listeners.add(listener);
+            return () => {
+                this.#listeners.delete(listener);
+            };
+        }
+        return () => {};
+    }
+
+    #notifyListeners() {
+        this.#cachedList = Array.from(this.#uiEntries.values());
+        for (const listener of this.#listeners) {
+            try {
+                listener();
+            } catch (e) {
+                console.error('[PluginUIRegistry] Listener notification error:', e);
+            }
+        }
+    }
 
     /**
      * Registers a plugin's UI component and metadata.
@@ -26,6 +57,7 @@ export class PluginUIRegistry {
         }
 
         this.#uiEntries.set(dto.pluginId, dto);
+        this.#notifyListeners();
         return dto;
     }
 
@@ -36,7 +68,11 @@ export class PluginUIRegistry {
      */
     unregisterUI(pluginId) {
         if (!pluginId || typeof pluginId !== 'string') return false;
-        return this.#uiEntries.delete(pluginId);
+        const removed = this.#uiEntries.delete(pluginId);
+        if (removed) {
+            this.#notifyListeners();
+        }
+        return removed;
     }
 
     /**
@@ -61,18 +97,37 @@ export class PluginUIRegistry {
 
     /**
      * Lists all registered plugin UI entries.
+     * Returns a cached immutable snapshot reference for React useSyncExternalStore compatibility.
      * @returns {Array<Object>} List of registered UI DTOs
      */
     listUI() {
-        return Array.from(this.#uiEntries.values());
+        return this.#cachedList;
     }
 
     /**
      * Clears all registered UI definitions. Useful for tests.
      */
     clear() {
+        const hadEntries = this.#uiEntries.size > 0;
         this.#uiEntries.clear();
+        this.#cachedList = [];
+        if (hadEntries) {
+            this.#notifyListeners();
+        }
     }
 }
 
 export const pluginUIRegistry = new PluginUIRegistry();
+
+/**
+ * React Hook to subscribe to PluginUIRegistry changes.
+ * @param {PluginUIRegistry} [uiReg]
+ * @returns {Array<Object>} List of registered UI DTOs
+ */
+export function usePluginUIList(uiReg = pluginUIRegistry) {
+    return useSyncExternalStore(
+        (onStoreChange) => uiReg.subscribe(onStoreChange),
+        () => uiReg.listUI(),
+        () => uiReg.listUI()
+    );
+}

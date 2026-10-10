@@ -1,6 +1,6 @@
 import React from 'react';
 import { useAppStore } from './store/useAppStore.js';
-import { pluginUIRegistry } from './services/plugin/PluginUIRegistry.js';
+import { usePluginUIList } from './services/plugin/PluginUIRegistry.js';
 
 /**
  * Tab navigation component for switching between different views in the cost tracking app.
@@ -12,7 +12,8 @@ export default function CostAppTabs() {
     const activeTab = useAppStore(state => state.activeTab);
     const setActiveTab = useAppStore(state => state.setActiveTab);
 
-    const registeredPluginsUI = pluginUIRegistry.listUI().filter(p => p.hasUI && p.component);
+    const pluginUIList = usePluginUIList();
+    const registeredPluginsUI = pluginUIList.filter(p => p.hasUI && p.component);
 
     const getTabClass = (tabId) => {
         const base = "tab-btn px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all shrink-0 ";

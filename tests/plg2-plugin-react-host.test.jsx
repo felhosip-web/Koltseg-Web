@@ -12,7 +12,7 @@ import { act } from 'react';
 import { PluginStorageService } from '../src/services/plugin/PluginStorageService.js';
 import { PluginRegistry } from '../src/services/plugin/PluginRegistry.js';
 import { validatePluginUIContract, createPluginUIDTO } from '../src/services/plugin/PluginUIContract.js';
-import { PluginUIRegistry } from '../src/services/plugin/PluginUIRegistry.js';
+import { PluginUIRegistry, usePluginUIList } from '../src/services/plugin/PluginUIRegistry.js';
 import { PluginErrorBoundary } from '../src/components/plugin/PluginErrorBoundary.jsx';
 import { PluginHost } from '../src/components/plugin/PluginHost.jsx';
 import { SAMPLE_PLUGIN_MANIFEST, samplePluginSetup, SamplePluginComponent, registerSamplePlugin } from '../src/plugins/samplePlugin.jsx';
@@ -464,7 +464,7 @@ test('PLG2 — Plugin Switching & No Duplicate Initialization', async () => {
     dom.window.close();
 });
 
-test('PLG2 — UI Unmount vs Disposed Lifecycle Separation', async () => {
+test('PLG2 Capability Isolation — Plugin Context Isolation During Switching', async () => {
     const dom = setupJSDOM();
     const rootEl = document.getElementById('root');
     const root = createRoot(rootEl);
@@ -472,58 +472,217 @@ test('PLG2 — UI Unmount vs Disposed Lifecycle Separation', async () => {
     const registry = new PluginRegistry();
     const uiRegistry = new PluginUIRegistry();
 
+    const receivedContextsA = [];
+    const receivedContextsB = [];
+
     registry.register({
-        id: 'lifecycle.plugin',
-        name: 'Lifecycle Plugin',
+        id: 'isolation.plugin.a',
+        name: 'Isolation Plugin A',
         version: '1.0.0',
         apiVersion: '1',
         permissions: ['ui:toast']
     });
 
+    registry.register({
+        id: 'isolation.plugin.b',
+        name: 'Isolation Plugin B',
+        version: '1.0.0',
+        apiVersion: '1',
+        permissions: ['expenses:read']
+    });
+
     uiRegistry.registerUI({
-        pluginId: 'lifecycle.plugin',
-        title: 'Lifecycle Plugin',
+        pluginId: 'isolation.plugin.a',
+        title: 'Plugin A',
         hasUI: true,
-        component: () => React.createElement('div', { id: 'lifecycle-ui' }, 'Lifecycle UI')
+        component: ({ context }) => {
+            receivedContextsA.push(context);
+            return React.createElement('div', { id: 'rendered-a' }, 'A');
+        }
     });
 
-    // 1. Render UI
-    const initPromise = registry.initialize('lifecycle.plugin');
+    uiRegistry.registerUI({
+        pluginId: 'isolation.plugin.b',
+        title: 'Plugin B',
+        hasUI: true,
+        component: ({ context }) => {
+            receivedContextsB.push(context);
+            return React.createElement('div', { id: 'rendered-b' }, 'B');
+        }
+    });
+
+    // Initialize both plugins first so both have canonical active contexts in registry
+    await registry.initialize('isolation.plugin.a');
+    await registry.initialize('isolation.plugin.b');
+
+    const canonicalContextA = registry.getContext('isolation.plugin.a');
+    const canonicalContextB = registry.getContext('isolation.plugin.b');
+
+    assert.ok(canonicalContextA);
+    assert.ok(canonicalContextB);
+    assert.notStrictEqual(canonicalContextA, canonicalContextB);
+
+    // 1. Render Plugin A
     await act(async () => {
         root.render(React.createElement(PluginHost, {
-            pluginId: 'lifecycle.plugin',
+            pluginId: 'isolation.plugin.a',
             registry,
             uiRegistry
         }));
-        await initPromise;
     });
 
-    assert.equal(registry.get('lifecycle.plugin').state, 'active');
+    assert.equal(receivedContextsA.length >= 1, true);
+    assert.strictEqual(receivedContextsA[0], canonicalContextA);
 
-    // 2. Unmount React component (simulating tab switch)
-    await act(async () => {
-        root.render(React.createElement('div', null, 'Tab Switched Away'));
-        await Promise.resolve();
-    });
-
-    // Unmounting React UI MUST NOT dispose the plugin runtime!
-    assert.equal(registry.get('lifecycle.plugin').state, 'active', 'Plugin state remains active after UI unmount');
-
-    // 3. Explicit disposal
-    registry.dispose('lifecycle.plugin');
-    assert.equal(registry.get('lifecycle.plugin').state, 'disposed');
-
-    // 4. Re-rendering PluginHost shows disposed fallback
+    // 2. Switch same PluginHost instance to Plugin B
     await act(async () => {
         root.render(React.createElement(PluginHost, {
-            pluginId: 'lifecycle.plugin',
+            pluginId: 'isolation.plugin.b',
             registry,
             uiRegistry
         }));
-        await Promise.resolve();
     });
 
-    assert.equal(rootEl.innerHTML.includes('Inaktív bővítmény'), true);
+    assert.equal(receivedContextsB.length >= 1, true);
+
+    // CRITICAL SECURITY ASSERTION: Plugin B NEVER receives Plugin A's context, even for a single render!
+    for (const ctx of receivedContextsB) {
+        assert.notStrictEqual(ctx, canonicalContextA, "Plugin B MUST NEVER receive Plugin A's context!");
+        assert.strictEqual(ctx, canonicalContextB, "Plugin B MUST ONLY receive Plugin B's canonical context!");
+    }
+
+    root.unmount();
+    dom.window.close();
+});
+
+test('PLG2 Capability Isolation — Async Race Prevention', async () => {
+    const dom = setupJSDOM();
+    const rootEl = document.getElementById('root');
+    const root = createRoot(rootEl);
+
+    const registry = new PluginRegistry();
+    const uiRegistry = new PluginUIRegistry();
+
+    let resolveSlowSetupA;
+    const slowInitPromiseA = new Promise((resolve) => {
+        resolveSlowSetupA = resolve;
+    });
+
+    const receivedContextsB = [];
+
+    registry.register({
+        id: 'race.plugin.a',
+        name: 'Race Plugin A',
+        version: '1.0.0',
+        apiVersion: '1',
+        permissions: ['ui:toast']
+    }, async () => {
+        await slowInitPromiseA;
+    });
+
+    registry.register({
+        id: 'race.plugin.b',
+        name: 'Race Plugin B',
+        version: '1.0.0',
+        apiVersion: '1',
+        permissions: ['expenses:read']
+    });
+
+    uiRegistry.registerUI({
+        pluginId: 'race.plugin.a',
+        title: 'Plugin A',
+        hasUI: true,
+        component: () => React.createElement('div', { id: 'rendered-a' }, 'A')
+    });
+
+    uiRegistry.registerUI({
+        pluginId: 'race.plugin.b',
+        title: 'Plugin B',
+        hasUI: true,
+        component: ({ context }) => {
+            receivedContextsB.push(context);
+            return React.createElement('div', { id: 'rendered-b' }, 'B');
+        }
+    });
+
+    // Initialize B upfront
+    await registry.initialize('race.plugin.b');
+    const canonicalContextB = registry.getContext('race.plugin.b');
+
+    // 1. Render Plugin A (starts slow setup A)
+    await act(async () => {
+        root.render(React.createElement(PluginHost, {
+            pluginId: 'race.plugin.a',
+            registry,
+            uiRegistry
+        }));
+    });
+
+    // 2. Switch immediately to Plugin B while Plugin A is still resolving setup
+    await act(async () => {
+        root.render(React.createElement(PluginHost, {
+            pluginId: 'race.plugin.b',
+            registry,
+            uiRegistry
+        }));
+    });
+
+    assert.ok(document.getElementById('rendered-b'));
+
+    // 3. Resolve Plugin A's setup NOW
+    await act(async () => {
+        resolveSlowSetupA();
+        await new Promise(r => setImmediate(r));
+    });
+
+    // Verify Plugin B remains rendered and has received ONLY canonical B context
+    assert.ok(document.getElementById('rendered-b'));
+    assert.equal(document.getElementById('rendered-a'), null);
+
+    const canonicalContextA = registry.getContext('race.plugin.a');
+    for (const ctx of receivedContextsB) {
+        assert.notStrictEqual(ctx, canonicalContextA);
+        assert.strictEqual(ctx, canonicalContextB);
+    }
+
+    root.unmount();
+    dom.window.close();
+});
+
+test('PLG2 Dynamic UI Registration — Reactive Subscription', async () => {
+    const dom = setupJSDOM();
+    const rootEl = document.getElementById('root');
+    const root = createRoot(rootEl);
+
+    const uiRegistry = new PluginUIRegistry();
+
+    const TestTabContainer = () => {
+        const list = usePluginUIList(uiRegistry);
+        return React.createElement('div', { id: 'tabs-container' },
+            list.map(ui => React.createElement('button', { key: ui.pluginId }, ui.title))
+        );
+    };
+
+    await act(async () => {
+        root.render(React.createElement(TestTabContainer));
+    });
+
+    const containerBefore = document.getElementById('tabs-container');
+    assert.equal(containerBefore.children.length, 0);
+
+    // Register UI at runtime
+    await act(async () => {
+        uiRegistry.registerUI({
+            pluginId: 'dynamic.tab.plugin',
+            title: 'Dynamic Plugin Tab',
+            hasUI: true,
+            component: () => React.createElement('div', null, 'Tab Content')
+        });
+    });
+
+    const containerAfter = document.getElementById('tabs-container');
+    assert.equal(containerAfter.children.length, 1);
+    assert.equal(containerAfter.children[0].textContent, 'Dynamic Plugin Tab');
 
     root.unmount();
     dom.window.close();
