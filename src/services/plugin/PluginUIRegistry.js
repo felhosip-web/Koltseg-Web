@@ -13,8 +13,8 @@ export class PluginUIRegistry {
     #uiEntries = new Map();
     /** @type {Set<Function>} Private listeners set */
     #listeners = new Set();
-    /** @type {Array<Object>} Private cached list snapshot for useSyncExternalStore immutability */
-    #cachedList = [];
+    /** @type {Array<Object>} Private cached frozen list snapshot for useSyncExternalStore immutability */
+    #cachedList = Object.freeze([]);
 
     /**
      * Subscribes a listener to UI registry changes (registration / unregistration).
@@ -32,7 +32,7 @@ export class PluginUIRegistry {
     }
 
     #notifyListeners() {
-        this.#cachedList = Array.from(this.#uiEntries.values());
+        this.#cachedList = Object.freeze(Array.from(this.#uiEntries.values()));
         for (const listener of this.#listeners) {
             try {
                 listener();
@@ -97,8 +97,8 @@ export class PluginUIRegistry {
 
     /**
      * Lists all registered plugin UI entries.
-     * Returns a cached immutable snapshot reference for React useSyncExternalStore compatibility.
-     * @returns {Array<Object>} List of registered UI DTOs
+     * Returns a cached deeply frozen immutable array snapshot reference for React useSyncExternalStore compatibility.
+     * @returns {ReadonlyArray<Object>} Immutable frozen list of registered UI DTOs
      */
     listUI() {
         return this.#cachedList;
@@ -110,24 +110,23 @@ export class PluginUIRegistry {
     clear() {
         const hadEntries = this.#uiEntries.size > 0;
         this.#uiEntries.clear();
-        this.#cachedList = [];
+        this.#cachedList = Object.freeze([]);
         if (hadEntries) {
             this.#notifyListeners();
         }
     }
 }
 
-export const pluginUIRegistry = new PluginUIRegistry();
-
 /**
- * React Hook to subscribe to PluginUIRegistry changes.
- * @param {PluginUIRegistry} [uiReg]
- * @returns {Array<Object>} List of registered UI DTOs
+ * React Hook to subscribe to a PluginUIRegistry instance's changes.
+ * @param {PluginUIRegistry|null} [uiReg]
+ * @returns {ReadonlyArray<Object>} Immutable list of registered UI DTOs
  */
-export function usePluginUIList(uiReg = pluginUIRegistry) {
+export function usePluginUIList(uiReg = null) {
+    const EMPTY_LIST = Object.freeze([]);
     return useSyncExternalStore(
-        (onStoreChange) => uiReg.subscribe(onStoreChange),
-        () => uiReg.listUI(),
-        () => uiReg.listUI()
+        (onStoreChange) => uiReg ? uiReg.subscribe(onStoreChange) : () => {},
+        () => uiReg ? uiReg.listUI() : EMPTY_LIST,
+        () => uiReg ? uiReg.listUI() : EMPTY_LIST
     );
 }

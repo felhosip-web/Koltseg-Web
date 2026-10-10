@@ -747,5 +747,9 @@ export const appService = {
             return appInstance.moduleManager.modules.get('plugin_fuel_log') || appInstance.moduleManager.modules.get('plugin_fuel') || null;
         }
         return null;
+    },
+
+    getPluginUIRegistry() {
+        return appInstance?.pluginUIRegistry || null;
     }
 };

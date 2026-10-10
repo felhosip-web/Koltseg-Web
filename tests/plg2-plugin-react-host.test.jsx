@@ -146,6 +146,56 @@ test('PLG2 — PluginUIRegistry: Registration, retrieval, duplicate rejection, a
     assert.equal(uiReg.listUI().length, 0);
 });
 
+test('PLG2 Snapshot Immutability & Reference Stability: listUI() returns deeply frozen stable snapshot', () => {
+    const uiReg = new PluginUIRegistry();
+    const DummyComp = () => React.createElement('div', null, 'Demo');
+
+    // Initial empty list is frozen
+    const list1 = uiReg.listUI();
+    assert.ok(Object.isFrozen(list1), 'listUI() array snapshot MUST be deeply frozen');
+    assert.equal(list1.length, 0);
+
+    // Reference stability when unchanged
+    const list1Again = uiReg.listUI();
+    assert.strictEqual(list1, list1Again, 'listUI() MUST return exact same array reference when registry is unchanged');
+
+    // Consumer mutation attempts MUST fail
+    assert.throws(() => {
+        list1.push({ pluginId: 'hack' });
+    }, TypeError, 'Mutating listUI() snapshot array must throw TypeError');
+
+    // Register UI item
+    const contract = {
+        pluginId: 'p2.snapshot.test',
+        title: 'Snapshot Test',
+        hasUI: true,
+        component: DummyComp
+    };
+    uiReg.registerUI(contract);
+
+    // After mutation, list reference changes
+    const list2 = uiReg.listUI();
+    assert.ok(Object.isFrozen(list2), 'New listUI() snapshot MUST be frozen');
+    assert.notStrictEqual(list1, list2, 'New snapshot reference MUST be created on registerUI()');
+    assert.equal(list2.length, 1);
+
+    // DTO items inside snapshot are frozen
+    assert.ok(Object.isFrozen(list2[0]), 'DTO items inside snapshot MUST be frozen');
+    assert.throws(() => {
+        list2[0].title = 'hacked';
+    }, TypeError, 'Mutating DTO properties inside snapshot must throw TypeError');
+
+    // Reference stability for list2
+    const list2Again = uiReg.listUI();
+    assert.strictEqual(list2, list2Again, 'listUI() MUST return exact same reference until next mutation');
+
+    // Unregister
+    uiReg.unregisterUI('p2.snapshot.test');
+    const list3 = uiReg.listUI();
+    assert.notStrictEqual(list2, list3, 'Unregistering MUST produce new snapshot reference');
+    assert.equal(list3.length, 0);
+});
+
 test('PLG2 — React Plugin Host: Renders registered first-party plugin and passes restricted context', async () => {
     const dom = setupJSDOM();
     const rootEl = document.getElementById('root');

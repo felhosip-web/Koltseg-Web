@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { appService } from '../../services/appService.js';
-import { pluginUIRegistry as defaultUIRegistry } from '../../services/plugin/PluginUIRegistry.js';
 import { PluginErrorBoundary } from './PluginErrorBoundary.jsx';
 import { createPluginContext } from '../../services/plugin/PluginCapabilityFactory.js';
 
@@ -35,7 +34,7 @@ export function PluginHost({ pluginId, registry: customRegistry, uiRegistry: cus
     // Resolve registries
     const appInstance = appService.getAppInstance();
     const registry = customRegistry || appInstance?.pluginRegistry || appInstance?.pluginRuntime?.registry;
-    const uiRegistry = customUIRegistry || defaultUIRegistry;
+    const uiRegistry = customUIRegistry || appInstance?.pluginUIRegistry || appService.getPluginUIRegistry();
 
     useEffect(() => {
         let isCurrentEffect = true;
@@ -93,7 +92,7 @@ export function PluginHost({ pluginId, registry: customRegistry, uiRegistry: cus
             }
 
             // 3. Resolve UI contract
-            const uiEntry = uiRegistry.getUI(pluginId);
+            const uiEntry = uiRegistry ? uiRegistry.getUI(pluginId) : null;
             if (!uiEntry || !uiEntry.hasUI || !uiEntry.component) {
                 if (isCurrentEffect && isMountedRef.current) {
                     setResolvedState({
@@ -218,7 +217,7 @@ export function PluginHost({ pluginId, registry: customRegistry, uiRegistry: cus
         effectiveContext = null;
     }
 
-    const uiEntry = uiRegistry.getUI(pluginId);
+    const uiEntry = uiRegistry ? uiRegistry.getUI(pluginId) : null;
 
     if (effectiveStatus === 'loading') {
         return (

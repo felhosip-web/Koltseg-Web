@@ -1,18 +1,22 @@
 import React from 'react';
 import { useAppStore } from './store/useAppStore.js';
 import { usePluginUIList } from './services/plugin/PluginUIRegistry.js';
+import { appService } from './services/appService.js';
 
 /**
  * Tab navigation component for switching between different views in the cost tracking app.
  * Provides tabs for dashboard, table, time tracking, charts, reminders, incoming transfers, stats,
  * and dynamically registered trusted first-party plugin UIs.
+ * @param {Object} [props]
+ * @param {Object} [props.uiRegistry] - Optional custom PluginUIRegistry instance
  * @returns {JSX.Element} The tab navigation component
  */
-export default function CostAppTabs() {
+export default function CostAppTabs({ uiRegistry: customUIRegistry }) {
     const activeTab = useAppStore(state => state.activeTab);
     const setActiveTab = useAppStore(state => state.setActiveTab);
 
-    const pluginUIList = usePluginUIList();
+    const uiRegistry = customUIRegistry || appService.getPluginUIRegistry();
+    const pluginUIList = usePluginUIList(uiRegistry);
     const registeredPluginsUI = pluginUIList.filter(p => p.hasUI && p.component);
 
     const getTabClass = (tabId) => {

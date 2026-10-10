@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { pluginUIRegistry } from '../services/plugin/PluginUIRegistry.js';
 
 export const SAMPLE_PLUGIN_MANIFEST = Object.freeze({
     id: 'firstparty.sample.plugin',
@@ -139,14 +138,14 @@ export function SamplePluginComponent({ context }) {
  * @param {Object} registry - PLG1 PluginRegistry instance
  * @param {Object} [uiReg] - PLG2 PluginUIRegistry instance
  */
-export function registerSamplePlugin(registry, uiReg = pluginUIRegistry) {
+export function registerSamplePlugin(registry, uiReg = null) {
     if (!registry) return;
 
     if (!registry.has(SAMPLE_PLUGIN_MANIFEST.id)) {
         registry.register(SAMPLE_PLUGIN_MANIFEST, samplePluginSetup);
     }
 
-    if (!uiReg.getUI(SAMPLE_PLUGIN_MANIFEST.id)) {
+    if (uiReg && !uiReg.getUI(SAMPLE_PLUGIN_MANIFEST.id)) {
         uiReg.registerUI({
             pluginId: SAMPLE_PLUGIN_MANIFEST.id,
             title: SAMPLE_PLUGIN_MANIFEST.name,
