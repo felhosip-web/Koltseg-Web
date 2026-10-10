@@ -112,6 +112,7 @@ export class App {
         this.pluginStorage = new PluginStorage(this); // legacy compatibility
         this.pluginStorageService = new PluginStorageService(this.db, this.syncService);
         this.pluginRuntime = new PluginRuntime(this.pluginStorageService, appService);
+        this.pluginRegistry = this.pluginRuntime.registry;
 
         // === 9. BEJÖVŐ UTALÁSOK ===
         this.incomingManager = new IncomingManager(this.db, this.syncService);

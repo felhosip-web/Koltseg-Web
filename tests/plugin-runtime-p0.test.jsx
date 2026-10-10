@@ -86,7 +86,7 @@ test('PLG0 — Security Boundary: Scoped storage and plugin context do NOT expos
 
     let capturedContext = null;
 
-    runtime.registerPlugin({
+    await runtime.registerPlugin({
         id: 'secure-plugin-1',
         name: 'Secure Test Plugin',
         version: '1.0.0',
@@ -309,7 +309,7 @@ test('PLG0 — App Lifecycle Wiring: App connects PluginStorageService and Plugi
     assert.equal(app.pluginStorageService.syncService, syncService);
 
     // Verify plugin runtime can register a plugin and access storageService through app
-    app.pluginRuntime.registerPlugin({
+    await app.pluginRuntime.registerPlugin({
         id: 'lifecycle-test-plugin',
         name: 'Lifecycle Test',
         version: '1.0.0',
