@@ -109,11 +109,14 @@ export function PluginHost({ pluginId, registry: customRegistry, uiRegistry: cus
                     return;
                 }
 
-                // Create/resolve restricted PluginContext for UI
-                const context = createPluginContext(currentRecord.manifest, {
-                    storageService: registry.storageService || appInstance?.pluginStorageService,
-                    appService: registry.appService || appService
-                });
+                // Retrieve canonical restricted PluginContext created during initialization
+                let context = typeof registry.getContext === 'function' ? registry.getContext(pluginId) : null;
+                if (!context) {
+                    context = createPluginContext(currentRecord.manifest, {
+                        storageService: registry.storageService || appInstance?.pluginStorageService,
+                        appService: registry.appService || appService
+                    });
+                }
 
                 if (isCurrentEffect && isMountedRef.current) {
                     setPluginContext(context);

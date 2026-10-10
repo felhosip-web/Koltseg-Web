@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import fs from 'node:fs';
 import path from 'node:path';
-import React, { useState } from 'react';
+import React from 'react';
 import { JSDOM } from 'jsdom';
 import Dexie from 'dexie';
 import 'fake-indexeddb/auto';
@@ -190,17 +190,15 @@ test('PLG2 — React Plugin Host: Renders registered first-party plugin and pass
         component: TestComponent
     });
 
+    const initPromise = registry.initialize('firstparty.render.test');
+
     await act(async () => {
         root.render(React.createElement(PluginHost, {
             pluginId: 'firstparty.render.test',
             registry,
             uiRegistry
         }));
-    });
-
-    // Wait for microtask/initialization
-    await act(async () => {
-        await new Promise(r => setTimeout(r, 50));
+        await initPromise;
     });
 
     assert.equal(setupRan, true, 'Plugin setup should have run');
@@ -235,10 +233,7 @@ test('PLG2 — React Plugin Host: Graceful handling of unknown plugin ID', async
             registry,
             uiRegistry
         }));
-    });
-
-    await act(async () => {
-        await new Promise(r => setTimeout(r, 50));
+        await new Promise(r => setImmediate(r));
     });
 
     const bodyHtml = rootEl.innerHTML;
@@ -271,10 +266,7 @@ test('PLG2 — React Plugin Host: Graceful handling of plugin without UI (hasUI:
             registry,
             uiRegistry
         }));
-    });
-
-    await act(async () => {
-        await new Promise(r => setTimeout(r, 50));
+        await new Promise(r => setImmediate(r));
     });
 
     const bodyHtml = rootEl.innerHTML;
@@ -311,16 +303,15 @@ test('PLG2 — React Plugin Host: Graceful handling of setup initialization fail
         component: () => React.createElement('div', null, 'Content')
     });
 
+    const initPromise = registry.initialize('failing.init.plugin').catch(() => {});
+
     await act(async () => {
         root.render(React.createElement(PluginHost, {
             pluginId: 'failing.init.plugin',
             registry,
             uiRegistry
         }));
-    });
-
-    await act(async () => {
-        await new Promise(r => setTimeout(r, 50));
+        await initPromise;
     });
 
     const bodyHtml = rootEl.innerHTML;
@@ -358,6 +349,8 @@ test('PLG2 — PluginErrorBoundary: Isolates plugin component render crash from 
         component: CrashingComponent
     });
 
+    const initPromise = registry.initialize('crashing.render.plugin');
+
     await act(async () => {
         root.render(React.createElement('div', { id: 'host-app-container' }, [
             React.createElement('header', { key: 'h' }, 'Host App Header Alive'),
@@ -368,10 +361,7 @@ test('PLG2 — PluginErrorBoundary: Isolates plugin component render crash from 
                 uiRegistry
             })
         ]));
-    });
-
-    await act(async () => {
-        await new Promise(r => setTimeout(r, 50));
+        await initPromise;
     });
 
     const bodyHtml = rootEl.innerHTML;
@@ -429,27 +419,29 @@ test('PLG2 — Plugin Switching & No Duplicate Initialization', async () => {
     });
 
     // 1. Render Plugin A
+    const initA = registry.initialize('switch.plugin.a');
     await act(async () => {
         root.render(React.createElement(PluginHost, {
             pluginId: 'switch.plugin.a',
             registry,
             uiRegistry
         }));
+        await initA;
     });
-    await act(async () => { await new Promise(r => setTimeout(r, 50)); });
 
     assert.ok(document.getElementById('comp-a'));
     assert.equal(setupAExecutions, 1);
 
     // 2. Switch to Plugin B
+    const initB = registry.initialize('switch.plugin.b');
     await act(async () => {
         root.render(React.createElement(PluginHost, {
             pluginId: 'switch.plugin.b',
             registry,
             uiRegistry
         }));
+        await initB;
     });
-    await act(async () => { await new Promise(r => setTimeout(r, 50)); });
 
     assert.ok(document.getElementById('comp-b'));
     assert.equal(document.getElementById('comp-a'), null);
@@ -462,8 +454,8 @@ test('PLG2 — Plugin Switching & No Duplicate Initialization', async () => {
             registry,
             uiRegistry
         }));
+        await Promise.resolve();
     });
-    await act(async () => { await new Promise(r => setTimeout(r, 50)); });
 
     assert.ok(document.getElementById('comp-a'));
     assert.equal(setupAExecutions, 1, 'Plugin A setup MUST NOT run again when switching back');
@@ -496,20 +488,22 @@ test('PLG2 — UI Unmount vs Disposed Lifecycle Separation', async () => {
     });
 
     // 1. Render UI
+    const initPromise = registry.initialize('lifecycle.plugin');
     await act(async () => {
         root.render(React.createElement(PluginHost, {
             pluginId: 'lifecycle.plugin',
             registry,
             uiRegistry
         }));
+        await initPromise;
     });
-    await act(async () => { await new Promise(r => setTimeout(r, 50)); });
 
     assert.equal(registry.get('lifecycle.plugin').state, 'active');
 
     // 2. Unmount React component (simulating tab switch)
     await act(async () => {
         root.render(React.createElement('div', null, 'Tab Switched Away'));
+        await Promise.resolve();
     });
 
     // Unmounting React UI MUST NOT dispose the plugin runtime!
@@ -526,10 +520,62 @@ test('PLG2 — UI Unmount vs Disposed Lifecycle Separation', async () => {
             registry,
             uiRegistry
         }));
+        await Promise.resolve();
     });
-    await act(async () => { await new Promise(r => setTimeout(r, 50)); });
 
     assert.equal(rootEl.innerHTML.includes('Inaktív bővítmény'), true);
+
+    root.unmount();
+    dom.window.close();
+});
+
+test('PLG2 — Context Lifecycle Invariant: Setup and React UI receive the exact same PluginContext instance', async () => {
+    const dom = setupJSDOM();
+    const rootEl = document.getElementById('root');
+    const root = createRoot(rootEl);
+
+    let setupContext = null;
+    let uiContext = null;
+
+    const registry = new PluginRegistry();
+    const uiRegistry = new PluginUIRegistry();
+
+    const manifest = {
+        id: 'canonical.context.plugin',
+        name: 'Canonical Context Plugin',
+        version: '1.0.0',
+        apiVersion: '1',
+        permissions: ['ui:toast', 'storage:private']
+    };
+
+    registry.register(manifest, async (ctx) => {
+        setupContext = ctx;
+    });
+
+    uiRegistry.registerUI({
+        pluginId: 'canonical.context.plugin',
+        title: 'Canonical Context Plugin',
+        hasUI: true,
+        component: ({ context }) => {
+            uiContext = context;
+            return React.createElement('div', null, 'Canonical UI');
+        }
+    });
+
+    const initPromise = registry.initialize('canonical.context.plugin');
+
+    await act(async () => {
+        root.render(React.createElement(PluginHost, {
+            pluginId: 'canonical.context.plugin',
+            registry,
+            uiRegistry
+        }));
+        await initPromise;
+    });
+
+    assert.ok(setupContext, 'Setup must receive PluginContext');
+    assert.ok(uiContext, 'UI component must receive PluginContext');
+    assert.strictEqual(setupContext, uiContext, 'Setup and React UI MUST receive the exact same PluginContext instance');
 
     root.unmount();
     dom.window.close();
