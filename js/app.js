@@ -22,6 +22,7 @@ import { RemoteConfigManager } from './remote-config-manager.js';
 import { PluginStorage } from './plugin-storage.js';
 import { PluginStorageService } from '../src/services/plugin/PluginStorageService.js';
 import { PluginRuntime } from '../src/services/plugin/PluginRuntime.js';
+import { registerSamplePlugin } from '../src/plugins/samplePlugin.jsx';
 import { OfflineHandler } from './offline-handler.js';
 import { getVersionManager } from './version-manager.js';
 import { MESSAGES, formatMessage } from './messages.js';
@@ -113,6 +114,7 @@ export class App {
         this.pluginStorageService = new PluginStorageService(this.db, this.syncService);
         this.pluginRuntime = new PluginRuntime(this.pluginStorageService, appService);
         this.pluginRegistry = this.pluginRuntime.registry;
+        registerSamplePlugin(this.pluginRegistry);
 
         // === 9. BEJÖVŐ UTALÁSOK ===
         this.incomingManager = new IncomingManager(this.db, this.syncService);
