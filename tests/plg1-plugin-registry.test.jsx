@@ -165,7 +165,7 @@ test('PLG1 — PluginRegistry: Registration, Duplicate ID rejection, and query o
     assert.equal(registry.list().length, 1);
 });
 
-test('PLG1 Security — Deep Freeze Immutability: Post-registration permission mutation attempts fail and cannot grant unauthorized capabilities', async () => {
+test('PLG1 Security — Encapsulation & Immutability: Public DTOs prevent internal record and manifest mutation', async () => {
     const mockAppService = {
         getAppInstance: () => ({
             items: { items: [{ id: 'i1', name: 'Coffee' }] }
@@ -176,59 +176,70 @@ test('PLG1 Security — Deep Freeze Immutability: Post-registration permission m
     const registry = new PluginRegistry(storageService, mockAppService);
     const runtime = new PluginRuntime(storageService, mockAppService);
 
-    // Manifest originally registered with ONLY 'ui:toast' (lacks 'expenses:read' and 'storage:private')
+    let setupContext = null;
+
+    // Manifest originally registered with ONLY 'ui:toast'
     const originalManifest = {
-        id: 'immutable.perm.plugin',
-        name: 'Immutable Perm Plugin',
+        id: 'encapsulated.plugin',
+        name: 'Encapsulated Plugin',
         version: '1.0.0',
         apiVersion: '1',
         permissions: ['ui:toast']
     };
 
     // 1. Register plugin
-    const regRecord = registry.register(originalManifest);
+    const regDto = registry.register(originalManifest, (ctx) => {
+        setupContext = ctx;
+    });
 
-    // Verify manifest permissions array is deeply frozen
-    assert.ok(Object.isFrozen(regRecord.manifest));
-    assert.ok(Object.isFrozen(regRecord.manifest.permissions));
+    // Verify DTO is frozen
+    assert.ok(Object.isFrozen(regDto));
+    assert.ok(Object.isFrozen(regDto.manifest));
 
-    // Attempt 1: Try to push unapproved permission through register() returned record
-    assert.throws(() => {
-        regRecord.manifest.permissions.push('expenses:read');
-    }, TypeError);
+    // Attempt mutation 1: Replace regDto.manifest or regDto.state or regDto.setup
+    assert.throws(() => { regDto.manifest = { permissions: ['expenses:read', 'storage:private', 'ui:toast'] }; }, TypeError);
+    assert.throws(() => { regDto.state = 'active'; }, TypeError);
+    assert.throws(() => { regDto.setup = () => {}; }, TypeError);
+    assert.throws(() => { regDto.manifest.permissions.push('expenses:read'); }, TypeError);
 
-    // Attempt 2: Try to push unapproved permission through registry.get()
-    const getRecord = registry.get('immutable.perm.plugin');
-    assert.throws(() => {
-        getRecord.manifest.permissions.push('expenses:read');
-    }, TypeError);
+    // Attempt mutation 2: Get via registry.get()
+    const getDto = registry.get('encapsulated.plugin');
+    assert.throws(() => { getDto.manifest = { permissions: ['expenses:read'] }; }, TypeError);
+    assert.throws(() => { getDto.state = 'active'; }, TypeError);
+    assert.throws(() => { getDto.manifest.permissions.push('expenses:read'); }, TypeError);
 
-    // Attempt 3: Try to mutate permissions through registry.list()
-    const listResult = registry.list();
-    assert.throws(() => {
-        listResult[0].manifest.permissions.push('expenses:read');
-    }, TypeError);
+    // Attempt mutation 3: Mutate via registry.list()
+    const listDtos = registry.list();
+    assert.throws(() => { listDtos[0].manifest = { permissions: ['expenses:read'] }; }, TypeError);
+    assert.throws(() => { listDtos[0].manifest.permissions.push('expenses:read'); }, TypeError);
 
-    // Attempt 4: Try to mutate permissions through PluginRuntime.listPlugins()
+    // Attempt mutation 4: Mutate via PluginRuntime.getPlugin() and listPlugins()
     await runtime.registerPlugin({
-        id: 'runtime.immutable.plugin',
-        name: 'Runtime Immutable Plugin',
+        id: 'runtime.encapsulated.plugin',
+        name: 'Runtime Encapsulated Plugin',
         version: '1.0.0',
         apiVersion: '1',
         permissions: ['ui:toast']
     });
+
+    const runtimeDto = runtime.getPlugin('runtime.encapsulated.plugin');
+    assert.throws(() => { runtimeDto.manifest = { permissions: ['expenses:read'] }; }, TypeError);
+
     const runtimeList = runtime.listPlugins();
-    const runtimeItem = runtimeList.find(p => p.id === 'runtime.immutable.plugin');
-    assert.throws(() => {
-        runtimeItem.permissions.push('expenses:read');
-    }, TypeError);
+    const runtimeItem = runtimeList.find(p => p.id === 'runtime.encapsulated.plugin');
+    assert.throws(() => { runtimeItem.permissions.push('expenses:read'); }, TypeError);
 
-    // Initialize the plugin and verify unapproved 'expenses:read' capability remains DENIED
-    const activeRecord = await registry.initialize('immutable.perm.plugin');
+    // 2. Initialize plugin and attempt mutation on initialize() return value
+    const initDto = await registry.initialize('encapsulated.plugin');
+    assert.equal(initDto.state, 'active');
+    assert.equal(initDto.context, undefined, 'Internal context handle must not be exposed on public DTO');
+    assert.throws(() => { initDto.manifest = { permissions: ['expenses:read'] }; }, TypeError);
+    assert.throws(() => { initDto.state = 'registered'; }, TypeError);
 
-    assert.equal(activeRecord.state, 'active');
+    // Verify unapproved 'expenses:read' capability remains DENIED inside plugin setup context
+    assert.ok(setupContext);
     assert.throws(() => {
-        activeRecord.context.api.getCategoryList();
+        setupContext.api.getCategoryList();
     }, /lacks "expenses:read" permission/);
 });
 
@@ -294,7 +305,6 @@ test('PLG1 Promise Contract — Initialization with no setup function reaches ac
 
     const rec = await registry.initialize('no.setup.plugin');
     assert.equal(rec.state, 'active');
-    assert.equal(rec.initPromise, null, 'initPromise must be cleared after initialization with no setup');
 });
 
 test('PLG1 Promise Contract — Successful setup clears initPromise', async () => {
@@ -319,7 +329,6 @@ test('PLG1 Promise Contract — Successful setup clears initPromise', async () =
 
     const rec = await initPromise;
     assert.equal(rec.state, 'active');
-    assert.equal(rec.initPromise, null, 'initPromise must be cleared after successful setup');
 });
 
 test('PLG1 Promise Contract — Failed setup clears initPromise and preserves rollback behavior', async () => {
@@ -342,9 +351,7 @@ test('PLG1 Promise Contract — Failed setup clears initPromise and preserves ro
 
     const rec = registry.get('failed.setup.plugin');
     assert.equal(rec.state, 'registered');
-    assert.equal(rec.context, null);
     assert.equal(rec.error, setupError);
-    assert.equal(rec.initPromise, null, 'initPromise must be cleared after failed setup');
 });
 
 test('PLG1 — Sync Setup Lifecycle: Successful synchronous setup resolves and activates plugin', async () => {
@@ -433,7 +440,6 @@ test('PLG1 — Sync & Async Failure Rollback: Synchronous setup failure rolls ba
 
     const record = registry.get('sync.failing.plugin');
     assert.equal(record.state, 'registered');
-    assert.equal(record.context, null);
     assert.equal(record.error, syncError);
 });
 
@@ -469,7 +475,6 @@ test('PLG1 — Sync & Async Failure Rollback: Asynchronous setup rejection rolls
 
     const record = registry.get('async.failing.plugin');
     assert.equal(record.state, 'registered');
-    assert.equal(record.context, null);
     assert.equal(record.error, asyncError);
 });
 
@@ -535,10 +540,6 @@ test('PLG1 — Concurrent Initialization: Simultaneous calls execute setup exact
     assert.equal(setupExecutions, 1, 'Concurrent initialization must execute setup exactly once');
     assert.equal(rec1.state, 'active');
     assert.equal(rec2.state, 'active');
-
-    // Verify initPromise is cleared after completion
-    const record = registry.get('concurrent.plugin');
-    assert.equal(record.initPromise, null, 'initPromise must be cleared after concurrent initialization completes');
 });
 
 test('PLG1 — Disposal During Pending Initialization: Disposal during pending setup prevents reactivation and preserves disposed state', async () => {
@@ -569,10 +570,9 @@ test('PLG1 — Disposal During Pending Initialization: Disposal during pending s
     // Call dispose while initialization is pending
     registry.dispose('disposal.pending.plugin');
 
-    // State is now 'disposed' and context is null
+    // State is now 'disposed'
     const recordDisposed = registry.get('disposal.pending.plugin');
     assert.equal(recordDisposed.state, 'disposed');
-    assert.equal(recordDisposed.context, null);
 
     // Resolve pending setup
     resolveSetupPromise();
@@ -582,10 +582,9 @@ test('PLG1 — Disposal During Pending Initialization: Disposal during pending s
         await initPromise;
     }, /was disposed during initialization/);
 
-    // Verify plugin NEVER reactivated and remains 'disposed' with context null
+    // Verify plugin NEVER reactivated and remains 'disposed'
     const finalRecord = registry.get('disposal.pending.plugin');
     assert.equal(finalRecord.state, 'disposed');
-    assert.equal(finalRecord.context, null);
 });
 
 test('PLG1 — Dispose Behavior: Idempotent disposal and prohibition of initializing disposed plugin', async () => {

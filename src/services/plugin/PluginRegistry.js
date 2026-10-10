@@ -21,6 +21,22 @@ function deepFreeze(obj) {
     return obj;
 }
 
+/**
+ * Creates an immutable, deeply frozen public DTO snapshot of a plugin record.
+ * Encapsulates internal registry references (setup callback, context, initPromise).
+ * @param {Object|null} record
+ * @returns {Object|null} Deeply frozen DTO snapshot
+ */
+function createRecordSnapshot(record) {
+    if (!record) return null;
+    return deepFreeze({
+        manifest: record.manifest, // deeply frozen manifest contract
+        state: record.state,
+        error: record.error || null,
+        registeredAt: record.registeredAt
+    });
+}
+
 export class PluginRegistry {
     /**
      * @param {Object} storageService - PluginStorageService instance
@@ -45,9 +61,10 @@ export class PluginRegistry {
     /**
      * Registers a plugin in the registry with state "registered".
      * Stored manifest contract is deeply frozen to prevent post-validation permission mutations.
+     * Returns an immutable public DTO snapshot to prevent caller mutation of internal registry records.
      * @param {Object} manifest - Declarative plugin manifest contract
      * @param {Function|null} setup - Optional setup function receiving restricted context
-     * @returns {Object} Plugin record
+     * @returns {Object} Immutable plugin record DTO snapshot
      */
     register(manifest, setup = null) {
         // 1. Validate manifest contract
@@ -77,17 +94,17 @@ export class PluginRegistry {
         };
 
         this.plugins.set(manifest.id, pluginRecord);
-        return pluginRecord;
+        return createRecordSnapshot(pluginRecord);
     }
 
     /**
      * Initializes a registered plugin, executes setup (sync or async) with restricted PluginContext, and transitions to "active".
-     * Returns a Promise for ALL code paths (including validation, unregistered, disposed, context creation, setup, and errors).
+     * Returns a Promise resolving to an immutable DTO snapshot across all code paths.
      * Concurrent calls to initialize() return the exact same in-flight Promise object (p1 === p2).
      * On setup failure (sync throw or async rejection), rolls back state cleanly to "registered" without leaving a half-initialized state.
      * Disposal during pending initialization is handled safely and prevents reactivation.
      * @param {string} pluginId
-     * @returns {Promise<Object>} Plugin record promise
+     * @returns {Promise<Object>} Immutable plugin record DTO snapshot promise
      */
     initialize(pluginId) {
         try {
@@ -105,7 +122,7 @@ export class PluginRegistry {
             }
 
             if (record.state === 'active') {
-                return Promise.resolve(record);
+                return Promise.resolve(createRecordSnapshot(record));
             }
 
             // Handle concurrent initialization: return the EXACT same in-flight Promise object
@@ -139,7 +156,7 @@ export class PluginRegistry {
                     record.context = context;
                     record.state = 'active';
                     record.error = null;
-                    return record;
+                    return createRecordSnapshot(record);
                 } catch (err) {
                     // Setup failure or disposal during setup rollback
                     if (record.state !== 'disposed') {
@@ -201,13 +218,14 @@ export class PluginRegistry {
     }
 
     /**
-     * Retrieves a plugin record by ID.
+     * Retrieves an immutable DTO snapshot of a plugin record by ID.
      * @param {string} pluginId
-     * @returns {Object|null}
+     * @returns {Object|null} Immutable DTO snapshot
      */
     get(pluginId) {
         if (!pluginId || typeof pluginId !== 'string') return null;
-        return this.plugins.get(pluginId) || null;
+        const record = this.plugins.get(pluginId);
+        return createRecordSnapshot(record);
     }
 
     /**
@@ -221,14 +239,10 @@ export class PluginRegistry {
     }
 
     /**
-     * Lists all registered plugins.
-     * @returns {Array<Object>} List of plugin summaries
+     * Lists all registered plugins as immutable DTO snapshots.
+     * @returns {Array<Object>} List of immutable plugin DTO summaries
      */
     list() {
-        return Array.from(this.plugins.values()).map(p => ({
-            manifest: p.manifest,
-            state: p.state,
-            error: p.error
-        }));
+        return Array.from(this.plugins.values()).map(createRecordSnapshot);
     }
 }
