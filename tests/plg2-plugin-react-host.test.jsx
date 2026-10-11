@@ -825,6 +825,157 @@ test('PLG2 — Context Lifecycle Invariant: Setup and React UI receive the exact
     dom.window.close();
 });
 
+test('PLG2 Reactivity — Disposing active rendered plugin triggers immediate UI update', async () => {
+    const dom = setupJSDOM();
+    const rootEl = document.getElementById('root');
+    const root = createRoot(rootEl);
+
+    const registry = new PluginRegistry();
+    const uiRegistry = new PluginUIRegistry();
+
+    registry.register({
+        id: 'dispose.reactivity.test',
+        name: 'Dispose Reactivity Plugin',
+        version: '1.0.0',
+        apiVersion: '1',
+        permissions: ['ui:toast']
+    });
+
+    uiRegistry.registerUI({
+        pluginId: 'dispose.reactivity.test',
+        title: 'Dispose Reactivity Plugin',
+        hasUI: true,
+        component: () => React.createElement('div', { id: 'active-plugin-content' }, 'Active Plugin UI')
+    });
+
+    await registry.initialize('dispose.reactivity.test');
+
+    await act(async () => {
+        root.render(React.createElement(PluginHost, {
+            pluginId: 'dispose.reactivity.test',
+            registry,
+            uiRegistry
+        }));
+    });
+
+    assert.ok(document.getElementById('active-plugin-content'), 'Active plugin should be rendered');
+
+    // Dispose active plugin externally
+    await act(async () => {
+        await registry.dispose('dispose.reactivity.test');
+    });
+
+    assert.equal(document.getElementById('active-plugin-content'), null, 'Plugin component should be unmounted upon disposal');
+    const bodyHtml = rootEl.innerHTML;
+    assert.equal(bodyHtml.includes('Inaktív bővítmény'), true, 'UI should immediately show disposed state text');
+
+    root.unmount();
+    dom.window.close();
+});
+
+test('PLG2 Reactivity — Unregistering active rendered plugin triggers immediate UI update', async () => {
+    const dom = setupJSDOM();
+    const rootEl = document.getElementById('root');
+    const root = createRoot(rootEl);
+
+    const registry = new PluginRegistry();
+    const uiRegistry = new PluginUIRegistry();
+
+    registry.register({
+        id: 'unregister.reactivity.test',
+        name: 'Unregister Reactivity Plugin',
+        version: '1.0.0',
+        apiVersion: '1',
+        permissions: ['ui:toast']
+    });
+
+    uiRegistry.registerUI({
+        pluginId: 'unregister.reactivity.test',
+        title: 'Unregister Reactivity Plugin',
+        hasUI: true,
+        component: () => React.createElement('div', { id: 'active-unregister-content' }, 'Active UI')
+    });
+
+    await registry.initialize('unregister.reactivity.test');
+
+    await act(async () => {
+        root.render(React.createElement(PluginHost, {
+            pluginId: 'unregister.reactivity.test',
+            registry,
+            uiRegistry
+        }));
+    });
+
+    assert.ok(document.getElementById('active-unregister-content'));
+
+    // Unregister active plugin externally
+    await act(async () => {
+        registry.unregister('unregister.reactivity.test');
+    });
+
+    assert.equal(document.getElementById('active-unregister-content'), null, 'Plugin component should be unmounted upon unregistration');
+    const bodyHtml = rootEl.innerHTML;
+    assert.equal(bodyHtml.includes('Ismeretlen bővítmény'), true, 'UI should immediately show unknown/unavailable state text');
+
+    root.unmount();
+    dom.window.close();
+});
+
+test('PLG2 Reactivity — Unmounting PluginHost cleans up subscription without disposing runtime plugin', async () => {
+    const dom = setupJSDOM();
+    const rootEl = document.getElementById('root');
+    const root = createRoot(rootEl);
+
+    const registry = new PluginRegistry();
+    const uiRegistry = new PluginUIRegistry();
+
+    registry.register({
+        id: 'unmount.clean.test',
+        name: 'Unmount Clean Plugin',
+        version: '1.0.0',
+        apiVersion: '1',
+        permissions: ['ui:toast']
+    });
+
+    uiRegistry.registerUI({
+        pluginId: 'unmount.clean.test',
+        title: 'Unmount Clean Plugin',
+        hasUI: true,
+        component: () => React.createElement('div', { id: 'unmount-ui' }, 'Unmount UI')
+    });
+
+    await registry.initialize('unmount.clean.test');
+
+    await act(async () => {
+        root.render(React.createElement(PluginHost, {
+            pluginId: 'unmount.clean.test',
+            registry,
+            uiRegistry
+        }));
+    });
+
+    assert.ok(document.getElementById('unmount-ui'));
+
+    // Unmount host
+    await act(async () => {
+        root.unmount();
+    });
+
+    // Plugin in registry must remain active (unmounting UI host does NOT dispose runtime plugin)
+    const dto = registry.get('unmount.clean.test');
+    assert.equal(dto.state, 'active');
+
+    // Modifying registry now should not cause state errors or leaks
+    await act(async () => {
+        await registry.dispose('unmount.clean.test');
+    });
+
+    const dtoAfter = registry.get('unmount.clean.test');
+    assert.equal(dtoAfter.state, 'disposed');
+
+    dom.window.close();
+});
+
 test('PLG2 — Static Security & Architecture Audit: Codebase scan for forbidden execution and global handles', () => {
     const filesToAudit = [
         'src/services/plugin/PluginUIContract.js',

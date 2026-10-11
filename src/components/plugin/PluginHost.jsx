@@ -7,6 +7,7 @@ import { createPluginContext } from '../../services/plugin/PluginCapabilityFacto
  * React Plugin Host Component (PLG2)
  * Renders trusted first-party plugins within a narrow, isolated UI boundary.
  * Enforces strict capability and context isolation during plugin switching and async resolution.
+ * Reacts dynamically to registry lifecycle mutations (disposal, unregistration).
  *
  * @param {Object} props
  * @param {string} props.pluginId - Plugin ID to resolve and render
@@ -15,6 +16,7 @@ import { createPluginContext } from '../../services/plugin/PluginCapabilityFacto
  * @returns {JSX.Element} Plugin Host container
  */
 export function PluginHost({ pluginId, registry: customRegistry, uiRegistry: customUIRegistry }) {
+    const [, setRegistryTick] = useState(0);
     const [resolvedState, setResolvedState] = useState({
         boundPluginId: null,
         status: 'loading', // 'loading' | 'ready' | 'error' | 'disposed' | 'no_ui' | 'unknown'
@@ -35,6 +37,28 @@ export function PluginHost({ pluginId, registry: customRegistry, uiRegistry: cus
     const appInstance = appService.getAppInstance();
     const registry = customRegistry || appInstance?.pluginRegistry || appInstance?.pluginRuntime?.registry;
     const uiRegistry = customUIRegistry || appInstance?.pluginUIRegistry || appService.getPluginUIRegistry();
+
+    // Subscribe to registry lifecycle updates
+    useEffect(() => {
+        if (!registry || typeof registry.subscribe !== 'function') return;
+        const unsubscribe = registry.subscribe(() => {
+            if (isMountedRef.current) {
+                setRegistryTick(t => t + 1);
+            }
+        });
+        return unsubscribe;
+    }, [registry]);
+
+    // Subscribe to UI registry updates
+    useEffect(() => {
+        if (!uiRegistry || typeof uiRegistry.subscribe !== 'function') return;
+        const unsubscribe = uiRegistry.subscribe(() => {
+            if (isMountedRef.current) {
+                setRegistryTick(t => t + 1);
+            }
+        });
+        return unsubscribe;
+    }, [uiRegistry]);
 
     useEffect(() => {
         let isCurrentEffect = true;
