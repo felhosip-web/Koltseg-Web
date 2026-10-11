@@ -976,6 +976,216 @@ test('PLG2 Reactivity — Unmounting PluginHost cleans up subscription without d
     dom.window.close();
 });
 
+test('PLG2 Reactivity — Unknown plugin -> register plugin -> host updates correctly', async () => {
+    const dom = setupJSDOM();
+    const rootEl = document.getElementById('root');
+    const root = createRoot(rootEl);
+
+    const registry = new PluginRegistry();
+    const uiRegistry = new PluginUIRegistry();
+
+    // Render Host with unknown plugin
+    await act(async () => {
+        root.render(React.createElement(PluginHost, {
+            pluginId: 'late.registered.plugin',
+            registry,
+            uiRegistry
+        }));
+        await new Promise(r => setImmediate(r));
+    });
+
+    assert.equal(rootEl.innerHTML.includes('Ismeretlen bővítmény'), true);
+
+    // Register UI & Manifest dynamically
+    uiRegistry.registerUI({
+        pluginId: 'late.registered.plugin',
+        title: 'Late Plugin',
+        hasUI: true,
+        component: () => React.createElement('div', { id: 'late-content' }, 'Late Content')
+    });
+
+    await act(async () => {
+        registry.register({
+            id: 'late.registered.plugin',
+            name: 'Late Plugin',
+            version: '1.0.0',
+            apiVersion: '1',
+            permissions: ['ui:toast']
+        });
+        await new Promise(r => setImmediate(r));
+    });
+
+    assert.ok(document.getElementById('late-content'), 'Host should automatically resolve and render dynamically registered plugin');
+
+    root.unmount();
+    dom.window.close();
+});
+
+test('PLG2 Reactivity — No UI -> register UI -> host updates correctly', async () => {
+    const dom = setupJSDOM();
+    const rootEl = document.getElementById('root');
+    const root = createRoot(rootEl);
+
+    const registry = new PluginRegistry();
+    const uiRegistry = new PluginUIRegistry();
+
+    // Register manifest first
+    registry.register({
+        id: 'no.ui.first.plugin',
+        name: 'No UI First',
+        version: '1.0.0',
+        apiVersion: '1',
+        permissions: ['ui:toast']
+    });
+
+    await act(async () => {
+        root.render(React.createElement(PluginHost, {
+            pluginId: 'no.ui.first.plugin',
+            registry,
+            uiRegistry
+        }));
+        await new Promise(r => setImmediate(r));
+    });
+
+    assert.equal(rootEl.innerHTML.includes('Háttér bővítmény'), true);
+
+    // Register UI dynamically
+    await act(async () => {
+        uiRegistry.registerUI({
+            pluginId: 'no.ui.first.plugin',
+            title: 'No UI First',
+            hasUI: true,
+            component: () => React.createElement('div', { id: 'now-has-ui' }, 'Now Has UI')
+        });
+        await new Promise(r => setImmediate(r));
+    });
+
+    assert.ok(document.getElementById('now-has-ui'), 'Host should re-evaluate and render UI when UI contract is registered');
+
+    root.unmount();
+    dom.window.close();
+});
+
+test('PLG2 Reactivity — Initialization failure does not cause repeated automatic setup attempts', async () => {
+    const dom = setupJSDOM();
+    const rootEl = document.getElementById('root');
+    const root = createRoot(rootEl);
+
+    let setupAttempts = 0;
+
+    const registry = new PluginRegistry();
+    const uiRegistry = new PluginUIRegistry();
+
+    registry.register({
+        id: 'failed.setup.plugin',
+        name: 'Failed Setup Plugin',
+        version: '1.0.0',
+        apiVersion: '1',
+        permissions: ['ui:toast']
+    }, async () => {
+        setupAttempts++;
+        throw new Error('Fatal setup crash');
+    });
+
+    uiRegistry.registerUI({
+        pluginId: 'failed.setup.plugin',
+        title: 'Failed Setup Plugin',
+        hasUI: true,
+        component: () => React.createElement('div', null, 'Fail')
+    });
+
+    const initP = registry.initialize('failed.setup.plugin').catch(() => {});
+
+    await act(async () => {
+        root.render(React.createElement(PluginHost, {
+            pluginId: 'failed.setup.plugin',
+            registry,
+            uiRegistry
+        }));
+        await initP;
+    });
+
+    assert.equal(setupAttempts, 1);
+    assert.equal(rootEl.innerHTML.includes('Fatal setup crash'), true);
+
+    // Trigger an unrelated registry update (e.g., registering another plugin)
+    await act(async () => {
+        registry.register({
+            id: 'unrelated.plugin',
+            name: 'Unrelated',
+            version: '1.0.0',
+            apiVersion: '1',
+            permissions: []
+        });
+        await new Promise(r => setImmediate(r));
+    });
+
+    assert.equal(setupAttempts, 1, 'Registry notifications MUST NOT trigger repeated setup attempts on failed plugins');
+    assert.equal(rootEl.innerHTML.includes('Fatal setup crash'), true);
+
+    root.unmount();
+    dom.window.close();
+});
+
+test('PLG2 Reactivity — Successful initialization and lifecycle notifications do not cause duplicate setup', async () => {
+    const dom = setupJSDOM();
+    const rootEl = document.getElementById('root');
+    const root = createRoot(rootEl);
+
+    let setupRuns = 0;
+
+    const registry = new PluginRegistry();
+    const uiRegistry = new PluginUIRegistry();
+
+    registry.register({
+        id: 'no.duplicate.setup.plugin',
+        name: 'No Dup Setup',
+        version: '1.0.0',
+        apiVersion: '1',
+        permissions: ['ui:toast']
+    }, async () => {
+        setupRuns++;
+    });
+
+    uiRegistry.registerUI({
+        pluginId: 'no.duplicate.setup.plugin',
+        title: 'No Dup Setup',
+        hasUI: true,
+        component: () => React.createElement('div', { id: 'dup-setup-ui' }, 'Content')
+    });
+
+    const initP = registry.initialize('no.duplicate.setup.plugin');
+
+    await act(async () => {
+        root.render(React.createElement(PluginHost, {
+            pluginId: 'no.duplicate.setup.plugin',
+            registry,
+            uiRegistry
+        }));
+        await initP;
+    });
+
+    assert.equal(setupRuns, 1);
+    assert.ok(document.getElementById('dup-setup-ui'));
+
+    // Trigger unrelated registry notifications
+    await act(async () => {
+        registry.register({
+            id: 'another.plugin',
+            name: 'Another',
+            version: '1.0.0',
+            apiVersion: '1',
+            permissions: []
+        });
+        await new Promise(r => setImmediate(r));
+    });
+
+    assert.equal(setupRuns, 1, 'Setup MUST NOT re-run on subsequent lifecycle notifications');
+
+    root.unmount();
+    dom.window.close();
+});
+
 test('PLG2 — Static Security & Architecture Audit: Codebase scan for forbidden execution and global handles', () => {
     const filesToAudit = [
         'src/services/plugin/PluginUIContract.js',

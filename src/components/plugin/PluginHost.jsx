@@ -16,7 +16,7 @@ import { createPluginContext } from '../../services/plugin/PluginCapabilityFacto
  * @returns {JSX.Element} Plugin Host container
  */
 export function PluginHost({ pluginId, registry: customRegistry, uiRegistry: customUIRegistry }) {
-    const [, setRegistryTick] = useState(0);
+    const [registryTick, setRegistryTick] = useState(0);
     const [resolvedState, setResolvedState] = useState({
         boundPluginId: null,
         status: 'loading', // 'loading' | 'ready' | 'error' | 'disposed' | 'no_ui' | 'unknown'
@@ -129,7 +129,20 @@ export function PluginHost({ pluginId, registry: customRegistry, uiRegistry: cus
                 return;
             }
 
-            // 4. Handle initialization if not yet active
+            // 4. Check if initialization previously failed on this record
+            if (record.state === 'registered' && record.error) {
+                if (isCurrentEffect && isMountedRef.current) {
+                    setResolvedState({
+                        boundPluginId: pluginId,
+                        status: 'error',
+                        errorMessage: record.error.message || String(record.error),
+                        context: null
+                    });
+                }
+                return;
+            }
+
+            // 5. Handle initialization if not yet active
             try {
                 if (record.state === 'registered' || record.state === 'initialized') {
                     if (isCurrentEffect && isMountedRef.current) {
@@ -205,7 +218,7 @@ export function PluginHost({ pluginId, registry: customRegistry, uiRegistry: cus
         return () => {
             isCurrentEffect = false;
         };
-    }, [pluginId, registry, uiRegistry, appInstance]);
+    }, [pluginId, registry, uiRegistry, appInstance, registryTick]);
 
     // Synchronously derive context and status for current pluginId
     const canonicalContext = (registry && typeof registry.getContext === 'function') ? registry.getContext(pluginId) : null;
