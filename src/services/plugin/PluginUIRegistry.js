@@ -8,13 +8,15 @@
 import { useSyncExternalStore } from 'react';
 import { validatePluginUIContract, createPluginUIDTO } from './PluginUIContract.js';
 
+const STABLE_EMPTY_LIST = Object.freeze([]);
+
 export class PluginUIRegistry {
     /** @type {Map<string, Object>} Private internal map of pluginId -> UI DTO */
     #uiEntries = new Map();
     /** @type {Set<Function>} Private listeners set */
     #listeners = new Set();
     /** @type {Array<Object>} Private cached frozen list snapshot for useSyncExternalStore immutability */
-    #cachedList = Object.freeze([]);
+    #cachedList = STABLE_EMPTY_LIST;
 
     /**
      * Subscribes a listener to UI registry changes (registration / unregistration).
@@ -110,7 +112,7 @@ export class PluginUIRegistry {
     clear() {
         const hadEntries = this.#uiEntries.size > 0;
         this.#uiEntries.clear();
-        this.#cachedList = Object.freeze([]);
+        this.#cachedList = STABLE_EMPTY_LIST;
         if (hadEntries) {
             this.#notifyListeners();
         }
@@ -123,10 +125,9 @@ export class PluginUIRegistry {
  * @returns {ReadonlyArray<Object>} Immutable list of registered UI DTOs
  */
 export function usePluginUIList(uiReg = null) {
-    const EMPTY_LIST = Object.freeze([]);
     return useSyncExternalStore(
         (onStoreChange) => uiReg ? uiReg.subscribe(onStoreChange) : () => {},
-        () => uiReg ? uiReg.listUI() : EMPTY_LIST,
-        () => uiReg ? uiReg.listUI() : EMPTY_LIST
+        () => uiReg ? uiReg.listUI() : STABLE_EMPTY_LIST,
+        () => uiReg ? uiReg.listUI() : STABLE_EMPTY_LIST
     );
 }

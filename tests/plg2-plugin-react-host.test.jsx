@@ -196,6 +196,41 @@ test('PLG2 Snapshot Immutability & Reference Stability: listUI() returns deeply 
     assert.equal(list3.length, 0);
 });
 
+test('PLG2 Snapshot Stability — usePluginUIList(null) returns stable empty snapshot', async () => {
+    const dom = setupJSDOM();
+    const rootEl = document.getElementById('root');
+    const root = createRoot(rootEl);
+
+    const receivedSnapshots = [];
+
+    const TestComponent = () => {
+        const list = usePluginUIList(null);
+        receivedSnapshots.push(list);
+        return React.createElement('div', null, `Count: ${list.length}`);
+    };
+
+    await act(async () => {
+        root.render(React.createElement(TestComponent));
+    });
+
+    assert.equal(receivedSnapshots.length >= 1, true);
+    const firstSnapshot = receivedSnapshots[0];
+    assert.ok(Object.isFrozen(firstSnapshot), 'Empty snapshot MUST be frozen');
+    assert.equal(firstSnapshot.length, 0);
+
+    // Re-render
+    await act(async () => {
+        root.render(React.createElement(TestComponent));
+    });
+
+    assert.equal(receivedSnapshots.length >= 2, true);
+    const secondSnapshot = receivedSnapshots[1];
+    assert.strictEqual(firstSnapshot, secondSnapshot, 'usePluginUIList(null) MUST return the exact same stable reference across renders');
+
+    root.unmount();
+    dom.window.close();
+});
+
 test('PLG2 — React Plugin Host: Renders registered first-party plugin and passes restricted context', async () => {
     const dom = setupJSDOM();
     const rootEl = document.getElementById('root');
