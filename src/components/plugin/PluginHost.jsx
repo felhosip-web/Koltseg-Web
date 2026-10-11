@@ -160,6 +160,18 @@ export function PluginHost({ pluginId, registry: customRegistry, uiRegistry: cus
 
                 // Check again post-initialization state
                 const currentRecord = registry.get(pluginId);
+                if (!currentRecord) {
+                    if (isCurrentEffect && isMountedRef.current) {
+                        setResolvedState({
+                            boundPluginId: pluginId,
+                            status: 'unknown',
+                            errorMessage: `A megadott bővítmény ("${pluginId}") nem található a regiszterben.`,
+                            context: null
+                        });
+                    }
+                    return;
+                }
+
                 if (currentRecord.state === 'disposed') {
                     if (isCurrentEffect && isMountedRef.current) {
                         setResolvedState({

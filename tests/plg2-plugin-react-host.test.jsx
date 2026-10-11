@@ -1186,6 +1186,67 @@ test('PLG2 Reactivity — Successful initialization and lifecycle notifications 
     dom.window.close();
 });
 
+test('PLG2 Reactivity — Unregister during pending asynchronous initialization handles missing record safely without exception or stale UI', async () => {
+    const dom = setupJSDOM();
+    const rootEl = document.getElementById('root');
+    const root = createRoot(rootEl);
+
+    const registry = new PluginRegistry();
+    const uiRegistry = new PluginUIRegistry();
+
+    let resolvePendingSetup;
+    const pendingSetupPromise = new Promise((resolve) => {
+        resolvePendingSetup = resolve;
+    });
+
+    registry.register({
+        id: 'async.unregister.race.plugin',
+        name: 'Async Unregister Race Plugin',
+        version: '1.0.0',
+        apiVersion: '1',
+        permissions: ['ui:toast']
+    }, async () => {
+        await pendingSetupPromise;
+    });
+
+    uiRegistry.registerUI({
+        pluginId: 'async.unregister.race.plugin',
+        title: 'Async Unregister Race Plugin',
+        hasUI: true,
+        component: () => React.createElement('div', { id: 'stale-race-ui' }, 'Stale Race UI')
+    });
+
+    // 1. Render PluginHost, which triggers async initialize()
+    await act(async () => {
+        root.render(React.createElement(PluginHost, {
+            pluginId: 'async.unregister.race.plugin',
+            registry,
+            uiRegistry
+        }));
+    });
+
+    assert.equal(document.getElementById('stale-race-ui'), null);
+
+    // 2. Unregister plugin while setup is still pending
+    await act(async () => {
+        registry.unregister('async.unregister.race.plugin');
+    });
+
+    // 3. Resolve pending setup now
+    await act(async () => {
+        resolvePendingSetup();
+        await new Promise(r => setImmediate(r));
+    });
+
+    // 4. Verify no uncaught exception occurred, no stale UI is rendered, and status is unknown
+    assert.equal(document.getElementById('stale-race-ui'), null, 'Stale UI MUST NOT render if plugin was unregistered');
+    const bodyHtml = rootEl.innerHTML;
+    assert.equal(bodyHtml.includes('Ismeretlen bővítmény'), true, 'UI should safely show unknown/unregistered status');
+
+    root.unmount();
+    dom.window.close();
+});
+
 test('PLG2 — Static Security & Architecture Audit: Codebase scan for forbidden execution and global handles', () => {
     const filesToAudit = [
         'src/services/plugin/PluginUIContract.js',
