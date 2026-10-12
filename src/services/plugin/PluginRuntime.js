@@ -58,6 +58,29 @@ export class PluginRuntime {
     }
 
     /**
+     * Disposes an active or initialized plugin.
+     * @param {string} pluginId
+     * @returns {boolean} True if disposed
+     */
+    disposePlugin(pluginId) {
+        return this.registry.dispose(pluginId);
+    }
+
+    /**
+     * Unregisters a plugin from PluginRegistry and removes its UI from PluginUIRegistry.
+     * @param {string} pluginId
+     * @returns {boolean} True if removed from registry
+     */
+    unregisterPlugin(pluginId) {
+        const removedFromRegistry = this.registry.unregister(pluginId);
+        const uiRegistry = this.appService?.getPluginUIRegistry?.();
+        if (uiRegistry && typeof uiRegistry.unregisterUI === 'function') {
+            uiRegistry.unregisterUI(pluginId);
+        }
+        return removedFromRegistry;
+    }
+
+    /**
      * Legacy PluginStorage Data Migration Helper.
      * Maps old hardcoded tables to generic plugin_records.
      * @param {Object} app - Host App instance

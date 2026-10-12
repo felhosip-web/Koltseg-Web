@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { appService } from '../../services/appService.js';
 import { PluginErrorBoundary } from './PluginErrorBoundary.jsx';
-import { createPluginContext } from '../../services/plugin/PluginCapabilityFactory.js';
 
 /**
  * React Plugin Host Component (PLG2)
@@ -197,12 +196,17 @@ export function PluginHost({ pluginId, registry: customRegistry, uiRegistry: cus
                 }
 
                 // Retrieve canonical restricted PluginContext created during initialization
-                let context = typeof registry.getContext === 'function' ? registry.getContext(pluginId) : null;
+                const context = typeof registry.getContext === 'function' ? registry.getContext(pluginId) : null;
                 if (!context) {
-                    context = createPluginContext(currentRecord.manifest, {
-                        storageService: registry.storageService || appInstance?.pluginStorageService,
-                        appService: registry.appService || appService
-                    });
+                    if (isCurrentEffect && isMountedRef.current) {
+                        setResolvedState({
+                            boundPluginId: pluginId,
+                            status: 'error',
+                            errorMessage: `A bővítmény ("${pluginId}") nem rendelkezik érvényes környezettel (PluginContext).`,
+                            context: null
+                        });
+                    }
+                    return;
                 }
 
                 if (isCurrentEffect && isMountedRef.current) {
@@ -238,6 +242,7 @@ export function PluginHost({ pluginId, registry: customRegistry, uiRegistry: cus
     const isAlreadyActive = currentRecord?.state === 'active' && Boolean(canonicalContext);
     const isDisposed = currentRecord?.state === 'disposed';
     const isUnknown = !currentRecord && Boolean(pluginId);
+    const isFailed = currentRecord?.state === 'registered' && Boolean(currentRecord?.error);
 
     const isStateBoundToCurrentPlugin = resolvedState.boundPluginId === pluginId;
 
@@ -254,6 +259,9 @@ export function PluginHost({ pluginId, registry: customRegistry, uiRegistry: cus
     } else if (isDisposed) {
         effectiveStatus = 'disposed';
         effectiveErrorMessage = `A bővítmény ("${pluginId}") ki lett kapcsolva (disposed).`;
+    } else if (isFailed) {
+        effectiveStatus = 'error';
+        effectiveErrorMessage = currentRecord.error.message || String(currentRecord.error);
     } else if (isAlreadyActive) {
         effectiveStatus = 'ready';
         effectiveContext = canonicalContext;

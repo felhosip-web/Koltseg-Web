@@ -219,6 +219,13 @@ export class PluginRegistry {
 
             return initPromise;
         } catch (syncErr) {
+            const record = this.#plugins.get(pluginId);
+            if (record && record.state !== 'disposed') {
+                record.state = 'registered';
+                record.context = null;
+                record.error = syncErr;
+                this.#notifyListeners();
+            }
             return Promise.reject(syncErr);
         }
     }
