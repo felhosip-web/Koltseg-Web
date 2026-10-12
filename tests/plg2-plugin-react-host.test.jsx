@@ -1247,6 +1247,86 @@ test('PLG2 Reactivity — Unregister during pending asynchronous initialization 
     dom.window.close();
 });
 
+test('PLG2 Reactivity — Post-initialization missing record null-guard is explicitly exercised and verified', async () => {
+    const dom = setupJSDOM();
+    const rootEl = document.getElementById('root');
+    const root = createRoot(rootEl);
+
+    const baseRegistry = new PluginRegistry();
+    const uiRegistry = new PluginUIRegistry();
+
+    let resolvePendingSetup;
+    const pendingSetupPromise = new Promise((resolve) => {
+        resolvePendingSetup = resolve;
+    });
+
+    baseRegistry.register({
+        id: 'post.init.nullguard.plugin',
+        name: 'Null Guard Plugin',
+        version: '1.0.0',
+        apiVersion: '1',
+        permissions: ['ui:toast']
+    }, async () => {
+        await pendingSetupPromise;
+    });
+
+    uiRegistry.registerUI({
+        pluginId: 'post.init.nullguard.plugin',
+        title: 'Null Guard Plugin',
+        hasUI: true,
+        component: () => React.createElement('div', { id: 'nullguard-ui' }, 'Null Guard UI')
+    });
+
+    let nullGuardBranchExecuted = false;
+
+    // Create registry wrapper that suppresses listener notifications during unregistration
+    const registryWrapper = {
+        subscribe: (listener) => baseRegistry.subscribe(listener),
+        register: (...args) => baseRegistry.register(...args),
+        initialize: (...args) => baseRegistry.initialize(...args),
+        getContext: (...args) => baseRegistry.getContext(...args),
+        dispose: (...args) => baseRegistry.dispose(...args),
+        unregister: (id) => {
+            // Unregister without notifying listeners so isCurrentEffect remains true
+            baseRegistry.dispose(id);
+            // Delete directly from underlying registry without triggering listeners
+            baseRegistry.unregister(id);
+        },
+        get: (id) => {
+            const record = baseRegistry.get(id);
+            if (!record && id === 'post.init.nullguard.plugin') {
+                nullGuardBranchExecuted = true;
+            }
+            return record;
+        }
+    };
+
+    // 1. Render PluginHost, starting async setup
+    await act(async () => {
+        root.render(React.createElement(PluginHost, {
+            pluginId: 'post.init.nullguard.plugin',
+            registry: registryWrapper,
+            uiRegistry
+        }));
+    });
+
+    // 2. Unregister record while setup is pending
+    baseRegistry.unregister('post.init.nullguard.plugin');
+
+    // 3. Resolve setup promise
+    await act(async () => {
+        resolvePendingSetup();
+        await new Promise(r => setImmediate(r));
+    });
+
+    assert.equal(nullGuardBranchExecuted, true, 'post-initialization null-guard branch MUST be executed');
+    assert.equal(document.getElementById('nullguard-ui'), null, 'UI component MUST NOT render');
+    assert.equal(rootEl.innerHTML.includes('Ismeretlen bővítmény'), true, 'Host MUST safely handle missing record and set status to unknown');
+
+    root.unmount();
+    dom.window.close();
+});
+
 test('PLG2 — Static Security & Architecture Audit: Codebase scan for forbidden execution and global handles', () => {
     const filesToAudit = [
         'src/services/plugin/PluginUIContract.js',
