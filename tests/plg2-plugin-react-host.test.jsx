@@ -1252,76 +1252,111 @@ test('PLG2 Reactivity — Post-initialization missing record null-guard is expli
     const rootEl = document.getElementById('root');
     const root = createRoot(rootEl);
 
-    const baseRegistry = new PluginRegistry();
-    const uiRegistry = new PluginUIRegistry();
-
     let resolvePendingSetup;
     const pendingSetupPromise = new Promise((resolve) => {
         resolvePendingSetup = resolve;
     });
 
-    baseRegistry.register({
-        id: 'post.init.nullguard.plugin',
-        name: 'Null Guard Plugin',
-        version: '1.0.0',
-        apiVersion: '1',
-        permissions: ['ui:toast']
-    }, async () => {
-        await pendingSetupPromise;
-    });
+    const targetPluginId = 'post.init.nullguard.plugin';
+    let initializeCalled = false;
+    let postInitGetCalledAndReturnedNull = false;
 
+    let recordInStorage = {
+        manifest: {
+            id: targetPluginId,
+            name: 'Null Guard Plugin',
+            version: '1.0.0',
+            apiVersion: '1',
+            permissions: ['ui:toast']
+        },
+        setup: async () => { await pendingSetupPromise; },
+        state: 'registered',
+        context: null,
+        error: null,
+        registeredAt: new Date().toISOString()
+    };
+
+    const listeners = new Set();
+
+    const controlledRegistry = {
+        subscribe: (fn) => {
+            listeners.add(fn);
+            return () => listeners.delete(fn);
+        },
+        register: () => {},
+        initialize: async (id) => {
+            if (id === targetPluginId) {
+                initializeCalled = true;
+                recordInStorage.state = 'initialized';
+                await recordInStorage.setup();
+                if (recordInStorage) {
+                    recordInStorage.state = 'active';
+                }
+                return Object.freeze({ manifest: recordInStorage?.manifest, state: recordInStorage?.state || 'active', error: null });
+            }
+        },
+        getContext: () => null,
+        dispose: () => {},
+        unregisterSilently: (id) => {
+            if (id === targetPluginId) {
+                // Delete record from storage without notifying listeners so isCurrentEffect in PluginHost remains true
+                recordInStorage = null;
+            }
+        },
+        get: (id) => {
+            if (id === targetPluginId) {
+                if (!recordInStorage) {
+                    if (initializeCalled) {
+                        // THIS is the post-initialization get() call inside resolvePlugin()!
+                        postInitGetCalledAndReturnedNull = true;
+                    }
+                    return null;
+                }
+                return Object.freeze({
+                    manifest: recordInStorage.manifest,
+                    state: recordInStorage.state,
+                    error: recordInStorage.error,
+                    registeredAt: recordInStorage.registeredAt
+                });
+            }
+            return null;
+        }
+    };
+
+    const uiRegistry = new PluginUIRegistry();
     uiRegistry.registerUI({
-        pluginId: 'post.init.nullguard.plugin',
+        pluginId: targetPluginId,
         title: 'Null Guard Plugin',
         hasUI: true,
         component: () => React.createElement('div', { id: 'nullguard-ui' }, 'Null Guard UI')
     });
 
-    let nullGuardBranchExecuted = false;
-
-    // Create registry wrapper that suppresses listener notifications during unregistration
-    const registryWrapper = {
-        subscribe: (listener) => baseRegistry.subscribe(listener),
-        register: (...args) => baseRegistry.register(...args),
-        initialize: (...args) => baseRegistry.initialize(...args),
-        getContext: (...args) => baseRegistry.getContext(...args),
-        dispose: (...args) => baseRegistry.dispose(...args),
-        unregister: (id) => {
-            // Unregister without notifying listeners so isCurrentEffect remains true
-            baseRegistry.dispose(id);
-            // Delete directly from underlying registry without triggering listeners
-            baseRegistry.unregister(id);
-        },
-        get: (id) => {
-            const record = baseRegistry.get(id);
-            if (!record && id === 'post.init.nullguard.plugin') {
-                nullGuardBranchExecuted = true;
-            }
-            return record;
-        }
-    };
-
-    // 1. Render PluginHost, starting async setup
+    // 1. Render PluginHost with controlledRegistry, starting async setup
     await act(async () => {
         root.render(React.createElement(PluginHost, {
-            pluginId: 'post.init.nullguard.plugin',
-            registry: registryWrapper,
+            pluginId: targetPluginId,
+            registry: controlledRegistry,
             uiRegistry
         }));
     });
 
-    // 2. Unregister record while setup is pending
-    baseRegistry.unregister('post.init.nullguard.plugin');
+    assert.equal(initializeCalled, true, 'initialize() should have been called');
+    assert.equal(postInitGetCalledAndReturnedNull, false, 'post-init null guard must NOT have been triggered yet');
 
-    // 3. Resolve setup promise
+    // 2. Unregister record silently while setup is pending
+    controlledRegistry.unregisterSilently(targetPluginId);
+
+    // 3. Resolve pending setup promise
     await act(async () => {
         resolvePendingSetup();
         await new Promise(r => setImmediate(r));
     });
 
-    assert.equal(nullGuardBranchExecuted, true, 'post-initialization null-guard branch MUST be executed');
+    // 4. Verify post-initialization null-guard was explicitly exercised and handled safely
+    assert.equal(postInitGetCalledAndReturnedNull, true, 'post-initialization registry.get() returning null MUST be exercised');
     assert.equal(document.getElementById('nullguard-ui'), null, 'UI component MUST NOT render');
-    assert.equal(rootEl.innerHTML.includes('Ismeretlen bővítmény'), true, 'Host MUST safely handle missing record and set status to unknown');
+    const bodyHtml = rootEl.innerHTML;
+    assert.equal(bodyHtml.includes('Ismeretlen bővítmény'), true, 'Host MUST safely handle missing record post-initialization and set status to unknown');
 
     root.unmount();
     dom.window.close();
