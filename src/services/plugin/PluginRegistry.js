@@ -1,5 +1,5 @@
 // src/services/plugin/PluginRegistry.js
-// Host-side PluginRegistry and Lifecycle Foundation (PLG1)
+// Host-side PluginRegistry and Lifecycle Foundation (PLG1 & PLG2)
 
 import { validatePluginManifest } from './PluginManifestValidator.js';
 import { createPluginContext } from './PluginCapabilityFactory.js';
@@ -49,6 +49,8 @@ function createRecordSnapshot(record) {
 export class PluginRegistry {
     /** @type {Map<string, Object>} Private internal plugin records storage */
     #plugins = new Map();
+    /** @type {Set<Function>} Private listeners set for reactive lifecycle updates */
+    #listeners = new Set();
 
     /**
      * @param {Object} storageService - PluginStorageService instance
@@ -57,6 +59,31 @@ export class PluginRegistry {
     constructor(storageService = null, appService = null) {
         this.storageService = storageService;
         this.appService = appService;
+    }
+
+    /**
+     * Subscribes a listener function to registry lifecycle state changes.
+     * @param {Function} listener
+     * @returns {Function} Unsubscribe function
+     */
+    subscribe(listener) {
+        if (typeof listener === 'function') {
+            this.#listeners.add(listener);
+            return () => {
+                this.#listeners.delete(listener);
+            };
+        }
+        return () => {};
+    }
+
+    #notifyListeners() {
+        for (const listener of this.#listeners) {
+            try {
+                listener();
+            } catch (e) {
+                console.error('[PluginRegistry] Listener notification error:', e);
+            }
+        }
     }
 
     /**
@@ -105,6 +132,7 @@ export class PluginRegistry {
         };
 
         this.#plugins.set(manifest.id, pluginRecord);
+        this.#notifyListeners();
         return createRecordSnapshot(pluginRecord);
     }
 
@@ -149,6 +177,7 @@ export class PluginRegistry {
 
             // 2. Mark as initialized and start async setup tracking
             record.state = 'initialized';
+            this.#notifyListeners();
 
             let initPromiseRef;
             const initPromise = (async () => {
@@ -167,6 +196,7 @@ export class PluginRegistry {
                     record.context = context;
                     record.state = 'active';
                     record.error = null;
+                    this.#notifyListeners();
                     return createRecordSnapshot(record);
                 } catch (err) {
                     // Setup failure or disposal during setup rollback
@@ -175,6 +205,7 @@ export class PluginRegistry {
                         record.context = null;
                         record.error = err;
                     }
+                    this.#notifyListeners();
                     throw err;
                 } finally {
                     if (record.initPromise === initPromiseRef) {
@@ -210,6 +241,7 @@ export class PluginRegistry {
         record.state = 'disposed';
         record.context = null;
         record.initPromise = null;
+        this.#notifyListeners();
         return true;
     }
 
@@ -223,6 +255,7 @@ export class PluginRegistry {
         if (this.#plugins.has(pluginId)) {
             this.dispose(pluginId);
             this.#plugins.delete(pluginId);
+            this.#notifyListeners();
             return true;
         }
         return false;
@@ -255,5 +288,20 @@ export class PluginRegistry {
      */
     list() {
         return Array.from(this.#plugins.values()).map(createRecordSnapshot);
+    }
+
+    /**
+     * Retrieves the active PluginContext instance for a plugin.
+     * Guarantees context lifecycle consistency across setup and UI rendering.
+     * @param {string} pluginId
+     * @returns {Object|null} Restricted PluginContext if plugin is active, else null
+     */
+    getContext(pluginId) {
+        if (!pluginId || typeof pluginId !== 'string') return null;
+        const record = this.#plugins.get(pluginId);
+        if (record && record.state === 'active') {
+            return record.context;
+        }
+        return null;
     }
 }
