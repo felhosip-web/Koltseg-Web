@@ -27,6 +27,32 @@ This document outlines the proposed **PLG3-P1 Plugin Manager API** and lifecycle
 ### B. Proposed New PLG3-P1 Plugin Manager APIs
 The proposed PLG3-P1 Plugin Manager layer provides a clean management facade over existing registry and storage services specifically designed for UI consumption (e.g., in `SettingsPanel`):
 
+#### Proposed `PluginRegistry.prototype.enable(pluginId)` Addition (PLG3-P1 Lifecycle Addition)
+In PLG1, `initialize()` explicitly rejects plugins in the `disposed` state, and `registry.get(pluginId)` returns deeply frozen immutable DTO snapshots (`Object.freeze(...)`). Mutating snapshot DTO properties directly (e.g., `dto.state = 'registered'`) throws a `TypeError`.
+
+To enable re-activating a previously disposed plugin, PLG3-P1 proposes adding an explicit method to `PluginRegistry`:
+```js
+/**
+ * Enables a previously disposed plugin by transitioning its internal private record state
+ * from 'disposed' to 'registered' and clearing previous errors.
+ * @param {string} pluginId
+ * @returns {boolean} True if successfully transitioned to 'registered'
+ */
+enable(pluginId) {
+    if (!pluginId || typeof pluginId !== 'string') return false;
+    const record = this.#plugins.get(pluginId); // Private Map access
+    if (!record) return false;
+    if (record.state === 'disposed') {
+        record.state = 'registered';
+        record.error = null;
+        this.#notifyListeners();
+        return true;
+    }
+    return record.state === 'registered' || record.state === 'active';
+}
+```
+
+#### Proposed `PluginManagerService` Facade
 ```js
 export class PluginManagerService {
     constructor(runtime, uiRegistry) {
@@ -60,7 +86,7 @@ export class PluginManagerService {
     }
 
     /**
-     * Toggles a plugin's runtime state (enabled = true -> initialize; enabled = false -> dispose).
+     * Toggles a plugin's runtime state (enabled = true -> enable & initialize; enabled = false -> dispose).
      * @param {string} pluginId
      * @param {boolean} enabled
      * @returns {Promise<boolean>} True if toggle operation succeeded
@@ -74,8 +100,9 @@ export class PluginManagerService {
         if (!record) return false;
 
         if (record.state === 'disposed') {
-            // Re-enable disposed plugin
-            record.state = 'registered';
+            // Uses proposed PLG3-P1 PluginRegistry.enable() method to transition
+            // internal private record state from 'disposed' to 'registered'
+            this.registry.enable(pluginId);
         }
 
         await this.registry.initialize(pluginId);
@@ -103,24 +130,30 @@ export class PluginManagerService {
     }
 
     /**
-     * Explicitly purges all stored JSON data records for a plugin from IndexedDB & Cloud.
+     * Explicitly purges all stored JSON data records for a plugin from IndexedDB & Cloud Sync.
+     * Interacts directly with PluginStorageService and collection(col).clear().
      * @param {string} pluginId
-     * @returns {Promise<number>} Number of purged records
+     * @returns {Promise<number>} Total number of purged records
      */
     async purgePluginStorageData(pluginId) {
-        const records = this.runtime.storageService.getAllRecords()
-            .filter(r => r.plugin_id === pluginId && !r.deleted_at);
+        const allRecords = this.runtime.storageService.getAllRecords();
+        const pluginRecords = allRecords.filter(r => r.plugin_id === pluginId && !r.deleted_at);
+
+        if (pluginRecords.length === 0) return 0;
 
         const scopedStorage = this.runtime.storageService.createPluginStorage(pluginId);
-        const collectionNames = new Set(records.map(r => r.collection));
+        const collectionNames = Array.from(new Set(pluginRecords.map(r => r.collection)));
 
-        let purgedCount = 0;
+        let totalPurged = 0;
         for (const colName of collectionNames) {
-            const count = await scopedStorage.collection(colName).clear();
-            purgedCount += count;
+            // collection.clear() iterates active collection items, invokes delete(recordKey),
+            // which updates in-memory cache, writes tombstones to IndexedDB deleted_records,
+            // and enqueues high-priority delete operations for Cloud Sync.
+            const colPurged = await scopedStorage.collection(colName).clear();
+            totalPurged += colPurged;
         }
 
-        return purgedCount;
+        return totalPurged;
     }
 }
 ```
@@ -137,7 +170,22 @@ export class PluginManagerService {
 
 ---
 
-## 3. Registration, Initialization, Failure, Retry, and Removal Behavior
+## 3. Storage Purge Verification & Contract Analysis
+
+Inspection of `PluginStorageService.js` confirms the behavior of `purgePluginStorageData()`:
+1. `getAllRecords()` retrieves all non-deleted records (`!r.deleted_at`) currently loaded in memory.
+2. `scopedStorage.collection(colName).clear()` iterates through all active items in the target collection and executes `delete(recordKey)` for each item.
+3. `delete(recordKey)` performs three operations:
+   - Splicing the record out of `service.records` (updating in-memory cache).
+   - Calling `db.delete('plugin_records', rec.id)`, which writes tombstone entries to IndexedDB `deleted_records`.
+   - Enqueuing a high-priority delete in `syncService` (`addToQueue('delete', { id: rec.id }, 'plugin_records', 'high', 'id')`).
+4. `clear()` returns the exact integer count of deleted active records.
+
+This guarantees that `purgePluginStorageData(pluginId)` reliably clears in-memory state, updates IndexedDB, writes tombstones to protect against stale remote pulls, and notifies Cloud Sync.
+
+---
+
+## 4. Registration, Initialization, Failure, Retry, and Removal Behavior
 
 1. **Registration**:
    - `validatePluginManifest(manifest)` ensures all required fields are valid and permissions belong to `KNOWN_PERMISSIONS`.
@@ -160,7 +208,7 @@ export class PluginManagerService {
 
 ---
 
-## 4. Consumer Integration: How Future Manager UI Will Consume the API
+## 5. Consumer Integration: How Future Manager UI Will Consume the API
 
 The future **Plugin Manager UI** (to be embedded in `SettingsPanel.jsx`) will consume the API as follows:
 
@@ -235,7 +283,7 @@ export function PluginManagerPanel({ pluginManager }) {
 
 ---
 
-## 5. Transient vs. Persisted Object Boundaries
+## 6. Transient vs. Persisted Object Boundaries
 
 To guarantee security, sandbox isolation, and serialization safety, a strict boundary separates **transient runtime handles** from **persisted declarative data**:
 
@@ -253,7 +301,7 @@ To guarantee security, sandbox isolation, and serialization safety, a strict bou
 
 ---
 
-## 6. Lifecycle Resource Cleanup Guarantees & Deferred Teardown Limitations
+## 7. Lifecycle Resource Cleanup Guarantees & Deferred Teardown Limitations
 
 ### A. Current Implementation Cleanup Guarantees
 1. **Context Nullification**: When `dispose(pluginId)` or `unregister(pluginId)` is invoked, `record.context` and `record.initPromise` are immediately set to `null` in `PluginRegistry`.
