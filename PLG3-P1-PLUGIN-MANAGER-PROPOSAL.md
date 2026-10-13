@@ -111,10 +111,16 @@ export class PluginManagerService {
 
     /**
      * Calculates storage metrics (total record count) for a specific plugin across collections.
+     * Requires PluginStorageService.isLoaded === true for accurate reporting.
      * @param {string} pluginId
-     * @returns {Promise<{ totalRecords: number, collections: Record<string, number> }>}
+     * @returns {Promise<{ totalRecords: number, collections: Record<string, number>, isLoaded: boolean }>}
      */
     async getPluginStorageMetrics(pluginId) {
+        const isLoaded = Boolean(this.runtime.storageService.isLoaded);
+        if (!isLoaded) {
+            return { totalRecords: 0, collections: {}, isLoaded: false };
+        }
+
         const records = this.runtime.storageService.getAllRecords()
             .filter(r => r.plugin_id === pluginId && !r.deleted_at);
 
@@ -125,35 +131,45 @@ export class PluginManagerService {
 
         return {
             totalRecords: records.length,
-            collections
+            collections,
+            isLoaded: true
         };
     }
 
     /**
      * Explicitly purges all stored JSON data records for a plugin from IndexedDB & Cloud Sync.
+     * Requires PluginStorageService.isLoaded === true before executing.
      * Interacts directly with PluginStorageService and collection(col).clear().
      * @param {string} pluginId
-     * @returns {Promise<number>} Total number of purged records
+     * @returns {Promise<{ success: boolean, totalPurged: number, error?: string }>}
      */
     async purgePluginStorageData(pluginId) {
+        if (!this.runtime.storageService.isLoaded) {
+            return {
+                success: false,
+                totalPurged: 0,
+                error: 'Cannot purge storage: PluginStorageService has not loaded.'
+            };
+        }
+
         const allRecords = this.runtime.storageService.getAllRecords();
         const pluginRecords = allRecords.filter(r => r.plugin_id === pluginId && !r.deleted_at);
 
-        if (pluginRecords.length === 0) return 0;
+        if (pluginRecords.length === 0) {
+            return { success: true, totalPurged: 0 };
+        }
 
         const scopedStorage = this.runtime.storageService.createPluginStorage(pluginId);
         const collectionNames = Array.from(new Set(pluginRecords.map(r => r.collection)));
 
         let totalPurged = 0;
         for (const colName of collectionNames) {
-            // collection.clear() iterates active collection items, invokes delete(recordKey),
-            // which updates in-memory cache, writes tombstones to IndexedDB deleted_records,
-            // and enqueues high-priority delete operations for Cloud Sync.
+            // collection.clear() iterates active in-memory collection items and invokes delete(recordKey)
             const colPurged = await scopedStorage.collection(colName).clear();
             totalPurged += colPurged;
         }
 
-        return totalPurged;
+        return { success: true, totalPurged };
     }
 }
 ```
@@ -172,16 +188,21 @@ export class PluginManagerService {
 
 ## 3. Storage Purge Verification & Contract Analysis
 
-Inspection of `PluginStorageService.js` confirms the behavior of `purgePluginStorageData()`:
-1. `getAllRecords()` retrieves all non-deleted records (`!r.deleted_at`) currently loaded in memory.
-2. `scopedStorage.collection(colName).clear()` iterates through all active items in the target collection and executes `delete(recordKey)` for each item.
-3. `delete(recordKey)` performs three operations:
-   - Splicing the record out of `service.records` (updating in-memory cache).
-   - Calling `db.delete('plugin_records', rec.id)`, which writes tombstone entries to IndexedDB `deleted_records`.
-   - Enqueuing a high-priority delete in `syncService` (`addToQueue('delete', { id: rec.id }, 'plugin_records', 'high', 'id')`).
-4. `clear()` returns the exact integer count of deleted active records.
+Inspection of `PluginStorageService.js` and `js/oop-core.js` clarifies the exact behavior and guarantees of storage purging:
 
-This guarantees that `purgePluginStorageData(pluginId)` reliably clears in-memory state, updates IndexedDB, writes tombstones to protect against stale remote pulls, and notifies Cloud Sync.
+1. **In-Memory Load Boundary**:
+   `purgePluginStorageData()` enumerates active records via `this.runtime.storageService.getAllRecords()`, which returns in-memory records loaded by `PluginStorageService.load()`.
+   *Limitation & Guarantee*: Reporting `0` records purged does **not** prove that the persistent database is empty unless `PluginStorageService.isLoaded === true`. The PLG3-P1 Manager API must explicitly check `isLoaded === true` before executing or reporting a purge as complete.
+
+2. **Collection `clear()` Return Semantics**:
+   `collection.clear()` iterates active in-memory target records and passes each `record_key` to `delete(recordKey)`. It returns the integer count of target items processed, representing the number of targeted in-memory records rather than transactional proof that every individual IndexedDB write, tombstone creation, and cloud-sync queue insertion succeeded without internal warnings.
+
+3. **`Database.prototype.delete()` Best-Effort Guarantees**:
+   In `js/oop-core.js`, `Database.prototype.delete()` attempts to write a tombstone entry to `deleted_records` and enqueue a delete operation in `syncService`. These tracking operations are wrapped inside a `try...catch` block. If saving a tombstone or queueing a delete fails, `Database.prototype.delete()` logs a warning (`[DB] Hiba a törlés naplózásakor:`) and still proceeds with `_directDelete()` local IndexedDB removal.
+   *Limitation & Guarantee*: Local record removal from IndexedDB is authoritative, whereas tombstone generation and cloud-sync queueing are best-effort operations that catch and log warnings rather than aborting local deletion.
+
+4. **Failure Reporting Requirements**:
+   The future PLG3-P1 `PluginManagerService` must implement explicit failure reporting (returning `{ success: boolean, totalPurged: number, error?: string }`) and verify `isLoaded === true` before claiming a storage purge is complete.
 
 ---
 
@@ -236,8 +257,12 @@ export function PluginManagerPanel({ pluginManager }) {
 
     const handlePurgeData = async (pluginId) => {
         if (window.confirm(`Biztosan törölni szeretnéd a bővítmény összes elmentett adatát?`)) {
-            await pluginManager.purgePluginStorageData(pluginId);
-            alert('Adatok sikeresen törölve.');
+            const res = await pluginManager.purgePluginStorageData(pluginId);
+            if (res.success) {
+                alert(`${res.totalPurged} adat rekord törölve.`);
+            } else {
+                alert(`Hiba történt az adatok törlésekor: ${res.error}`);
+            }
         }
     };
 
