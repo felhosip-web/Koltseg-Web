@@ -142,7 +142,7 @@ export class PluginManagerService {
 
     /**
      * Explicitly purges all stored JSON data records for a plugin from IndexedDB & Cloud Sync.
-     * Verifies storage readiness, tracks per-record deletions, and returns a truthful PurgeOutcomeDTO.
+     * Verifies storage readiness, tracks per-record local deletions, and returns a truthful PurgeOutcomeDTO.
      * @param {string} pluginId
      * @returns {Promise<PurgeOutcomeDTO>} Truthful purge outcome DTO
      */
@@ -203,7 +203,7 @@ export class PluginManagerService {
             localPurgedCount,
             tombstoneStatus: localPurgedCount > 0 ? 'best_effort_unverified' : 'not_applicable',
             syncStatus: localPurgedCount > 0
-                ? (syncServiceActive ? 'enqueued_unverified' : 'skipped_disabled')
+                ? (syncServiceActive ? 'attempted_unverified' : 'skipped_disabled')
                 : 'not_applicable',
             errors
         };
@@ -219,7 +219,7 @@ export class PluginManagerService {
 |---|---|---|---|---|
 | **Disable / `dispose(id)`** | Transitions to `disposed`. `context` and `initPromise` are set to `null`. Manifest remains in memory. | Contract remains registered. | **Preserved**. User data in IndexedDB/Cloud is untouched. | Renders "Inaktív bővítmény" card. Tab remains visible in navigation if `hasUI: true`. |
 | **Unregister / `unregister(id)`** | Disposed and **removed** from `#plugins` Map. | UI contract removed from `PluginUIRegistry`. | **Preserved**. User data in IndexedDB/Cloud is untouched. | Renders "Ismeretlen bővítmény" card. Tab is removed from tab bar (`CostAppTabs`). |
-| **Purge Data / `purgePluginStorageData(id)`** | Unchanged (plugin can be active, registered, or disposed). | Unchanged. | **Deleted**. Local records removed, tombstones written to IndexedDB `deleted_records`, and high-priority cloud deletes enqueued. | Plugin storage collections are emptied (`0` records). |
+| **Purge Data / `purgePluginStorageData(id)`** | Unchanged (plugin can be active, registered, or disposed). | Unchanged. | **Deleted**. Local records removed from memory and IndexedDB. Tombstone creation and cloud-sync queueing are attempted on a best-effort basis. | Plugin storage collections are emptied (`0` records). |
 
 ---
 
@@ -244,14 +244,16 @@ Inspection of `PluginStorageService.js` and `js/oop-core.js` clarifies the exact
    Because tombstone generation and cloud-sync queueing catch errors internally without throwing, the host cannot prove that tombstones or sync items were successfully written. The proposed `PurgeOutcomeDTO` truthfully represents these outcomes as status flags rather than unconditional booleans:
    ```ts
    interface PurgeOutcomeDTO {
-       success: boolean;
+       success: boolean; // True if local in-memory/IndexedDB target record removals succeeded without local deletion errors
        localPurgedCount: number; // Confirmed local in-memory/IndexedDB records deleted
-       tombstoneStatus: 'not_applicable' | 'best_effort_unverified';
-       syncStatus: 'not_applicable' | 'enqueued_unverified' | 'skipped_disabled';
+       tombstoneStatus: 'not_applicable' | 'best_effort_unverified'; // Best-effort tombstone logging in deleted_records
+       syncStatus: 'not_applicable' | 'attempted_unverified' | 'skipped_disabled'; // Attempted queueing in syncService
        errors: string[];
    }
    ```
-   - **Zero-Record Result**: When no active records exist in the verified loaded snapshot (`pluginRecords.length === 0`), `purgePluginStorageData()` returns `localPurgedCount: 0`, `tombstoneStatus: 'not_applicable'`, `syncStatus: 'not_applicable'`, and `errors: []`, without claiming tombstones or sync queues were created.
+   - **Local Success Definition**: `success: true` in `PurgeOutcomeDTO` strictly indicates that local in-memory and IndexedDB record removal completed without local deletion errors. It does **not** guarantee tombstone or cloud-sync queue success.
+   - **Sync Status Wording**: `syncStatus` is reported as `'attempted_unverified'` when SyncService is active, expressing attempted queueing without claiming unverified queue insertion evidence.
+   - **Zero-Record Result**: When no active records exist in the verified loaded snapshot (`pluginRecords.length === 0`), `purgePluginStorageData()` returns `localPurgedCount: 0`, `tombstoneStatus: 'not_applicable'`, `syncStatus: 'not_applicable'`, and `errors: []`, without claiming tombstones or sync queues were created or attempted.
 
 ---
 
