@@ -142,9 +142,9 @@ export class PluginManagerService {
 
     /**
      * Explicitly purges all stored JSON data records for a plugin from IndexedDB & Cloud Sync.
-     * Verifies storage readiness and catches exceptions gracefully, returning a structured PurgeOutcomeDTO.
+     * Verifies storage readiness, tracks per-record deletions, and returns a truthful PurgeOutcomeDTO.
      * @param {string} pluginId
-     * @returns {Promise<{ success: boolean, localPurgedCount: number, tombstonesCreated: boolean, syncQueued: boolean, errors: string[] }>}
+     * @returns {Promise<PurgeOutcomeDTO>} Truthful purge outcome DTO
      */
     async purgePluginStorageData(pluginId) {
         const errors = [];
@@ -159,8 +159,8 @@ export class PluginManagerService {
             return {
                 success: false,
                 localPurgedCount: 0,
-                tombstonesCreated: false,
-                syncQueued: false,
+                tombstoneStatus: 'not_applicable',
+                syncStatus: 'not_applicable',
                 errors: ['Cannot purge storage: PluginStorageService is not ready or failed to load.']
             };
         }
@@ -169,7 +169,13 @@ export class PluginManagerService {
         const pluginRecords = allRecords.filter(r => r.plugin_id === pluginId && !r.deleted_at);
 
         if (pluginRecords.length === 0) {
-            return { success: true, localPurgedCount: 0, tombstonesCreated: true, syncQueued: true, errors: [] };
+            return {
+                success: true,
+                localPurgedCount: 0,
+                tombstoneStatus: 'not_applicable',
+                syncStatus: 'not_applicable',
+                errors: []
+            };
         }
 
         const scopedStorage = storageService.createPluginStorage(pluginId);
@@ -177,12 +183,16 @@ export class PluginManagerService {
 
         let localPurgedCount = 0;
         for (const colName of collectionNames) {
-            try {
-                // collection.clear() iterates active collection items and invokes delete(recordKey)
-                const colPurged = await scopedStorage.collection(colName).clear();
-                localPurgedCount += colPurged;
-            } catch (err) {
-                errors.push(`Collection "${colName}" clear error: ${err?.message || String(err)}`);
+            const col = scopedStorage.collection(colName);
+            const recordsInCol = pluginRecords.filter(r => r.collection === colName);
+
+            for (const rec of recordsInCol) {
+                try {
+                    const deleted = await col.delete(rec.record_key);
+                    if (deleted) localPurgedCount++;
+                } catch (err) {
+                    errors.push(`Record "${rec.record_key}" in collection "${colName}" delete error: ${err?.message || String(err)}`);
+                }
             }
         }
 
@@ -191,8 +201,10 @@ export class PluginManagerService {
         return {
             success: errors.length === 0,
             localPurgedCount,
-            tombstonesCreated: true, // Best-effort in Database.prototype.delete
-            syncQueued: syncServiceActive,
+            tombstoneStatus: localPurgedCount > 0 ? 'best_effort_unverified' : 'not_applicable',
+            syncStatus: localPurgedCount > 0
+                ? (syncServiceActive ? 'enqueued_unverified' : 'skipped_disabled')
+                : 'not_applicable',
             errors
         };
     }
@@ -216,22 +228,30 @@ export class PluginManagerService {
 Inspection of `PluginStorageService.js` and `js/oop-core.js` clarifies the exact behavior, guarantees, and readiness state requirements for storage purging:
 
 1. **Stale Readiness State Defect & Proposed Fix**:
-   - *Current Implementation Inspection*: In `PluginStorageService.js`, `load()` sets `this.isLoaded = true` on success. However, if a subsequent `load()` call fails, the `catch` block resets `this.records = []` without setting `this.isLoaded = false`.
-   - *Stale Readiness Risk*: A stale `isLoaded === true` flag from a previous successful load could allow callers to treat an empty `this.records` array as proof of zero stored items when in fact the latest database query failed!
+   - *Current Implementation Inspection*: In `PluginStorageService.js`, `load()` sets `this.isLoaded = true` on success. However, if `this.db` is missing or if a subsequent `load()` call fails, `load()` returns `[]` (and resets `this.records = []`) without setting `this.isLoaded = false`.
+   - *Stale Readiness Risk*: A stale `isLoaded === true` flag from a previous successful load could allow callers to treat an empty `this.records` array as proof of zero stored items when in fact the latest database load failed!
    - *PLG3-P1 Proposed Contract Fix*:
-     - `PluginStorageService.prototype.load()` must reset `this.isLoaded = false` in its `catch` block.
+     - `PluginStorageService.prototype.load()` must set `this.isLoaded = false` whenever `!this.db` or when a load query fails in `catch`.
      - `PluginStorageService` must expose a `verifyReadiness()` method that confirms both `this.isLoaded === true` and underlying `db` availability before querying `getAllRecords()`.
      - `purgePluginStorageData()` must require `verifyReadiness()` to return `true` before executing or reporting a purge outcome.
 
-2. **Collection `clear()` Return Semantics**:
-   `collection.clear()` iterates active in-memory target records and passes each `record_key` to `delete(recordKey)`. It returns the integer count of target items processed (`localPurgedCount`), representing local in-memory/IndexedDB target records rather than transactional proof that every individual tombstone write and cloud-sync queue insertion succeeded without warnings.
+2. **Per-Record Deletion & Partial Failure Tracking**:
+   To ensure that `localPurgedCount` accurately reflects the number of records actually removed prior to an exception, `purgePluginStorageData()` iterates through target records individually rather than relying on `collection.clear()` post-batch counts. If an error occurs on a specific record, the error is recorded in `errors[]` while `localPurgedCount` preserves the count of successfully deleted records.
 
-3. **`Database.prototype.delete()` Best-Effort Guarantees**:
+3. **`Database.prototype.delete()` Best-Effort Guarantees & `PurgeOutcomeDTO`**:
    In `js/oop-core.js`, `Database.prototype.delete()` attempts to write a tombstone entry to `deleted_records` and enqueue a delete operation in `syncService`. These tracking operations are wrapped inside a `try...catch` block. If saving a tombstone or queueing a delete fails, `Database.prototype.delete()` logs a warning (`[DB] Hiba a törlés naplózásakor:`) and proceeds with `_directDelete()` local IndexedDB removal.
-   *Limitation & Guarantee*: Local record removal from IndexedDB is authoritative, whereas tombstone generation and cloud-sync queueing are best-effort operations that catch and log warnings rather than aborting local deletion.
 
-4. **Failure Reporting Requirements**:
-   The future PLG3-P1 `PluginManagerService` must implement explicit failure reporting (returning `{ success: boolean, localPurgedCount: number, tombstonesCreated: boolean, syncQueued: boolean, errors: string[] }`) and catch exceptions during collection clearing to prevent unhandled promise rejections.
+   Because tombstone generation and cloud-sync queueing catch errors internally without throwing, the host cannot prove that tombstones or sync items were successfully written. The proposed `PurgeOutcomeDTO` truthfully represents these outcomes as status flags rather than unconditional booleans:
+   ```ts
+   interface PurgeOutcomeDTO {
+       success: boolean;
+       localPurgedCount: number; // Confirmed local in-memory/IndexedDB records deleted
+       tombstoneStatus: 'not_applicable' | 'best_effort_unverified';
+       syncStatus: 'not_applicable' | 'enqueued_unverified' | 'skipped_disabled';
+       errors: string[];
+   }
+   ```
+   - **Zero-Record Result**: When no active records exist in the verified loaded snapshot (`pluginRecords.length === 0`), `purgePluginStorageData()` returns `localPurgedCount: 0`, `tombstoneStatus: 'not_applicable'`, `syncStatus: 'not_applicable'`, and `errors: []`, without claiming tombstones or sync queues were created.
 
 ---
 
