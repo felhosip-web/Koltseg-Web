@@ -111,15 +111,13 @@ export class PluginManagerService {
 
     /**
      * Calculates storage metrics (total record count) for a specific plugin across collections.
-     * Verifies storage readiness (storageService.verifyReadiness()) before querying.
+     * Strictly requires storageService.verifyReadiness() === true before querying.
      * @param {string} pluginId
      * @returns {Promise<{ totalRecords: number, collections: Record<string, number>, isLoaded: boolean }>}
      */
     async getPluginStorageMetrics(pluginId) {
         const storageService = this.runtime.storageService;
-        const isReady = typeof storageService.verifyReadiness === 'function'
-            ? storageService.verifyReadiness()
-            : Boolean(storageService.isLoaded);
+        const isReady = Boolean(storageService && typeof storageService.verifyReadiness === 'function' && storageService.verifyReadiness());
 
         if (!isReady) {
             return { totalRecords: 0, collections: {}, isLoaded: false };
@@ -142,7 +140,8 @@ export class PluginManagerService {
 
     /**
      * Explicitly purges all stored JSON data records for a plugin from IndexedDB & Cloud Sync.
-     * Verifies storage readiness, tracks per-record local deletions, and returns a truthful PurgeOutcomeDTO.
+     * Strictly requires storageService.verifyReadiness() === true before executing.
+     * Tracks per-record local deletions and returns a truthful PurgeOutcomeDTO.
      * @param {string} pluginId
      * @returns {Promise<PurgeOutcomeDTO>} Truthful purge outcome DTO
      */
@@ -150,10 +149,8 @@ export class PluginManagerService {
         const errors = [];
         const storageService = this.runtime.storageService;
 
-        // 1. Verify storage readiness
-        const isReady = typeof storageService.verifyReadiness === 'function'
-            ? storageService.verifyReadiness()
-            : Boolean(storageService.isLoaded);
+        // 1. Verify storage readiness (mandatory prerequisite contract)
+        const isReady = Boolean(storageService && typeof storageService.verifyReadiness === 'function' && storageService.verifyReadiness());
 
         if (!isReady) {
             return {
@@ -161,7 +158,7 @@ export class PluginManagerService {
                 localPurgedCount: 0,
                 tombstoneStatus: 'not_applicable',
                 syncStatus: 'not_applicable',
-                errors: ['Cannot purge storage: PluginStorageService is not ready or failed to load.']
+                errors: ['Cannot purge storage: storageService.verifyReadiness() is missing or returned false.']
             };
         }
 
@@ -227,13 +224,13 @@ export class PluginManagerService {
 
 Inspection of `PluginStorageService.js` and `js/oop-core.js` clarifies the exact behavior, guarantees, and readiness state requirements for storage purging:
 
-1. **Stale Readiness State Defect & Proposed Fix**:
+1. **Stale Readiness State Defect & Mandatory `verifyReadiness()` Prerequisite**:
    - *Current Implementation Inspection*: In `PluginStorageService.js`, `load()` sets `this.isLoaded = true` on success. However, if `this.db` is missing or if a subsequent `load()` call fails, `load()` returns `[]` (and resets `this.records = []`) without setting `this.isLoaded = false`.
    - *Stale Readiness Risk*: A stale `isLoaded === true` flag from a previous successful load could allow callers to treat an empty `this.records` array as proof of zero stored items when in fact the latest database load failed!
-   - *PLG3-P1 Proposed Contract Fix*:
+   - *PLG3-P1 Mandatory Contract*:
      - `PluginStorageService.prototype.load()` must set `this.isLoaded = false` whenever `!this.db` or when a load query fails in `catch`.
-     - `PluginStorageService` must expose a `verifyReadiness()` method that confirms both `this.isLoaded === true` and underlying `db` availability before querying `getAllRecords()`.
-     - `purgePluginStorageData()` must require `verifyReadiness()` to return `true` before executing or reporting a purge outcome.
+     - `PluginStorageService` must expose a mandatory `verifyReadiness()` method that confirms both `this.isLoaded === true` and underlying `db` connection availability.
+     - The PLG3-P1 Manager API strictly requires `storageService.verifyReadiness()` to exist and return `true` before querying metrics or purging data. Fallback checks to `Boolean(storageService.isLoaded)` are explicitly prohibited. If `verifyReadiness()` is missing or returns `false`, `getPluginStorageMetrics()` reports `isLoaded: false` without claiming an authoritative zero-record total, and `purgePluginStorageData()` aborts immediately with `success: false` without deleting any records.
 
 2. **Per-Record Deletion & Partial Failure Tracking**:
    To ensure that `localPurgedCount` accurately reflects the number of records actually removed prior to an exception, `purgePluginStorageData()` iterates through target records individually rather than relying on `collection.clear()` post-batch counts. If an error occurs on a specific record, the error is recorded in `errors[]` while `localPurgedCount` preserves the count of successfully deleted records.
