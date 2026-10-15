@@ -209,7 +209,7 @@ export class PluginManagerService {
         const syncServiceActive = Boolean(storageService.syncService && !storageService.syncService.isMuted);
 
         return {
-            success: attemptedCount > 0 && localPurgedCount === attemptedCount && errors.length === 0,
+            success: errors.length === 0 && (attemptedCount === 0 || localPurgedCount === attemptedCount),
             attemptedCount,
             localPurgedCount,
             failedCount,
@@ -231,7 +231,7 @@ export class PluginManagerService {
 |---|---|---|---|---|
 | **Disable / `dispose(id)`** | Transitions to `disposed`. `context` and `initPromise` are set to `null`. Manifest remains in memory. | Contract remains registered. | **Preserved**. User data in IndexedDB/Cloud is untouched. | Renders "Inaktív bővítmény" card. Tab remains visible in navigation if `hasUI: true`. |
 | **Unregister / `unregister(id)`** | Disposed and **removed** from `#plugins` Map. | UI contract removed from `PluginUIRegistry`. | **Preserved**. User data in IndexedDB/Cloud is untouched. | Renders "Ismeretlen bővítmény" card. Tab is removed from tab bar (`CostAppTabs`). |
-| **Purge Data / `purgePluginStorageData(id)`** | Unchanged (plugin can be active, registered, or disposed). | Unchanged. | **Deleted**. Local records removed from memory and IndexedDB. Tombstone creation and cloud-sync queueing are attempted on a best-effort basis. | Local records removed for confirmed deletions; partial failure details reported in `PurgeOutcomeDTO`. |
+| **Purge Data / `purgePluginStorageData(id)`** | Unchanged (plugin can be active, registered, or disposed). | Unchanged. | Confirmed local deletions removed from memory and IndexedDB; partial failures reported in `PurgeOutcomeDTO`. Best-effort tombstone creation and cloud-sync queueing attempted. | Local records removed for confirmed deletions; partial failure details reported in `PurgeOutcomeDTO`. |
 
 ---
 
@@ -251,7 +251,7 @@ Inspection of `PluginStorageService.js` and `js/oop-core.js` clarifies the exact
    To ensure that `localPurgedCount` accurately reflects the number of records actually removed prior to an exception or deletion failure:
    - `purgePluginStorageData()` iterates through target records individually (`col.delete(rec.record_key)`).
    - If `col.delete()` returns `false` (e.g. key missing from memory cache), `failedCount` is incremented and an explicit error is recorded in `errors[]`.
-   - `success` in `PurgeOutcomeDTO` is strictly defined as `attemptedCount > 0 && localPurgedCount === attemptedCount && errors.length === 0`. Thus, `success` cannot be `true` if any targeted record returned `false` or threw an error on deletion.
+   - `success` in `PurgeOutcomeDTO` is strictly defined as `errors.length === 0 && (attemptedCount === 0 || localPurgedCount === attemptedCount)`. Thus, a verified zero-record purge succeeds as a no-op (`attemptedCount: 0`, `localPurgedCount: 0`), whereas an active record purge requires all attempted record removals to succeed.
 
 3. **`Database.prototype.delete()` Best-Effort Guarantees & Truthful `PurgeOutcomeDTO`**:
    In `js/oop-core.js`, `Database.prototype.delete()` attempts to write a tombstone entry to `deleted_records` and enqueue a delete operation in `syncService`. These tracking operations are wrapped inside a `try...catch` block. If saving a tombstone or queueing a delete fails, `Database.prototype.delete()` logs a warning (`[DB] Hiba a törlés naplózásakor:`) and proceeds with `_directDelete()` local IndexedDB removal.
@@ -259,8 +259,8 @@ Inspection of `PluginStorageService.js` and `js/oop-core.js` clarifies the exact
    Because tombstone generation and cloud-sync queueing catch errors internally without throwing, the host cannot prove that tombstones or sync items were successfully written. The proposed `PurgeOutcomeDTO` truthfully represents these outcomes as status flags rather than unconditional booleans:
    ```ts
    interface PurgeOutcomeDTO {
-       success: boolean; // True strictly if attemptedCount > 0 && localPurgedCount === attemptedCount && errors.length === 0
-       attemptedCount: number; // Number of active records targeted for deletion
+       success: boolean; // True if no local deletion errors occurred (either a verified no-op when 0 active records exist, or all attempted local record removals succeeded)
+       attemptedCount: number; // Number of active records targeted for deletion (0 for no-op)
        localPurgedCount: number; // Confirmed local in-memory/IndexedDB records deleted
        failedCount: number; // Number of targeted records that failed or returned false on delete()
        tombstoneStatus: 'not_applicable' | 'best_effort_unverified'; // Best-effort tombstone logging in deleted_records
@@ -268,9 +268,9 @@ Inspection of `PluginStorageService.js` and `js/oop-core.js` clarifies the exact
        errors: string[];
    }
    ```
-   - **Local Success Definition**: `success: true` in `PurgeOutcomeDTO` strictly indicates that all targeted local in-memory and IndexedDB record removals succeeded (`localPurgedCount === attemptedCount`) without errors. It does **not** guarantee tombstone or cloud-sync queue success.
+   - **Local Success Definition**: `success: true` in `PurgeOutcomeDTO` strictly indicates that local in-memory and IndexedDB record removal completed without local deletion errors (or verified zero active records). It does **not** guarantee tombstone or cloud-sync queue success.
    - **Sync Status Wording**: `syncStatus` is reported as `'attempted_unverified'` when SyncService is active, expressing attempted queueing without claiming unverified queue insertion evidence.
-   - **Zero-Record Result**: When no active records exist in the verified loaded snapshot (`pluginRecords.length === 0`), `purgePluginStorageData()` returns `attemptedCount: 0`, `localPurgedCount: 0`, `failedCount: 0`, `tombstoneStatus: 'not_applicable'`, `syncStatus: 'not_applicable'`, and `errors: []`, without claiming tombstones or sync queues were created or attempted.
+   - **Zero-Record Result**: When no active records exist in the verified loaded snapshot (`pluginRecords.length === 0`), `purgePluginStorageData()` returns `attemptedCount: 0`, `localPurgedCount: 0`, `failedCount: 0`, `tombstoneStatus: 'not_applicable'`, `syncStatus: 'not_applicable'`, and `errors: []`, representing a successful no-op purge without claiming tombstones or sync queues were created or attempted.
 
 ---
 
