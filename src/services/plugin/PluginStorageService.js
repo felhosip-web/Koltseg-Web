@@ -156,19 +156,15 @@ export class PluginStorageService {
                      */
                     async delete(recordKey) {
                         const keyStr = String(recordKey);
-                        const recIndex = service.records.findIndex(r =>
+                        const rec = service.records.find(r =>
                             r.plugin_id === boundPluginId &&
                             r.collection === boundCollection &&
-                            r.record_key === keyStr
+                            r.record_key === keyStr &&
+                            !r.deleted_at
                         );
 
-                        if (recIndex !== -1) {
-                            const rec = service.records[recIndex];
-
-                            // Remove from active in-memory cache
-                            service.records.splice(recIndex, 1);
-
-                            // Delete via db.delete which writes tombstone to deleted_records and enqueues high-priority delete
+                        if (rec) {
+                            // Persistent deletion via db.delete which writes tombstone to deleted_records and enqueues high-priority delete
                             if (service.db) {
                                 if (typeof service.db.delete === 'function') {
                                     await service.db.delete('plugin_records', rec.id);
@@ -177,6 +173,12 @@ export class PluginStorageService {
                                 }
                             } else if (service.syncService && !service.syncService.isMuted) {
                                 service.syncService.addToQueue('delete', { id: rec.id }, 'plugin_records', 'high', 'id');
+                            }
+
+                            // Remove from active in-memory cache ONLY after persistent deletion completes successfully
+                            const currIndex = service.records.findIndex(r => r.id === rec.id);
+                            if (currIndex !== -1) {
+                                service.records.splice(currIndex, 1);
                             }
 
                             return true;

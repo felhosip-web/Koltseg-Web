@@ -208,6 +208,50 @@ test('PLG3-P1 — Requirement 6: Storage not ready, missing database, and failed
     dom.window.close();
 });
 
+test('PLG3-P1 — Thrown DB deletion error preserves in-memory cache and updates purge outcome truthfully', async () => {
+    const dom = setupJSDOM();
+    const db = new Database();
+    db._enableMockDb();
+
+    // Mock db.delete to throw an error when deleting a specific record
+    db.delete = async (storeName, key) => {
+        throw new Error('Database write failure during delete');
+    };
+
+    const storageService = new PluginStorageService(db, null);
+    await storageService.load();
+
+    const runtime = new PluginRuntime(storageService, appService);
+    const manager = new PluginManagerService(runtime);
+
+    const storageA = storageService.createPluginStorage('throw.test.plugin.a');
+    await storageA.collection('cache').set('c1', { data: 'persistent payload' });
+
+    const storageB = storageService.createPluginStorage('throw.test.plugin.b');
+    await storageB.collection('cache').set('c1', { data: 'other plugin payload' });
+
+    const outcome = await manager.purgePluginStorageData('throw.test.plugin.a');
+
+    // Truthful accounting checks
+    assert.equal(outcome.success, false);
+    assert.equal(outcome.attemptedCount, 1);
+    assert.equal(outcome.localPurgedCount, 0);
+    assert.equal(outcome.failedCount, 1);
+    assert.ok(outcome.errors[0].includes('Database write failure during delete'));
+
+    // In-memory state preservation check for target plugin
+    const retainedValA = await storageA.collection('cache').get('c1');
+    assert.ok(retainedValA, 'Failed record MUST remain in in-memory cache when db.delete throws');
+    assert.equal(retainedValA.data, 'persistent payload');
+
+    // In-memory state preservation check for other plugin
+    const retainedValB = await storageB.collection('cache').get('c1');
+    assert.ok(retainedValB, 'Unrelated plugin record MUST remain intact');
+    assert.equal(retainedValB.data, 'other plugin payload');
+
+    dom.window.close();
+});
+
 test('PLG3-P1 — Requirement 7: Metrics for ready storage and correct plugin scoping', async () => {
     const dom = setupJSDOM();
     const db = new Database();
