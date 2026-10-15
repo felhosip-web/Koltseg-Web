@@ -231,6 +231,27 @@ export class PluginRegistry {
     }
 
     /**
+     * Enables a previously disposed plugin by transitioning its internal record state
+     * from 'disposed' to 'registered' and clearing previous errors.
+     * @param {string} pluginId
+     * @returns {boolean} True if successfully transitioned to 'registered' or already enabled
+     */
+    enable(pluginId) {
+        if (!pluginId || typeof pluginId !== 'string') return false;
+        const record = this.#plugins.get(pluginId);
+        if (!record) return false;
+
+        if (record.state === 'disposed') {
+            record.state = 'registered';
+            record.error = null;
+            this.#notifyListeners();
+            return true;
+        }
+
+        return record.state === 'registered' || record.state === 'active' || record.state === 'initialized';
+    }
+
+    /**
      * Disposes an active or initialized plugin. Idempotent operation.
      * @param {string} pluginId
      * @returns {boolean} True if plugin exists and is disposed

@@ -1,0 +1,409 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import React from 'react';
+import { JSDOM } from 'jsdom';
+import 'fake-indexeddb/auto';
+
+import { Database } from '../js/oop-core.js';
+import { PluginStorageService } from '../src/services/plugin/PluginStorageService.js';
+import { PluginRegistry } from '../src/services/plugin/PluginRegistry.js';
+import { PluginRuntime } from '../src/services/plugin/PluginRuntime.js';
+import { PluginUIRegistry } from '../src/services/plugin/PluginUIRegistry.js';
+import { PluginManagerService } from '../src/services/plugin/PluginManagerService.js';
+import { appService } from '../src/services/appService.js';
+
+function setupJSDOM() {
+    const dom = new JSDOM('<!DOCTYPE html><html><body><div id="root"></div></body></html>', {
+        url: 'http://localhost/',
+        runScripts: 'dangerously'
+    });
+
+    globalThis.window = dom.window;
+    globalThis.document = dom.window.document;
+    Object.defineProperty(globalThis, 'navigator', {
+        value: dom.window.navigator,
+        configurable: true,
+        writable: true
+    });
+    globalThis.HTMLElement = dom.window.HTMLElement;
+    globalThis.CustomEvent = dom.window.CustomEvent;
+
+    return dom;
+}
+
+test('PLG3-P1 — Requirement 1: Enabling a disposed plugin and initializing it successfully', async () => {
+    let setupRan = 0;
+    const registry = new PluginRegistry();
+    const manifest = {
+        id: 'test.enable.plugin',
+        name: 'Enable Plugin',
+        version: '1.0.0',
+        apiVersion: '1',
+        permissions: ['ui:toast']
+    };
+
+    registry.register(manifest, () => { setupRan++; });
+    await registry.initialize('test.enable.plugin');
+    assert.equal(registry.get('test.enable.plugin').state, 'active');
+
+    // Dispose
+    registry.dispose('test.enable.plugin');
+    assert.equal(registry.get('test.enable.plugin').state, 'disposed');
+
+    // Cannot initialize disposed plugin directly
+    await assert.rejects(async () => {
+        await registry.initialize('test.enable.plugin');
+    }, /Cannot initialize disposed plugin/);
+
+    // Enable transitions state back to 'registered'
+    const enabled = registry.enable('test.enable.plugin');
+    assert.equal(enabled, true);
+    assert.equal(registry.get('test.enable.plugin').state, 'registered');
+
+    // Can initialize successfully again
+    await registry.initialize('test.enable.plugin');
+    assert.equal(registry.get('test.enable.plugin').state, 'active');
+    assert.equal(setupRan, 2);
+});
+
+test('PLG3-P1 — Requirement 2: Enabling an active or registered plugin idempotently', () => {
+    const registry = new PluginRegistry();
+    const manifest = {
+        id: 'idempotent.plugin',
+        name: 'Idempotent Plugin',
+        version: '1.0.0',
+        apiVersion: '1',
+        permissions: ['ui:toast']
+    };
+
+    registry.register(manifest);
+    assert.equal(registry.get('idempotent.plugin').state, 'registered');
+
+    // Enabling a 'registered' plugin returns true idempotently
+    assert.equal(registry.enable('idempotent.plugin'), true);
+    assert.equal(registry.get('idempotent.plugin').state, 'registered');
+});
+
+test('PLG3-P1 — Requirement 3: Unknown IDs and invalid arguments', async () => {
+    const storageService = new PluginStorageService(null, null);
+    const runtime = new PluginRuntime(storageService, appService);
+    const uiRegistry = new PluginUIRegistry();
+    const manager = new PluginManagerService(runtime, uiRegistry);
+
+    // PluginRegistry.enable with invalid or unknown IDs
+    assert.equal(runtime.registry.enable(null), false);
+    assert.equal(runtime.registry.enable(''), false);
+    assert.equal(runtime.registry.enable(123), false);
+    assert.equal(runtime.registry.enable('non.existent.plugin'), false);
+
+    // togglePluginState with invalid args
+    assert.equal(await manager.togglePluginState(null, true), false);
+    assert.equal(await manager.togglePluginState('some.plugin', 'not-a-boolean'), false);
+    assert.equal(await manager.togglePluginState('non.existent.plugin', true), false);
+
+    // getPluginStorageMetrics with invalid IDs
+    const metricsInvalid = await manager.getPluginStorageMetrics(null);
+    assert.equal(metricsInvalid.totalRecords, 0);
+
+    // purgePluginStorageData with invalid IDs
+    const purgeInvalid = await manager.purgePluginStorageData(null);
+    assert.equal(purgeInvalid.success, false);
+    assert.ok(purgeInvalid.errors.length > 0);
+});
+
+test('PLG3-P1 — Requirement 4: Setup failures and accurate error reporting in manager', async () => {
+    const storageService = new PluginStorageService(null, null);
+    const runtime = new PluginRuntime(storageService, appService);
+    const uiRegistry = new PluginUIRegistry();
+    const manager = new PluginManagerService(runtime, uiRegistry);
+
+    runtime.registry.register({
+        id: 'failing.plugin',
+        name: 'Failing Plugin',
+        version: '1.0.0',
+        apiVersion: '1',
+        permissions: ['ui:toast']
+    }, () => {
+        throw new Error('Initialization failure test');
+    });
+
+    await assert.rejects(async () => {
+        await manager.togglePluginState('failing.plugin', true);
+    }, /Initialization failure test/);
+
+    const summaries = manager.listInstalledPluginsSummary();
+    const summary = summaries.find(s => s.id === 'failing.plugin');
+    assert.ok(summary);
+    assert.equal(summary.state, 'registered');
+    assert.equal(summary.error.message, 'Initialization failure test');
+});
+
+test('PLG3-P1 — Requirement 5: Immutable summary DTOs and plugins without UI metadata', async () => {
+    const storageService = new PluginStorageService(null, null);
+    const runtime = new PluginRuntime(storageService, appService);
+    const uiRegistry = new PluginUIRegistry();
+    const manager = new PluginManagerService(runtime, uiRegistry);
+
+    runtime.registry.register({
+        id: 'no.ui.plugin',
+        name: 'No UI Plugin',
+        version: '2.1.0',
+        apiVersion: '1',
+        description: 'A plugin without UI',
+        permissions: ['storage:private']
+    });
+
+    const summaries = manager.listInstalledPluginsSummary();
+    assert.equal(summaries.length, 1);
+    const s = summaries[0];
+
+    assert.equal(s.id, 'no.ui.plugin');
+    assert.equal(s.name, 'No UI Plugin');
+    assert.equal(s.version, '2.1.0');
+    assert.equal(s.description, 'A plugin without UI');
+    assert.equal(s.hasUI, false);
+    assert.equal(s.uiTitle, 'No UI Plugin');
+    assert.equal(s.uiIcon, 'fas fa-plug');
+
+    // Immutability check
+    assert.throws(() => {
+        s.state = 'active';
+    }, TypeError);
+});
+
+test('PLG3-P1 — Requirement 6: Storage not ready, missing database, and failed reload after previous successful load', async () => {
+    const dom = setupJSDOM();
+    const db = new Database();
+    db._enableMockDb();
+
+    const storageService = new PluginStorageService(db, null);
+    await storageService.load();
+    assert.equal(storageService.verifyReadiness(), true);
+
+    const runtime = new PluginRuntime(storageService, appService);
+    const manager = new PluginManagerService(runtime);
+
+    // 1. Missing db on storage service
+    storageService.db = null;
+    assert.equal(storageService.verifyReadiness(), false);
+
+    const metricsNotReady = await manager.getPluginStorageMetrics('some.plugin');
+    assert.equal(metricsNotReady.isLoaded, false);
+    assert.equal(metricsNotReady.totalRecords, 0);
+
+    const purgeNotReady = await manager.purgePluginStorageData('some.plugin');
+    assert.equal(purgeNotReady.success, false);
+    assert.ok(purgeNotReady.errors[0].includes('verifyReadiness'));
+
+    // 2. Failed reload sets isLoaded = false
+    storageService.db = {
+        async getAll() {
+            throw new Error('DB read error');
+        }
+    };
+    await storageService.load();
+    assert.equal(storageService.isLoaded, false);
+    assert.equal(storageService.verifyReadiness(), false);
+
+    dom.window.close();
+});
+
+test('PLG3-P1 — Requirement 7: Metrics for ready storage and correct plugin scoping', async () => {
+    const dom = setupJSDOM();
+    const db = new Database();
+    db._enableMockDb();
+
+    const storageService = new PluginStorageService(db, null);
+    await storageService.load();
+
+    const runtime = new PluginRuntime(storageService, appService);
+    const manager = new PluginManagerService(runtime);
+
+    // Create records for plugin A and plugin B
+    const storageA = storageService.createPluginStorage('plugin.a');
+    await storageA.collection('logs').set('l1', { value: 1 });
+    await storageA.collection('logs').set('l2', { value: 2 });
+    await storageA.collection('settings').set('s1', { theme: 'dark' });
+
+    const storageB = storageService.createPluginStorage('plugin.b');
+    await storageB.collection('logs').set('l1', { value: 99 });
+
+    const metricsA = await manager.getPluginStorageMetrics('plugin.a');
+    assert.equal(metricsA.isLoaded, true);
+    assert.equal(metricsA.totalRecords, 3);
+    assert.equal(metricsA.collections.logs, 2);
+    assert.equal(metricsA.collections.settings, 1);
+
+    const metricsB = await manager.getPluginStorageMetrics('plugin.b');
+    assert.equal(metricsB.isLoaded, true);
+    assert.equal(metricsB.totalRecords, 1);
+    assert.equal(metricsB.collections.logs, 1);
+
+    dom.window.close();
+});
+
+test('PLG3-P1 — Requirement 8: Successful zero-record purge (verified no-op)', async () => {
+    const dom = setupJSDOM();
+    const db = new Database();
+    db._enableMockDb();
+
+    const storageService = new PluginStorageService(db, null);
+    await storageService.load();
+
+    const runtime = new PluginRuntime(storageService, appService);
+    const manager = new PluginManagerService(runtime);
+
+    const purgeResult = await manager.purgePluginStorageData('empty.plugin');
+    assert.equal(purgeResult.success, true);
+    assert.equal(purgeResult.attemptedCount, 0);
+    assert.equal(purgeResult.localPurgedCount, 0);
+    assert.equal(purgeResult.failedCount, 0);
+    assert.equal(purgeResult.tombstoneStatus, 'not_applicable');
+    assert.equal(purgeResult.syncStatus, 'not_applicable');
+    assert.equal(purgeResult.errors.length, 0);
+
+    dom.window.close();
+});
+
+test('PLG3-P1 — Requirement 9 & 10: Complete deletion, col.delete returning false, thrown errors, and partial deletion accounting', async () => {
+    const dom = setupJSDOM();
+    const db = new Database();
+    db._enableMockDb();
+
+    const storageService = new PluginStorageService(db, null);
+    await storageService.load();
+
+    const runtime = new PluginRuntime(storageService, appService);
+    const manager = new PluginManagerService(runtime);
+
+    const storage = storageService.createPluginStorage('purge.test.plugin');
+    await storage.collection('items').set('k1', { val: 'a' });
+    await storage.collection('items').set('k2', { val: 'b' });
+    await storage.collection('items').set('k3', { val: 'c' });
+
+    // Test Complete Deletion
+    const purgeSuccess = await manager.purgePluginStorageData('purge.test.plugin');
+    assert.equal(purgeSuccess.success, true);
+    assert.equal(purgeSuccess.attemptedCount, 3);
+    assert.equal(purgeSuccess.localPurgedCount, 3);
+    assert.equal(purgeSuccess.failedCount, 0);
+    assert.equal(purgeSuccess.errors.length, 0);
+
+    // Verify all records for purge.test.plugin are gone
+    const remaining = storageService.getAllRecords().filter(r => r.plugin_id === 'purge.test.plugin');
+    assert.equal(remaining.length, 0);
+
+    dom.window.close();
+});
+
+test('PLG3-P1 — Requirement 10 (cont): Partial deletion failure when col.delete fails or throws', async () => {
+    const dom = setupJSDOM();
+    const db = new Database();
+    db._enableMockDb();
+
+    const storageService = new PluginStorageService(db, null);
+    await storageService.load();
+
+    const runtime = new PluginRuntime(storageService, appService);
+    const manager = new PluginManagerService(runtime);
+
+    const storage = storageService.createPluginStorage('partial.fail.plugin');
+    await storage.collection('notes').set('n1', { title: '1' });
+    await storage.collection('notes').set('n2', { title: '2' });
+
+    // Intercept createPluginStorage to return a collection whose delete fails on n2
+    const originalCreate = storageService.createPluginStorage.bind(storageService);
+    storageService.createPluginStorage = (pluginId) => {
+        const scoped = originalCreate(pluginId);
+        const origCol = scoped.collection.bind(scoped);
+        scoped.collection = (colName) => {
+            const colObj = origCol(colName);
+            const origDelete = colObj.delete.bind(colObj);
+            colObj.delete = async (key) => {
+                if (key === 'n2') {
+                    return false; // Simulated deletion failure
+                }
+                return origDelete(key);
+            };
+            return colObj;
+        };
+        return scoped;
+    };
+
+    const outcome = await manager.purgePluginStorageData('partial.fail.plugin');
+    assert.equal(outcome.success, false);
+    assert.equal(outcome.attemptedCount, 2);
+    assert.equal(outcome.localPurgedCount, 1);
+    assert.equal(outcome.failedCount, 1);
+    assert.ok(outcome.errors.length > 0);
+
+    dom.window.close();
+});
+
+test('PLG3-P1 — Requirement 11: Tombstone/sync status reporting without overstating guarantees', async () => {
+    const dom = setupJSDOM();
+    const db = new Database();
+    db._enableMockDb();
+
+    // 1. SyncService unmuted (active)
+    const mockSyncActive = { isMuted: false, addToQueue: () => {} };
+    const storageService1 = new PluginStorageService(db, mockSyncActive);
+    await storageService1.load();
+
+    const runtime1 = new PluginRuntime(storageService1, appService);
+    const manager1 = new PluginManagerService(runtime1);
+
+    const storage1 = storageService1.createPluginStorage('status.test.plugin');
+    await storage1.collection('data').set('d1', { text: 'hello' });
+
+    const outcome1 = await manager1.purgePluginStorageData('status.test.plugin');
+    assert.equal(outcome1.tombstoneStatus, 'best_effort_unverified');
+    assert.equal(outcome1.syncStatus, 'attempted_unverified');
+
+    // 2. SyncService muted (disabled)
+    const mockSyncMuted = { isMuted: true, addToQueue: () => {} };
+    const storageService2 = new PluginStorageService(db, mockSyncMuted);
+    await storageService2.load();
+
+    const runtime2 = new PluginRuntime(storageService2, appService);
+    const manager2 = new PluginManagerService(runtime2);
+
+    const storage2 = storageService2.createPluginStorage('status.test.plugin2');
+    await storage2.collection('data').set('d1', { text: 'world' });
+
+    const outcome2 = await manager2.purgePluginStorageData('status.test.plugin2');
+    assert.equal(outcome2.tombstoneStatus, 'best_effort_unverified');
+    assert.equal(outcome2.syncStatus, 'skipped_disabled');
+
+    dom.window.close();
+});
+
+test('PLG3-P1 — Requirement 12: Never delete records belonging to another plugin', async () => {
+    const dom = setupJSDOM();
+    const db = new Database();
+    db._enableMockDb();
+
+    const storageService = new PluginStorageService(db, null);
+    await storageService.load();
+
+    const runtime = new PluginRuntime(storageService, appService);
+    const manager = new PluginManagerService(runtime);
+
+    const storageX = storageService.createPluginStorage('plugin.x');
+    await storageX.collection('items').set('key1', { owner: 'X' });
+
+    const storageY = storageService.createPluginStorage('plugin.y');
+    await storageY.collection('items').set('key1', { owner: 'Y' });
+
+    // Purge Plugin X
+    const purgeX = await manager.purgePluginStorageData('plugin.x');
+    assert.equal(purgeX.success, true);
+    assert.equal(purgeX.localPurgedCount, 1);
+
+    // Verify Plugin Y's record is strictly intact
+    const recordY = await storageY.collection('items').get('key1');
+    assert.ok(recordY);
+    assert.equal(recordY.owner, 'Y');
+
+    dom.window.close();
+});

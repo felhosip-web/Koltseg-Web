@@ -20,10 +20,22 @@ export class PluginStorageService {
     }
 
     /**
+     * Confirms successful loading and usable database connection availability.
+     * @returns {boolean} True if loaded and database is available
+     */
+    verifyReadiness() {
+        return Boolean(this.isLoaded && this.db);
+    }
+
+    /**
      * Loads all non-deleted plugin records from IndexedDB into memory.
      */
     async load() {
-        if (!this.db) return [];
+        if (!this.db) {
+            this.records = [];
+            this.isLoaded = false;
+            return [];
+        }
         try {
             const rawRecords = await this.db.getAll('plugin_records');
             this.records = (rawRecords || []).filter(r => !r.deleted_at);
@@ -32,6 +44,7 @@ export class PluginStorageService {
         } catch (e) {
             console.error('[PluginStorageService] Error loading plugin_records:', e);
             this.records = [];
+            this.isLoaded = false;
             return [];
         }
     }
