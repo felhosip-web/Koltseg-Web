@@ -1,6 +1,23 @@
 // src/services/plugin/PluginManagerService.js
 // Host-side Plugin Manager Service Facade (PLG3-P1)
 
+/**
+ * Recursively freezes an object and all nested objects/arrays to guarantee deep immutability.
+ * @param {Object} obj
+ * @returns {Object} Deeply frozen object
+ */
+function deepFreeze(obj) {
+    if (obj && typeof obj === 'object') {
+        Object.freeze(obj);
+        for (const prop of Object.getOwnPropertyNames(obj)) {
+            if (obj[prop] !== null && (typeof obj[prop] === 'object' || typeof obj[prop] === 'function') && !Object.isFrozen(obj[prop])) {
+                deepFreeze(obj[prop]);
+            }
+        }
+    }
+    return obj;
+}
+
 export class PluginManagerService {
     /**
      * @param {Object} runtime - PluginRuntime instance
@@ -17,22 +34,37 @@ export class PluginManagerService {
 
     /**
      * Retrieves a consolidated summary list of all installed plugins for UI rendering.
-     * @returns {Array<Object>} List of immutable plugin summary DTOs
+     * @returns {Array<Object>} List of deeply frozen immutable plugin summary DTOs
      */
     listInstalledPluginsSummary() {
         const records = this.registry.list();
         return records.map(record => {
             const pluginId = record.manifest.id;
             const uiEntry = this.uiRegistry ? this.uiRegistry.getUI(pluginId) : null;
-            return Object.freeze({
+
+            // Detached permissions array snapshot
+            const permissions = Array.isArray(record.manifest.permissions)
+                ? [...record.manifest.permissions]
+                : [];
+
+            // Detached error object snapshot
+            let safeError = null;
+            if (record.error) {
+                safeError = {
+                    name: record.error.name || 'Error',
+                    message: record.error.message || String(record.error)
+                };
+            }
+
+            return deepFreeze({
                 id: record.manifest.id,
                 name: record.manifest.name,
                 version: record.manifest.version,
                 apiVersion: record.manifest.apiVersion,
                 description: record.manifest.description || '',
-                permissions: record.manifest.permissions,
+                permissions,
                 state: record.state,
-                error: record.error,
+                error: safeError,
                 hasUI: Boolean(uiEntry && uiEntry.hasUI),
                 uiTitle: uiEntry?.title || record.manifest.name,
                 uiIcon: uiEntry?.icon || 'fas fa-plug',

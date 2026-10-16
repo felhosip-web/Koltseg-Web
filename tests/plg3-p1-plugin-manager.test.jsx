@@ -171,6 +171,56 @@ test('PLG3-P1 — Requirement 5: Immutable summary DTOs and plugins without UI m
     }, TypeError);
 });
 
+test('PLG3-P1 — Deep immutability of summary DTO permissions, error, and manifest detachment', async () => {
+    const storageService = new PluginStorageService(null, null);
+    const runtime = new PluginRuntime(storageService, appService);
+    const uiRegistry = new PluginUIRegistry();
+    const manager = new PluginManagerService(runtime, uiRegistry);
+
+    const manifest = {
+        id: 'immutability.test.plugin',
+        name: 'Immutability Plugin',
+        version: '1.0.0',
+        apiVersion: '1',
+        permissions: ['ui:toast', 'storage:private']
+    };
+
+    runtime.registry.register(manifest, () => {
+        throw new Error('Fatal setup error for immutability test');
+    });
+
+    // Initialize to set record.error
+    await runtime.registry.initialize('immutability.test.plugin').catch(() => {});
+
+    const summaries = manager.listInstalledPluginsSummary();
+    const summary = summaries.find(s => s.id === 'immutability.test.plugin');
+    assert.ok(summary);
+
+    // 1. Mutating permissions array throws TypeError
+    assert.throws(() => {
+        summary.permissions.push('unapproved:permission');
+    }, TypeError);
+
+    assert.throws(() => {
+        summary.permissions[0] = 'tampered:permission';
+    }, TypeError);
+
+    // 2. Mutating error object throws TypeError
+    assert.throws(() => {
+        summary.error.message = 'tampered error message';
+    }, TypeError);
+
+    // 3. Attempting to mutate outer summary properties throws TypeError
+    assert.throws(() => {
+        summary.state = 'active';
+    }, TypeError);
+
+    // 4. Verify stored registry record was NOT altered by summary queries or mutation attempts
+    const storedRecord = runtime.registry.get('immutability.test.plugin');
+    assert.deepEqual(storedRecord.manifest.permissions, ['ui:toast', 'storage:private']);
+    assert.equal(storedRecord.error.message, 'Fatal setup error for immutability test');
+});
+
 test('PLG3-P1 — Requirement 6: Storage not ready, missing database, and failed reload after previous successful load', async () => {
     const dom = setupJSDOM();
     const db = new Database();
