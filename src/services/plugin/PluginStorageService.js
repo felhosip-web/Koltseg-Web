@@ -163,27 +163,30 @@ export class PluginStorageService {
                             !r.deleted_at
                         );
 
-                        if (rec) {
-                            // Persistent deletion via db.delete which writes tombstone to deleted_records and enqueues high-priority delete
-                            if (service.db) {
-                                if (typeof service.db.delete === 'function') {
-                                    await service.db.delete('plugin_records', rec.id);
-                                } else if (typeof service.db._directDelete === 'function') {
-                                    await service.db._directDelete('plugin_records', rec.id);
-                                }
-                            } else if (service.syncService && !service.syncService.isMuted) {
-                                service.syncService.addToQueue('delete', { id: rec.id }, 'plugin_records', 'high', 'id');
-                            }
-
-                            // Remove from active in-memory cache ONLY after persistent deletion completes successfully
-                            const currIndex = service.records.findIndex(r => r.id === rec.id);
-                            if (currIndex !== -1) {
-                                service.records.splice(currIndex, 1);
-                            }
-
-                            return true;
+                        if (!rec) {
+                            return false;
                         }
-                        return false;
+
+                        // Persistent deletion requires a usable database connection and deletion method
+                        if (!service.db) {
+                            return false;
+                        }
+
+                        if (typeof service.db.delete === 'function') {
+                            await service.db.delete('plugin_records', rec.id);
+                        } else if (typeof service.db._directDelete === 'function') {
+                            await service.db._directDelete('plugin_records', rec.id);
+                        } else {
+                            return false;
+                        }
+
+                        // Remove from active in-memory cache ONLY after persistent deletion completes successfully
+                        const currIndex = service.records.findIndex(r => r.id === rec.id);
+                        if (currIndex !== -1) {
+                            service.records.splice(currIndex, 1);
+                        }
+
+                        return true;
                     },
 
                     /**

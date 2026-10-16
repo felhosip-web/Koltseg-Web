@@ -145,7 +145,10 @@ test('PLG0 — Local Persistence & Reload: Scoped plugin records survive reload 
 });
 
 test('PLG0 — Multiple Collections & Full CRUD: get, set, update, delete, list, clear, count, has', async () => {
-    const storageService = new PluginStorageService(null, null);
+    const db = new Database();
+    db._enableMockDb();
+    const storageService = new PluginStorageService(db, null);
+    await storageService.load();
     const storage = storageService.createPluginStorage('plugin-multi');
 
     const notes = storage.collection('notes');

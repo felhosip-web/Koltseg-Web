@@ -258,6 +258,43 @@ test('PLG3-P1 — Requirement 6: Storage not ready, missing database, and failed
     dom.window.close();
 });
 
+test('PLG3-P1 — Storage deletion failure when database is missing or lacks deletion method', async () => {
+    const dom = setupJSDOM();
+    const db = new Database();
+    db._enableMockDb();
+
+    const storageService = new PluginStorageService(db, null);
+    await storageService.load();
+
+    const storage = storageService.createPluginStorage('db.missing.test.plugin');
+    const col = storage.collection('items');
+    await col.set('key1', { value: 'retained data' });
+
+    // 1. Simulate DB becoming null/unavailable during delete call
+    storageService.db = null;
+    const deletedNoDb = await col.delete('key1');
+    assert.equal(deletedNoDb, false, 'delete() MUST return false when database is null/unavailable');
+
+    // Restore DB handle and verify cache record was NOT removed
+    storageService.db = db;
+    const itemNoDb = await col.get('key1');
+    assert.ok(itemNoDb, 'Cached record MUST remain intact when database is null/unavailable');
+    assert.equal(itemNoDb.value, 'retained data');
+
+    // 2. Simulate DB object without usable delete / _directDelete methods
+    storageService.db = {};
+    const deletedNoMethod = await col.delete('key1');
+    assert.equal(deletedNoMethod, false, 'delete() MUST return false when database object lacks deletion methods');
+
+    // Restore DB handle and verify cache record was NOT removed
+    storageService.db = db;
+    const itemNoMethod = await col.get('key1');
+    assert.ok(itemNoMethod, 'Cached record MUST remain intact when database object lacks deletion methods');
+    assert.equal(itemNoMethod.value, 'retained data');
+
+    dom.window.close();
+});
+
 test('PLG3-P1 — Thrown DB deletion error preserves in-memory cache and updates purge outcome truthfully', async () => {
     const dom = setupJSDOM();
     const db = new Database();
