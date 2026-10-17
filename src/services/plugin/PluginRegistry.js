@@ -128,6 +128,7 @@ export class PluginRegistry {
             context: null,
             error: null,
             initPromise: null,
+            lifecycleToken: 1,
             registeredAt: new Date().toISOString()
         };
 
@@ -175,7 +176,8 @@ export class PluginRegistry {
                 appService: this.appService
             });
 
-            // 2. Mark as initialized and start async setup tracking
+            // 2. Mark as initialized and start async setup tracking with lifecycle token verification
+            const capturedToken = record.lifecycleToken;
             record.state = 'initialized';
             this.#notifyListeners();
 
@@ -188,9 +190,9 @@ export class PluginRegistry {
                         await record.setup(context);
                     }
 
-                    // Check if plugin was disposed during setup execution
-                    if (record.state === 'disposed') {
-                        throw new Error(`[PluginRegistry] Plugin "${pluginId}" was disposed during initialization.`);
+                    // Check if plugin lifecycle changed or was disposed during setup execution
+                    if (record.lifecycleToken !== capturedToken || record.state === 'disposed') {
+                        throw new Error(`[PluginRegistry] Plugin "${pluginId}" lifecycle changed or was disposed during initialization.`);
                     }
 
                     record.context = context;
@@ -199,16 +201,16 @@ export class PluginRegistry {
                     this.#notifyListeners();
                     return createRecordSnapshot(record);
                 } catch (err) {
-                    // Setup failure or disposal during setup rollback
-                    if (record.state !== 'disposed') {
+                    // Setup failure or lifecycle invalidation rollback
+                    if (record.lifecycleToken === capturedToken && record.state !== 'disposed') {
                         record.state = 'registered';
                         record.context = null;
                         record.error = err;
+                        this.#notifyListeners();
                     }
-                    this.#notifyListeners();
                     throw err;
                 } finally {
-                    if (record.initPromise === initPromiseRef) {
+                    if (record.lifecycleToken === capturedToken && record.initPromise === initPromiseRef) {
                         record.initPromise = null;
                     }
                 }
@@ -231,6 +233,28 @@ export class PluginRegistry {
     }
 
     /**
+     * Enables a previously disposed plugin by transitioning its internal record state
+     * from 'disposed' to 'registered' and clearing previous errors.
+     * @param {string} pluginId
+     * @returns {boolean} True if successfully transitioned to 'registered' or already enabled
+     */
+    enable(pluginId) {
+        if (!pluginId || typeof pluginId !== 'string') return false;
+        const record = this.#plugins.get(pluginId);
+        if (!record) return false;
+
+        if (record.state === 'disposed') {
+            record.state = 'registered';
+            record.error = null;
+            record.lifecycleToken++;
+            this.#notifyListeners();
+            return true;
+        }
+
+        return record.state === 'registered' || record.state === 'active' || record.state === 'initialized';
+    }
+
+    /**
      * Disposes an active or initialized plugin. Idempotent operation.
      * @param {string} pluginId
      * @returns {boolean} True if plugin exists and is disposed
@@ -248,6 +272,7 @@ export class PluginRegistry {
         record.state = 'disposed';
         record.context = null;
         record.initPromise = null;
+        record.lifecycleToken++;
         this.#notifyListeners();
         return true;
     }

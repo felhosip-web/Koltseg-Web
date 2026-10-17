@@ -20,10 +20,22 @@ export class PluginStorageService {
     }
 
     /**
+     * Confirms successful loading and usable database connection availability.
+     * @returns {boolean} True if loaded and database is available
+     */
+    verifyReadiness() {
+        return Boolean(this.isLoaded && this.db);
+    }
+
+    /**
      * Loads all non-deleted plugin records from IndexedDB into memory.
      */
     async load() {
-        if (!this.db) return [];
+        if (!this.db) {
+            this.records = [];
+            this.isLoaded = false;
+            return [];
+        }
         try {
             const rawRecords = await this.db.getAll('plugin_records');
             this.records = (rawRecords || []).filter(r => !r.deleted_at);
@@ -32,6 +44,7 @@ export class PluginStorageService {
         } catch (e) {
             console.error('[PluginStorageService] Error loading plugin_records:', e);
             this.records = [];
+            this.isLoaded = false;
             return [];
         }
     }
@@ -96,6 +109,9 @@ export class PluginStorageService {
                     async set(recordKey, value) {
                         if (!recordKey) throw new Error('recordKey is required');
                         if (value === undefined) throw new Error('value cannot be undefined');
+                        if (!service.db || typeof service.db.save !== 'function') {
+                            throw new Error('[PluginStorageService] Cannot set record: database connection is unavailable.');
+                        }
 
                         const keyStr = String(recordKey);
                         const now = new Date().toISOString();
@@ -106,7 +122,16 @@ export class PluginStorageService {
                             r.record_key === keyStr
                         );
 
+                        const isNew = !rec;
+                        let previousData = null;
+                        let previousUpdatedAt = null;
+                        let previousDeletedAt = null;
+
                         if (rec) {
+                            previousData = rec.data ? JSON.parse(JSON.stringify(rec.data)) : null;
+                            previousUpdatedAt = rec.updated_at;
+                            previousDeletedAt = rec.deleted_at;
+
                             rec.data = JSON.parse(JSON.stringify(value));
                             rec.updated_at = now;
                             rec.deleted_at = null;
@@ -124,9 +149,22 @@ export class PluginStorageService {
                             service.records.push(rec);
                         }
 
-                        // Save to IndexedDB if DB connection exists
-                        if (service.db) {
+                        try {
+                            // Save to IndexedDB
                             await service.db.save('plugin_records', rec);
+                        } catch (dbErr) {
+                            // Roll back in-memory cache on persistent write failure
+                            if (isNew) {
+                                const newIdx = service.records.findIndex(r => r.id === rec.id);
+                                if (newIdx !== -1) {
+                                    service.records.splice(newIdx, 1);
+                                }
+                            } else {
+                                rec.data = previousData;
+                                rec.updated_at = previousUpdatedAt;
+                                rec.deleted_at = previousDeletedAt;
+                            }
+                            throw dbErr;
                         }
 
                         // Enqueue change in SyncService if available
@@ -143,32 +181,37 @@ export class PluginStorageService {
                      */
                     async delete(recordKey) {
                         const keyStr = String(recordKey);
-                        const recIndex = service.records.findIndex(r =>
+                        const rec = service.records.find(r =>
                             r.plugin_id === boundPluginId &&
                             r.collection === boundCollection &&
-                            r.record_key === keyStr
+                            r.record_key === keyStr &&
+                            !r.deleted_at
                         );
 
-                        if (recIndex !== -1) {
-                            const rec = service.records[recIndex];
-
-                            // Remove from active in-memory cache
-                            service.records.splice(recIndex, 1);
-
-                            // Delete via db.delete which writes tombstone to deleted_records and enqueues high-priority delete
-                            if (service.db) {
-                                if (typeof service.db.delete === 'function') {
-                                    await service.db.delete('plugin_records', rec.id);
-                                } else if (typeof service.db._directDelete === 'function') {
-                                    await service.db._directDelete('plugin_records', rec.id);
-                                }
-                            } else if (service.syncService && !service.syncService.isMuted) {
-                                service.syncService.addToQueue('delete', { id: rec.id }, 'plugin_records', 'high', 'id');
-                            }
-
-                            return true;
+                        if (!rec) {
+                            return false;
                         }
-                        return false;
+
+                        // Persistent deletion requires a usable database connection and deletion method
+                        if (!service.db) {
+                            return false;
+                        }
+
+                        if (typeof service.db.delete === 'function') {
+                            await service.db.delete('plugin_records', rec.id);
+                        } else if (typeof service.db._directDelete === 'function') {
+                            await service.db._directDelete('plugin_records', rec.id);
+                        } else {
+                            return false;
+                        }
+
+                        // Remove from active in-memory cache ONLY after persistent deletion completes successfully
+                        const currIndex = service.records.findIndex(r => r.id === rec.id);
+                        if (currIndex !== -1) {
+                            service.records.splice(currIndex, 1);
+                        }
+
+                        return true;
                     },
 
                     /**
@@ -191,6 +234,7 @@ export class PluginStorageService {
 
                     /**
                      * Clears all records in this collection.
+                     * Returns count of confirmed successful deletions.
                      */
                     async clear() {
                         const targets = service.records.filter(r =>
@@ -199,10 +243,18 @@ export class PluginStorageService {
                             !r.deleted_at
                         );
 
+                        let clearedCount = 0;
                         for (const target of targets) {
-                            await this.delete(target.record_key);
+                            try {
+                                const deleted = await this.delete(target.record_key);
+                                if (deleted) {
+                                    clearedCount++;
+                                }
+                            } catch (e) {
+                                // Ignore individual record delete errors, do not increment count
+                            }
                         }
-                        return targets.length;
+                        return clearedCount;
                     },
 
                     /**
