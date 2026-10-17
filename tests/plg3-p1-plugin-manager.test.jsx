@@ -258,6 +258,126 @@ test('PLG3-P1 — Requirement 6: Storage not ready, missing database, and failed
     dom.window.close();
 });
 
+test('PLG3-P1 CodeRabbit Finding 1 — Stale setup resolution or rejection cannot overwrite newer plugin lifecycle state or context', async () => {
+    const registry = new PluginRegistry();
+
+    let resolveSetupA;
+    const promiseA = new Promise((resolve) => {
+        resolveSetupA = resolve;
+    });
+
+    let setupACount = 0;
+    let setupBCount = 0;
+
+    // 1. Register plugin with setup A
+    registry.register({
+        id: 'race.test.plugin',
+        name: 'Race Test Plugin',
+        version: '1.0.0',
+        apiVersion: '1',
+        permissions: ['ui:toast']
+    }, () => {
+        setupACount++;
+        return promiseA;
+    });
+
+    // Start setup A
+    const initPromiseA = registry.initialize('race.test.plugin');
+
+    // Dispose and re-enable plugin while setup A is pending
+    registry.dispose('race.test.plugin');
+    registry.unregister('race.test.plugin');
+
+    // Register setup B for same plugin ID
+    let contextB = null;
+    registry.register({
+        id: 'race.test.plugin',
+        name: 'Race Test Plugin',
+        version: '1.0.0',
+        apiVersion: '1',
+        permissions: ['ui:toast']
+    }, (ctx) => {
+        setupBCount++;
+        contextB = ctx;
+        return Promise.resolve();
+    });
+
+    const initPromiseB = registry.initialize('race.test.plugin');
+
+    // 3. Resolve setup A NOW
+    resolveSetupA();
+
+    // A's promise rejects because lifecycle token changed / plugin was disposed
+    await assert.rejects(async () => {
+        await initPromiseA;
+    });
+
+    // B resolves successfully
+    await initPromiseB;
+
+    // Verify plugin state and context strictly belong to setup B
+    const activeRecord = registry.get('race.test.plugin');
+    assert.equal(activeRecord.state, 'active');
+    assert.equal(registry.getContext('race.test.plugin'), contextB);
+    assert.equal(setupACount, 1);
+    assert.equal(setupBCount, 1);
+});
+
+test('PLG3-P1 CodeRabbit Finding 2 — PluginStorageService.set() without database connection throws error without mutating cache', async () => {
+    const storageService = new PluginStorageService(null, null);
+    const storage = storageService.createPluginStorage('unpersisted.test.plugin');
+    const col = storage.collection('items');
+
+    // Calling set() when db is unavailable throws an error
+    await assert.rejects(async () => {
+        await col.set('k1', { data: 'unpersisted data' });
+    }, /database connection is unavailable/);
+
+    // Verify in-memory cache was NOT mutated
+    assert.equal(await col.get('k1'), null);
+    assert.equal(storageService.records.length, 0);
+
+    // Calling load() on new session yields 0 records
+    await storageService.load();
+    assert.equal(await col.get('k1'), null);
+});
+
+test('PLG3-P1 CodeRabbit Finding 3 — collection.clear() returns count of confirmed successful deletions', async () => {
+    const dom = setupJSDOM();
+    const db = new Database();
+    db._enableMockDb();
+
+    const storageService = new PluginStorageService(db, null);
+    await storageService.load();
+
+    const storage = storageService.createPluginStorage('clear.test.plugin');
+    const col = storage.collection('items');
+
+    await col.set('k1', { val: '1' });
+    await col.set('k2', { val: '2' });
+    await col.set('k3', { val: '3' });
+
+    // 1. All deletions succeed
+    const cleared3 = await col.clear();
+    assert.equal(cleared3, 3);
+    assert.equal(await col.count(), 0);
+
+    // Re-populate
+    await col.set('k1', { val: '1' });
+    await col.set('k2', { val: '2' });
+
+    // 2. Clear when database becomes unavailable (all fail)
+    storageService.db = null;
+    const cleared0 = await col.clear();
+    assert.equal(cleared0, 0);
+
+    // Restore db and verify cached records remain in memory
+    storageService.db = db;
+    assert.equal(await col.count(), 2);
+
+    dom.window.close();
+});
+
 test('PLG3-P1 — Storage deletion failure when database is missing or lacks deletion method', async () => {
     const dom = setupJSDOM();
     const db = new Database();

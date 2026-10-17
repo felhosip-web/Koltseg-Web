@@ -109,6 +109,9 @@ export class PluginStorageService {
                     async set(recordKey, value) {
                         if (!recordKey) throw new Error('recordKey is required');
                         if (value === undefined) throw new Error('value cannot be undefined');
+                        if (!service.db || typeof service.db.save !== 'function') {
+                            throw new Error('[PluginStorageService] Cannot set record: database connection is unavailable.');
+                        }
 
                         const keyStr = String(recordKey);
                         const now = new Date().toISOString();
@@ -137,10 +140,8 @@ export class PluginStorageService {
                             service.records.push(rec);
                         }
 
-                        // Save to IndexedDB if DB connection exists
-                        if (service.db) {
-                            await service.db.save('plugin_records', rec);
-                        }
+                        // Save to IndexedDB
+                        await service.db.save('plugin_records', rec);
 
                         // Enqueue change in SyncService if available
                         if (service.syncService && !service.syncService.isMuted) {
@@ -209,6 +210,7 @@ export class PluginStorageService {
 
                     /**
                      * Clears all records in this collection.
+                     * Returns count of confirmed successful deletions.
                      */
                     async clear() {
                         const targets = service.records.filter(r =>
@@ -217,10 +219,18 @@ export class PluginStorageService {
                             !r.deleted_at
                         );
 
+                        let clearedCount = 0;
                         for (const target of targets) {
-                            await this.delete(target.record_key);
+                            try {
+                                const deleted = await this.delete(target.record_key);
+                                if (deleted) {
+                                    clearedCount++;
+                                }
+                            } catch (e) {
+                                // Ignore individual record delete errors, do not increment count
+                            }
                         }
-                        return targets.length;
+                        return clearedCount;
                     },
 
                     /**
