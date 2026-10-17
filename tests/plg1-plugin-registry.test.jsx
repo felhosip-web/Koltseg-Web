@@ -757,7 +757,12 @@ test('PLG1 — First-Party Test Plugin Example', async () => {
         }
     };
 
-    const storageService = new PluginStorageService(null, null);
+    const db = new Database();
+    db._enableMockDb();
+
+    const storageService = new PluginStorageService(db, null);
+    await storageService.load();
+
     const registry = new PluginRegistry(storageService, mockAppService);
 
     // Declarative manifest contract
