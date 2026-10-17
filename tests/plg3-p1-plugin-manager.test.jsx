@@ -258,67 +258,168 @@ test('PLG3-P1 — Requirement 6: Storage not ready, missing database, and failed
     dom.window.close();
 });
 
-test('PLG3-P1 CodeRabbit Finding 1 — Stale setup resolution or rejection cannot overwrite newer plugin lifecycle state or context', async () => {
+test('PLG3-P1 CodeRabbit Finding 1 (Resolving Stale Setup A) — Stale setup A resolution on same plugin record cannot alter pending setup B state, context, or initPromise', async () => {
     const registry = new PluginRegistry();
-
-    let resolveSetupA;
-    const promiseA = new Promise((resolve) => {
-        resolveSetupA = resolve;
-    });
 
     let setupACount = 0;
     let setupBCount = 0;
 
-    // 1. Register plugin with setup A
-    registry.register({
-        id: 'race.test.plugin',
-        name: 'Race Test Plugin',
-        version: '1.0.0',
-        apiVersion: '1',
-        permissions: ['ui:toast']
-    }, () => {
-        setupACount++;
-        return promiseA;
+    let resolveSetupA;
+    const promiseA = new Promise((res) => {
+        resolveSetupA = res;
     });
 
-    // Start setup A
-    const initPromiseA = registry.initialize('race.test.plugin');
+    let resolveSetupB;
+    const promiseB = new Promise((res) => {
+        resolveSetupB = res;
+    });
 
-    // Dispose and re-enable plugin while setup A is pending
-    registry.dispose('race.test.plugin');
-    registry.unregister('race.test.plugin');
+    let setupAStartedRes;
+    const setupAStarted = new Promise((res) => { setupAStartedRes = res; });
 
-    // Register setup B for same plugin ID
+    let setupBStartedRes;
+    const setupBStarted = new Promise((res) => { setupBStartedRes = res; });
+
+    let contextA = null;
     let contextB = null;
+
+    // Register ONE single plugin record with setup callback
     registry.register({
-        id: 'race.test.plugin',
-        name: 'Race Test Plugin',
+        id: 'same.record.race.plugin',
+        name: 'Same Record Race Plugin',
         version: '1.0.0',
         apiVersion: '1',
         permissions: ['ui:toast']
     }, (ctx) => {
-        setupBCount++;
-        contextB = ctx;
-        return Promise.resolve();
+        if (setupACount === 0) {
+            setupACount++;
+            contextA = ctx;
+            setupAStartedRes();
+            return promiseA;
+        } else {
+            setupBCount++;
+            contextB = ctx;
+            setupBStartedRes();
+            return promiseB;
+        }
     });
 
-    const initPromiseB = registry.initialize('race.test.plugin');
+    // 1. Start setup A
+    const initPromiseA = registry.initialize('same.record.race.plugin');
+    await setupAStarted;
 
-    // 3. Resolve setup A NOW
-    resolveSetupA();
+    // 2. Dispose and re-enable the exact SAME plugin record
+    registry.dispose('same.record.race.plugin');
+    registry.enable('same.record.race.plugin');
 
-    // A's promise rejects because lifecycle token changed / plugin was disposed
+    // 3. Start setup B on the SAME plugin record
+    const initPromiseB = registry.initialize('same.record.race.plugin');
+    await setupBStarted;
+
+    // State is 'initialized', initPromise belongs to B
+    assert.equal(registry.get('same.record.race.plugin').state, 'initialized');
+
+    // 4. Resolve setup A while setup B is still pending
+    resolveSetupA('stale result A');
+
+    // Setup A's promise rejects because lifecycle token changed
     await assert.rejects(async () => {
         await initPromiseA;
+    }, /lifecycle changed or was disposed/);
+
+    // Verify A could NOT mutate state, set error, or clear B's context
+    const recordMid = registry.get('same.record.race.plugin');
+    assert.equal(recordMid.state, 'initialized', 'Stale setup A resolution must NOT alter pending setup B state');
+    assert.equal(recordMid.error, null, 'Stale setup A resolution must NOT set an error');
+
+    // 5. Resolve setup B
+    resolveSetupB('result B');
+    const resultB = await initPromiseB;
+
+    // Final checks
+    assert.equal(resultB.state, 'active');
+    assert.equal(registry.get('same.record.race.plugin').state, 'active');
+    assert.equal(registry.getContext('same.record.race.plugin'), contextB);
+    assert.notEqual(contextA, contextB);
+    assert.equal(setupACount, 1);
+    assert.equal(setupBCount, 1);
+});
+
+test('PLG3-P1 CodeRabbit Finding 1 (Rejecting Stale Setup A) — Stale setup A rejection on same plugin record cannot alter pending setup B state, context, or error', async () => {
+    const registry = new PluginRegistry();
+
+    let rejectSetupA;
+    const promiseA = new Promise((_, rej) => {
+        rejectSetupA = rej;
     });
 
-    // B resolves successfully
-    await initPromiseB;
+    let resolveSetupB;
+    const promiseB = new Promise((res) => {
+        resolveSetupB = res;
+    });
 
-    // Verify plugin state and context strictly belong to setup B
-    const activeRecord = registry.get('race.test.plugin');
-    assert.equal(activeRecord.state, 'active');
-    assert.equal(registry.getContext('race.test.plugin'), contextB);
+    let setupAStartedRes;
+    const setupAStarted = new Promise((res) => { setupAStartedRes = res; });
+
+    let setupBStartedRes;
+    const setupBStarted = new Promise((res) => { setupBStartedRes = res; });
+
+    let setupACount = 0;
+    let setupBCount = 0;
+    let contextB = null;
+
+    registry.register({
+        id: 'same.record.reject.plugin',
+        name: 'Same Record Reject Plugin',
+        version: '1.0.0',
+        apiVersion: '1',
+        permissions: ['ui:toast']
+    }, (ctx) => {
+        if (setupACount === 0) {
+            setupACount++;
+            setupAStartedRes();
+            return promiseA;
+        } else {
+            setupBCount++;
+            contextB = ctx;
+            setupBStartedRes();
+            return promiseB;
+        }
+    });
+
+    // 1. Start setup A
+    const initPromiseA = registry.initialize('same.record.reject.plugin');
+    await setupAStarted;
+
+    // 2. Dispose and re-enable the exact SAME plugin record
+    registry.dispose('same.record.reject.plugin');
+    registry.enable('same.record.reject.plugin');
+
+    // 3. Start setup B on the SAME plugin record
+    const initPromiseB = registry.initialize('same.record.reject.plugin');
+    await setupBStarted;
+
+    // 4. Reject setup A with a stale error while setup B is pending
+    const staleErr = new Error('Stale Setup A Exception');
+    rejectSetupA(staleErr);
+
+    await assert.rejects(async () => {
+        await initPromiseA;
+    }, (err) => err === staleErr);
+
+    // Verify setup A rejection did NOT set record.error or alter setup B's state
+    const recordMid = registry.get('same.record.reject.plugin');
+    assert.equal(recordMid.state, 'initialized', 'Stale setup A rejection must NOT alter pending setup B state');
+    assert.equal(recordMid.error, null, 'Stale setup A rejection must NOT set error on record');
+
+    // 5. Resolve setup B
+    resolveSetupB();
+    const resultB = await initPromiseB;
+
+    assert.equal(resultB.state, 'active');
+    assert.equal(registry.get('same.record.reject.plugin').state, 'active');
+    assert.equal(registry.getContext('same.record.reject.plugin'), contextB);
+    assert.equal(registry.get('same.record.reject.plugin').error, null);
     assert.equal(setupACount, 1);
     assert.equal(setupBCount, 1);
 });
