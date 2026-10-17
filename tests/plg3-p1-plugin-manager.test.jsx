@@ -332,6 +332,10 @@ test('PLG3-P1 CodeRabbit Finding 1 (Resolving Stale Setup A) — Stale setup A r
     assert.equal(recordMid.state, 'initialized', 'Stale setup A resolution must NOT alter pending setup B state');
     assert.equal(recordMid.error, null, 'Stale setup A resolution must NOT set an error');
 
+    // Verify B's initPromise was NOT cleared by stale A
+    const initPromiseB2 = registry.initialize('same.record.race.plugin');
+    assert.strictEqual(initPromiseB, initPromiseB2, 'Stale A completion must NOT clear B in-flight initPromise');
+
     // 5. Resolve setup B
     resolveSetupB('result B');
     const resultB = await initPromiseB;
@@ -411,6 +415,10 @@ test('PLG3-P1 CodeRabbit Finding 1 (Rejecting Stale Setup A) — Stale setup A r
     const recordMid = registry.get('same.record.reject.plugin');
     assert.equal(recordMid.state, 'initialized', 'Stale setup A rejection must NOT alter pending setup B state');
     assert.equal(recordMid.error, null, 'Stale setup A rejection must NOT set error on record');
+
+    // Verify B's initPromise was NOT cleared by stale A rejection
+    const initPromiseB2 = registry.initialize('same.record.reject.plugin');
+    assert.strictEqual(initPromiseB, initPromiseB2, 'Stale A rejection must NOT clear B in-flight initPromise');
 
     // 5. Resolve setup B
     resolveSetupB();
