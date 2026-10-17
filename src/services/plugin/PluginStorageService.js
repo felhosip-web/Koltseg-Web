@@ -122,7 +122,16 @@ export class PluginStorageService {
                             r.record_key === keyStr
                         );
 
+                        const isNew = !rec;
+                        let previousData = null;
+                        let previousUpdatedAt = null;
+                        let previousDeletedAt = null;
+
                         if (rec) {
+                            previousData = rec.data ? JSON.parse(JSON.stringify(rec.data)) : null;
+                            previousUpdatedAt = rec.updated_at;
+                            previousDeletedAt = rec.deleted_at;
+
                             rec.data = JSON.parse(JSON.stringify(value));
                             rec.updated_at = now;
                             rec.deleted_at = null;
@@ -140,8 +149,23 @@ export class PluginStorageService {
                             service.records.push(rec);
                         }
 
-                        // Save to IndexedDB
-                        await service.db.save('plugin_records', rec);
+                        try {
+                            // Save to IndexedDB
+                            await service.db.save('plugin_records', rec);
+                        } catch (dbErr) {
+                            // Roll back in-memory cache on persistent write failure
+                            if (isNew) {
+                                const newIdx = service.records.findIndex(r => r.id === rec.id);
+                                if (newIdx !== -1) {
+                                    service.records.splice(newIdx, 1);
+                                }
+                            } else {
+                                rec.data = previousData;
+                                rec.updated_at = previousUpdatedAt;
+                                rec.deleted_at = previousDeletedAt;
+                            }
+                            throw dbErr;
+                        }
 
                         // Enqueue change in SyncService if available
                         if (service.syncService && !service.syncService.isMuted) {

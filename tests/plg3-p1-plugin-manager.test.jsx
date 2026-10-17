@@ -342,6 +342,48 @@ test('PLG3-P1 CodeRabbit Finding 2 — PluginStorageService.set() without databa
     assert.equal(await col.get('k1'), null);
 });
 
+test('PLG3-P1 — PluginStorageService.set() rolls back in-memory cache when db.save() rejects', async () => {
+    const dom = setupJSDOM();
+    const db = new Database();
+    db._enableMockDb();
+
+    const storageService = new PluginStorageService(db, null);
+    await storageService.load();
+
+    const storage = storageService.createPluginStorage('save.rollback.test.plugin');
+    const col = storage.collection('items');
+
+    // 1. Initial valid write succeeds
+    await col.set('key1', { value: 'initial valid data' });
+    assert.equal((await col.get('key1')).value, 'initial valid data');
+
+    // Mock db.save to reject
+    const originalSave = db.save.bind(db);
+    db.save = async () => {
+        throw new Error('Database write failure during save');
+    };
+
+    // 2. Inserting a NEW record when db.save rejects rolls back insertion
+    await assert.rejects(async () => {
+        await col.set('key2', { value: 'unpersisted new data' });
+    }, /Database write failure during save/);
+
+    assert.equal(await col.get('key2'), null, 'New record MUST NOT exist in cache after db.save rejection');
+
+    // 3. Updating an EXISTING record when db.save rejects restores previous value
+    await assert.rejects(async () => {
+        await col.set('key1', { value: 'unpersisted updated data' });
+    }, /Database write failure during save/);
+
+    assert.equal((await col.get('key1')).value, 'initial valid data', 'Existing record MUST preserve previous data in cache after db.save rejection');
+
+    // Restore original db.save and verify persistent state is preserved
+    db.save = originalSave;
+    assert.equal((await col.get('key1')).value, 'initial valid data');
+
+    dom.window.close();
+});
+
 test('PLG3-P1 CodeRabbit Finding 3 — collection.clear() returns count of confirmed successful deletions', async () => {
     const dom = setupJSDOM();
     const db = new Database();
