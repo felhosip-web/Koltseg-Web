@@ -407,10 +407,19 @@ export default function PluginManagerPanel() {
                         {!purgeResult ? (
                             <>
                                 <p className="text-xs text-slate-600 leading-relaxed">
-                                    Biztosan törölni szeretnéd a(z) <strong>"{purgeConfirmPlugin.name}"</strong> ({purgeConfirmPlugin.id}) összes elszeparált adatrekordját az IndexedDB és Cloud Sync tárhelyekről?
+                                    Biztosan törölni szeretnéd a(z) <strong>"{purgeConfirmPlugin.name}"</strong> ({purgeConfirmPlugin.id}) helyi elszeparált adatrekordjait a helyi (IndexedDB) adatbázisból?
                                 </p>
-                                <p className="text-[11px] text-red-600 font-bold bg-red-50 p-2.5 rounded-xl border border-red-100">
-                                    ⚠️ Ez a művelet nem vonható vissza!
+                                <div className="bg-amber-50 border border-amber-200 p-2.5 rounded-xl text-[11px] text-amber-800 space-y-1">
+                                    <div className="font-bold flex items-center gap-1">
+                                        <i className="fas fa-info-circle text-amber-600"></i>
+                                        <span>Helyi adattörlés (Local Scope):</span>
+                                    </div>
+                                    <p className="leading-normal">
+                                        Ez a művelet törli a helyi adatokat és törlési jelet (tombstone) sorol be. A távoli felhő szinkronizáció és törlés nem garantált, és csak nem ellenőrzött (best-effort) módon fut le.
+                                    </p>
+                                </div>
+                                <p className="text-[11px] text-red-600 font-bold bg-red-50 p-2 rounded-xl border border-red-100">
+                                    ⚠️ A helyi adatok törlése nem vonható vissza!
                                 </p>
 
                                 <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
@@ -460,7 +469,7 @@ export default function PluginManagerPanel() {
                                         ></i>
                                         <span>
                                             {purgeResult.success
-                                                ? 'Adattörlés Sikeresen Befejeződött!'
+                                                ? 'Helyi Adattörlés Sikeresen Befejeződött!'
                                                 : 'Adattörlés Részben vagy Teljesen Sikertelen!'}
                                         </span>
                                     </div>
@@ -470,13 +479,13 @@ export default function PluginManagerPanel() {
                                             Próbált: <strong>{purgeResult.attemptedCount}</strong>
                                         </div>
                                         <div className="bg-white/80 p-2 rounded-xl border border-slate-200">
-                                            Törölve: <strong>{purgeResult.localPurgedCount}</strong>
+                                            Helyi törlés: <strong>{purgeResult.localPurgedCount}</strong>
                                         </div>
                                         <div className="bg-white/80 p-2 rounded-xl border border-slate-200">
                                             Hibás: <strong>{purgeResult.failedCount}</strong>
                                         </div>
                                         <div className="bg-white/80 p-2 rounded-xl border border-slate-200">
-                                            Sync: <strong>{purgeResult.syncStatus}</strong>
+                                            Felhő sync: <strong>{purgeResult.syncStatus}</strong>
                                         </div>
                                     </div>
 

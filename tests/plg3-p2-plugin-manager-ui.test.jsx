@@ -327,6 +327,8 @@ test('PLG3-P2 — Purge confirmation, cancellation, execution, and truthful outc
     let modal = document.querySelector('[role="dialog"]');
     assert.ok(modal, 'Purge confirm modal must be visible');
     assert.ok(modal.textContent.includes('Biztosan törölni szeretnéd a(z) "Purge UI Plugin"'));
+    assert.ok(modal.textContent.includes('Helyi adattörlés (Local Scope)'));
+    assert.ok(modal.textContent.includes('A távoli felhő szinkronizáció és törlés nem garantált'));
 
     // 2. Test Cancellation
     const cancelBtn = modal.querySelector('button:nth-child(1)');
@@ -352,8 +354,9 @@ test('PLG3-P2 — Purge confirmation, cancellation, execution, and truthful outc
     });
 
     // Outcome DTO checks in modal
-    assert.ok(modal.textContent.includes('Adattörlés Sikeresen Befejeződött!'));
-    assert.ok(modal.textContent.includes('Törölve: 1'));
+    assert.ok(modal.textContent.includes('Helyi Adattörlés Sikeresen Befejeződött!'));
+    assert.ok(modal.textContent.includes('Helyi törlés: 1'));
+    assert.ok(modal.textContent.includes('Felhő sync:'));
     assert.equal(await pluginStorage.collection('data').get('rec1'), null);
 
     // Close outcome modal
