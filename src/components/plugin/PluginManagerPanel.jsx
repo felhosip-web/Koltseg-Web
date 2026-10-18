@@ -67,10 +67,23 @@ export default function PluginManagerPanel() {
     const handleToggleState = async (pluginId, currentState) => {
         if (processingIds.has(pluginId)) return;
 
+        // Determine deterministic target action from state:
+        // 'active' / 'initialized' -> disable (targetEnabled = false)
+        // 'disposed' / 'registered' -> enable (targetEnabled = true)
+        const canEnable = currentState === 'disposed' || currentState === 'registered';
+        const canDisable = currentState === 'active' || currentState === 'initialized';
+
+        if (!canEnable && !canDisable) {
+            const errMsg = `Érvénytelen vagy nem támogatott állapot (${currentState}) a(z) "${pluginId}" bővítménynél.`;
+            setActionError(errMsg);
+            appService.showToast(errMsg, 'error');
+            return;
+        }
+
+        const targetEnabled = canEnable;
+
         setActionError(null);
         setProcessingIds(prev => new Set(prev).add(pluginId));
-
-        const targetEnabled = currentState === 'disposed' || currentState === 'registered';
 
         try {
             const success = await appService.togglePluginState(pluginId, targetEnabled);
@@ -194,6 +207,8 @@ export default function PluginManagerPanel() {
                         const isLoadingMetric = loadingMetrics[plugin.id];
                         const isActive = plugin.state === 'active' || plugin.state === 'initialized';
                         const isDisposed = plugin.state === 'disposed';
+                        const isRegistered = plugin.state === 'registered';
+                        const isSupportedState = isActive || isDisposed || isRegistered;
 
                         let stateBadgeClass = 'bg-slate-100 text-slate-600 border-slate-200';
                         let stateLabel = 'Regisztrált';
@@ -206,6 +221,9 @@ export default function PluginManagerPanel() {
                         } else if (plugin.state === 'disposed') {
                             stateBadgeClass = 'bg-amber-100 text-amber-700 border-amber-200';
                             stateLabel = 'Kikapcsolva (Disposed)';
+                        } else if (!isSupportedState) {
+                            stateBadgeClass = 'bg-red-100 text-red-700 border-red-200';
+                            stateLabel = `Ismeretlen (${plugin.state})`;
                         }
 
                         return (
@@ -244,10 +262,12 @@ export default function PluginManagerPanel() {
                                         <button
                                             type="button"
                                             onClick={() => handleToggleState(plugin.id, plugin.state)}
-                                            disabled={isProcessing}
+                                            disabled={isProcessing || !isSupportedState}
                                             aria-label={`${plugin.name} bővítmény ${isActive ? 'kikapcsolása' : 'bekapcsolása'}`}
                                             className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 shadow-sm ${
-                                                isActive
+                                                !isSupportedState
+                                                    ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                                                    : isActive
                                                     ? 'bg-amber-500 hover:bg-amber-600 text-white disabled:bg-amber-300'
                                                     : 'bg-emerald-600 hover:bg-emerald-700 text-white disabled:bg-emerald-300'
                                             }`}
@@ -256,6 +276,11 @@ export default function PluginManagerPanel() {
                                                 <>
                                                     <i className="fas fa-spinner animate-spin"></i>
                                                     <span>Folyamatban...</span>
+                                                </>
+                                            ) : !isSupportedState ? (
+                                                <>
+                                                    <i className="fas fa-ban"></i>
+                                                    <span>Nem támogatott</span>
                                                 </>
                                             ) : isActive ? (
                                                 <>

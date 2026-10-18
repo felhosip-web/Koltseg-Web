@@ -75,6 +75,107 @@ test('PLG3-P2 — Empty state when no plugins are registered', async () => {
     dom.window.close();
 });
 
+test('PLG3-P2 — Consistent lifecycle toggle behavior across active, initialized, disposed, registered and unsupported states', async () => {
+    const dom = setupJSDOM();
+    const db = new Database();
+    db._enableMockDb();
+
+    const storageService = new PluginStorageService(db, null);
+    await storageService.load();
+    const runtime = new PluginRuntime(storageService, appService);
+    const uiRegistry = new PluginUIRegistry();
+    const pluginManager = new PluginManagerService(runtime, uiRegistry);
+
+    const toggleCalls = [];
+    const origToggle = pluginManager.togglePluginState.bind(pluginManager);
+    pluginManager.togglePluginState = async (id, enabled) => {
+        toggleCalls.push({ id, enabled });
+        return origToggle(id, enabled);
+    };
+
+    // Register 4 plugins for different states
+    runtime.registry.register({ id: 'p.registered', name: 'Reg Plugin', version: '1.0.0', apiVersion: '1', permissions: [] });
+    runtime.registry.register({ id: 'p.active', name: 'Active Plugin', version: '1.0.0', apiVersion: '1', permissions: [] });
+    runtime.registry.register({ id: 'p.disposed', name: 'Disposed Plugin', version: '1.0.0', apiVersion: '1', permissions: [] });
+
+    await runtime.registry.initialize('p.active');
+
+    runtime.registry.register({ id: 'p.disposed.reg', name: 'Disposed Reg', version: '1.0.0', apiVersion: '1', permissions: [] });
+    await runtime.registry.initialize('p.disposed.reg');
+    runtime.registry.dispose('p.disposed.reg');
+
+    // Mock listInstalledPluginsSummary to include an unsupported state plugin
+    const origList = pluginManager.listInstalledPluginsSummary.bind(pluginManager);
+    pluginManager.listInstalledPluginsSummary = () => {
+        const list = origList();
+        list.push({
+            id: 'p.unsupported',
+            name: 'Unsupported Plugin',
+            version: '1.0.0',
+            apiVersion: '1',
+            description: '',
+            permissions: [],
+            state: 'corrupted_state',
+            error: null,
+            hasUI: false,
+            uiTitle: 'Unsupported',
+            uiIcon: 'fas fa-plug',
+            registeredAt: new Date().toISOString()
+        });
+        return list;
+    };
+
+    const mockApp = {
+        pluginStorageService: storageService,
+        pluginRuntime: runtime,
+        pluginRegistry: runtime.registry,
+        pluginUIRegistry: uiRegistry,
+        pluginManager: pluginManager,
+        hmiNotif: { showToast: () => {} }
+    };
+
+    appService.bind(mockApp);
+
+    const rootEl = document.getElementById('root');
+    const root = createRoot(rootEl);
+
+    await act(async () => {
+        root.render(<PluginManagerPanel />);
+    });
+
+    // 1. Registered plugin: button says "Bekapcsolás", requests enabled = true
+    const regCard = document.querySelector('[data-plugin-card="p.registered"]');
+    const regBtn = regCard.querySelector('button');
+    assert.ok(regBtn.textContent.includes('Bekapcsolás'));
+    await act(async () => { regBtn.click(); });
+    assert.deepEqual(toggleCalls[toggleCalls.length - 1], { id: 'p.registered', enabled: true });
+
+    // 2. Active plugin: button says "Kikapcsolás", requests enabled = false
+    const activeCard = document.querySelector('[data-plugin-card="p.active"]');
+    const activeBtn = activeCard.querySelector('button');
+    assert.ok(activeBtn.textContent.includes('Kikapcsolás'));
+    await act(async () => { activeBtn.click(); });
+    assert.deepEqual(toggleCalls[toggleCalls.length - 1], { id: 'p.active', enabled: false });
+
+    // 3. Disposed plugin: button says "Bekapcsolás", requests enabled = true
+    const dispCard = document.querySelector('[data-plugin-card="p.disposed.reg"]');
+    const dispBtn = dispCard.querySelector('button');
+    assert.ok(dispBtn.textContent.includes('Bekapcsolás'));
+    await act(async () => { dispBtn.click(); });
+    assert.deepEqual(toggleCalls[toggleCalls.length - 1], { id: 'p.disposed.reg', enabled: true });
+
+    // 4. Unsupported state plugin: button is disabled and text says "Nem támogatott"
+    const unsuppCard = document.querySelector('[data-plugin-card="p.unsupported"]');
+    const unsuppBtn = unsuppCard.querySelector('button');
+    assert.equal(unsuppBtn.disabled, true);
+    assert.ok(unsuppBtn.textContent.includes('Nem támogatott'));
+
+    await act(async () => {
+        root.unmount();
+    });
+    dom.window.close();
+});
+
 test('PLG3-P2 — Renders plugin metadata, permissions, lifecycle state, and errors correctly', async () => {
     const dom = setupJSDOM();
     const db = new Database();
