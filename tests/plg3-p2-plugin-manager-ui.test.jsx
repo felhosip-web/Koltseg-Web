@@ -187,6 +187,12 @@ test('PLG3-P2 — Renders plugin metadata, permissions, lifecycle state, and err
     const uiRegistry = new PluginUIRegistry();
     const pluginManager = new PluginManagerService(runtime, uiRegistry);
 
+    let toggleCallCount = 0;
+    pluginManager.togglePluginState = async (id, enabled) => {
+        toggleCallCount++;
+        return false;
+    };
+
     runtime.registry.register({
         id: 'meta.test.plugin',
         name: 'Meta Plugin Test',
@@ -228,6 +234,18 @@ test('PLG3-P2 — Renders plugin metadata, permissions, lifecycle state, and err
     assert.ok(card.textContent.includes('storage:private'));
     assert.ok(card.textContent.includes('ui:toast'));
     assert.ok(card.textContent.includes('Plugin initialization failed for testing UI error rendering'));
+
+    // Assert lifecycle action is handled safely after initialization failure
+    const toggleBtn = card.querySelector('button');
+    assert.ok(toggleBtn, 'Action button must exist');
+    assert.equal(toggleBtn.disabled, true, 'Action button must be disabled for plugin with error');
+    assert.ok(toggleBtn.textContent.includes('Nem támogatott'), 'Action button must display "Nem támogatott" for plugin with error');
+
+    // Attempt click and verify no toggle state operation was invoked
+    await act(async () => {
+        toggleBtn.click();
+    });
+    assert.equal(toggleCallCount, 0, 'No lifecycle toggle operation should be invoked for plugin with error');
 
     await act(async () => {
         root.unmount();

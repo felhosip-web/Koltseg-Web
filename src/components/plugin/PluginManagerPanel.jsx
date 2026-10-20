@@ -208,7 +208,8 @@ export default function PluginManagerPanel() {
                         const isActive = plugin.state === 'active' || plugin.state === 'initialized';
                         const isDisposed = plugin.state === 'disposed';
                         const isRegistered = plugin.state === 'registered';
-                        const isSupportedState = isActive || isDisposed || isRegistered;
+                        const hasError = Boolean(plugin.error);
+                        const isSupportedState = (isActive || isDisposed || isRegistered) && !hasError;
 
                         let stateBadgeClass = 'bg-slate-100 text-slate-600 border-slate-200';
                         let stateLabel = 'Regisztrált';
