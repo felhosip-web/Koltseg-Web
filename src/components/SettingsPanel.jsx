@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { appService } from '../services/appService.js';
+import PluginManagerPanel from './plugin/PluginManagerPanel.jsx';
 
 /**
  * Settings panel component providing configuration options for authentication, cloud sync,
@@ -936,6 +937,7 @@ export default function SettingsPanel() {
 
                 {/* Modulok & Bővítmények tartalom */}
                 <div id="settingsContentModules" className="settings-tab-content hidden space-y-6 animate-fade-in">
+                    <PluginManagerPanel />
                     <div id="settingsContentModulesList"></div>
                 </div>
             </div>

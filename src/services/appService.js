@@ -751,5 +751,57 @@ export const appService = {
 
     getPluginUIRegistry() {
         return appInstance?.pluginUIRegistry || null;
+    },
+
+    /** Plugin Manager API Bridge (PLG3-P2) */
+    getPluginManagerService() {
+        return appInstance?.pluginManager || null;
+    },
+
+    subscribePluginRegistry(listener) {
+        if (appInstance?.pluginRegistry?.subscribe) {
+            return appInstance.pluginRegistry.subscribe(listener);
+        }
+        return () => {};
+    },
+
+    listInstalledPluginsSummary() {
+        const mgr = this.getPluginManagerService();
+        if (mgr && typeof mgr.listInstalledPluginsSummary === 'function') {
+            return mgr.listInstalledPluginsSummary();
+        }
+        return [];
+    },
+
+    async togglePluginState(pluginId, enabled) {
+        const mgr = this.getPluginManagerService();
+        if (mgr && typeof mgr.togglePluginState === 'function') {
+            return await mgr.togglePluginState(pluginId, enabled);
+        }
+        return false;
+    },
+
+    async getPluginStorageMetrics(pluginId) {
+        const mgr = this.getPluginManagerService();
+        if (mgr && typeof mgr.getPluginStorageMetrics === 'function') {
+            return await mgr.getPluginStorageMetrics(pluginId);
+        }
+        return { totalRecords: 0, collections: {}, isLoaded: false };
+    },
+
+    async purgePluginStorageData(pluginId) {
+        const mgr = this.getPluginManagerService();
+        if (mgr && typeof mgr.purgePluginStorageData === 'function') {
+            return await mgr.purgePluginStorageData(pluginId);
+        }
+        return {
+            success: false,
+            attemptedCount: 0,
+            localPurgedCount: 0,
+            failedCount: 0,
+            tombstoneStatus: 'not_applicable',
+            syncStatus: 'not_applicable',
+            errors: ['PluginManagerService nem érhető el.']
+        };
     }
 };

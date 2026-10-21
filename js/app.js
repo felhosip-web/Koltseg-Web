@@ -23,6 +23,7 @@ import { PluginStorage } from './plugin-storage.js';
 import { PluginStorageService } from '../src/services/plugin/PluginStorageService.js';
 import { PluginRuntime } from '../src/services/plugin/PluginRuntime.js';
 import { PluginUIRegistry } from '../src/services/plugin/PluginUIRegistry.js';
+import { PluginManagerService } from '../src/services/plugin/PluginManagerService.js';
 import { registerSamplePlugin } from '../src/plugins/samplePlugin.jsx';
 import { OfflineHandler } from './offline-handler.js';
 import { getVersionManager } from './version-manager.js';
@@ -116,6 +117,7 @@ export class App {
         this.pluginRuntime = new PluginRuntime(this.pluginStorageService, appService);
         this.pluginRegistry = this.pluginRuntime.registry;
         this.pluginUIRegistry = new PluginUIRegistry();
+        this.pluginManager = new PluginManagerService(this.pluginRuntime, this.pluginUIRegistry);
         registerSamplePlugin(this.pluginRegistry, this.pluginUIRegistry);
 
         // === 9. BEJÖVŐ UTALÁSOK ===
