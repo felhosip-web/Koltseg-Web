@@ -207,8 +207,9 @@ test('PLG0 — Sync Integration & Tombstone Protection: Local delete + stale rem
     // 1. Create plugin record locally
     await notes.set('note-101', { title: 'To Be Deleted' });
 
-    // Get the created record ID
-    const recsBefore = await db.getAll('plugin_records');
+    // Get the created record ID (filter out internal __host_ outbox records)
+    const recsAll = await db.getAll('plugin_records');
+    const recsBefore = recsAll.filter(r => !r.collection?.startsWith('__host_'));
     assert.equal(recsBefore.length, 1);
     const recId = recsBefore[0].id;
 
@@ -266,7 +267,7 @@ test('PLG0 — Sync Integration & Tombstone Protection: Local delete + stale rem
 
     // 4. Verify stale remote record was NOT resurrected
     assert.equal(await notes.get('note-101'), null);
-    const recsAfter = await db.getAll('plugin_records');
+    const recsAfter = (await db.getAll('plugin_records')).filter(r => !r.collection?.startsWith('__host_'));
     assert.equal(recsAfter.length, 0, 'Deleted plugin_record must NOT resurrect after sync');
 
     dom.window.close();

@@ -50,10 +50,39 @@ export class PluginStorageService {
     }
 
     /**
-     * Returns all active in-memory plugin records for SyncService
+     * Returns all active user-facing plugin records (excluding internal __host_ records) for SyncService and UI metrics.
      */
     getAllRecords() {
-        return this.records.filter(r => !r.deleted_at);
+        return this.records.filter(r => !r.deleted_at && !(r.collection && r.collection.startsWith('__host_')));
+    }
+
+    /**
+     * Returns all active internal host outbox records.
+     */
+    getHostOutboxRecords() {
+        return this.records.filter(r => r.collection === '__host_outbox__' && !r.deleted_at);
+    }
+
+    /**
+     * Removes an acknowledged host outbox record from IndexedDB and in-memory cache.
+     * @param {string} outboxId - Outbox record ID or op_id
+     */
+    async removeHostOutboxRecord(outboxId) {
+        if (!outboxId || !this.db) return false;
+        const targetIndex = this.records.findIndex(r =>
+            r.collection === '__host_outbox__' && (r.id === outboxId || r.op_id === outboxId || r.data?.op_id === outboxId)
+        );
+        if (targetIndex !== -1) {
+            const rec = this.records[targetIndex];
+            if (typeof this.db.delete === 'function') {
+                await this.db.delete('plugin_records', rec.id);
+            } else if (typeof this.db._directDelete === 'function') {
+                await this.db._directDelete('plugin_records', rec.id);
+            }
+            this.records.splice(targetIndex, 1);
+            return true;
+        }
+        return false;
     }
 
     /**
@@ -83,6 +112,9 @@ export class PluginStorageService {
                     throw new Error('[PluginStorageService] Valid collectionName is required.');
                 }
                 const boundCollection = String(collectionName).trim();
+                if (boundCollection.startsWith('__host_')) {
+                    throw new Error(`[PluginStorageService] Access to reserved system collection "${boundCollection}" is denied.`);
+                }
 
                 return {
                     /**
@@ -115,6 +147,7 @@ export class PluginStorageService {
 
                         const keyStr = String(recordKey);
                         const now = new Date().toISOString();
+                        const opId = generateUUID();
 
                         let rec = service.records.find(r =>
                             r.plugin_id === boundPluginId &&
@@ -126,15 +159,19 @@ export class PluginStorageService {
                         let previousData = null;
                         let previousUpdatedAt = null;
                         let previousDeletedAt = null;
+                        let previousOpId = null;
 
                         if (rec) {
                             previousData = rec.data ? JSON.parse(JSON.stringify(rec.data)) : null;
                             previousUpdatedAt = rec.updated_at;
                             previousDeletedAt = rec.deleted_at;
+                            previousOpId = rec.op_id;
 
                             rec.data = JSON.parse(JSON.stringify(value));
                             rec.updated_at = now;
                             rec.deleted_at = null;
+                            rec.op_id = opId;
+                            rec.schema_version = rec.schema_version || 1;
                         } else {
                             rec = {
                                 id: generateUUID(),
@@ -142,6 +179,8 @@ export class PluginStorageService {
                                 collection: boundCollection,
                                 record_key: keyStr,
                                 data: JSON.parse(JSON.stringify(value)),
+                                schema_version: 1,
+                                op_id: opId,
                                 created_at: now,
                                 updated_at: now,
                                 deleted_at: null
@@ -149,9 +188,39 @@ export class PluginStorageService {
                             service.records.push(rec);
                         }
 
+                        // Outbox record for durable IDB persistence
+                        const outboxRecord = {
+                            id: generateUUID(),
+                            plugin_id: boundPluginId,
+                            collection: '__host_outbox__',
+                            record_key: rec.id,
+                            data: {
+                                op: 'update',
+                                op_id: opId,
+                                target_id: rec.id,
+                                plugin_id: boundPluginId,
+                                target_collection: boundCollection,
+                                record_key: keyStr,
+                                payload: JSON.parse(JSON.stringify(rec))
+                            },
+                            schema_version: 1,
+                            op_id: opId,
+                            created_at: now,
+                            updated_at: now,
+                            deleted_at: null
+                        };
+
                         try {
-                            // Save to IndexedDB
-                            await service.db.save('plugin_records', rec);
+                            if (typeof service.db.runTransaction === 'function' && service.db.save === service.db.constructor?.prototype?.save) {
+                                await service.db.runTransaction(['plugin_records'], 'readwrite', (tx, stores) => {
+                                    const store = stores.plugin_records;
+                                    store.put(rec);
+                                    store.put(outboxRecord);
+                                });
+                            } else {
+                                await service.db.save('plugin_records', rec);
+                                await service.db.save('plugin_records', outboxRecord);
+                            }
                         } catch (dbErr) {
                             // Roll back in-memory cache on persistent write failure
                             if (isNew) {
@@ -163,9 +232,13 @@ export class PluginStorageService {
                                 rec.data = previousData;
                                 rec.updated_at = previousUpdatedAt;
                                 rec.deleted_at = previousDeletedAt;
+                                rec.op_id = previousOpId;
                             }
                             throw dbErr;
                         }
+
+                        // Also track in in-memory records list for outbox
+                        service.records.push(outboxRecord);
 
                         // Enqueue change in SyncService if available
                         if (service.syncService && !service.syncService.isMuted) {
@@ -197,18 +270,76 @@ export class PluginStorageService {
                             return false;
                         }
 
-                        if (typeof service.db.delete === 'function') {
-                            await service.db.delete('plugin_records', rec.id);
-                        } else if (typeof service.db._directDelete === 'function') {
-                            await service.db._directDelete('plugin_records', rec.id);
-                        } else {
-                            return false;
+                        const now = new Date().toISOString();
+                        const opId = generateUUID();
+
+                        // Tombstone record for deleted_records
+                        const tombstoneRecord = {
+                            id: generateUUID(),
+                            record_id: String(rec.id),
+                            table_name: 'plugin_records',
+                            deleted_at: now,
+                            updated_at: now
+                        };
+
+                        // Outbox record for durable IDB persistence of deletion
+                        const outboxRecord = {
+                            id: generateUUID(),
+                            plugin_id: boundPluginId,
+                            collection: '__host_outbox__',
+                            record_key: rec.id,
+                            data: {
+                                op: 'delete',
+                                op_id: opId,
+                                target_id: rec.id,
+                                plugin_id: boundPluginId,
+                                target_collection: boundCollection,
+                                record_key: keyStr
+                            },
+                            schema_version: rec.schema_version || 1,
+                            op_id: opId,
+                            created_at: now,
+                            updated_at: now,
+                            deleted_at: null
+                        };
+
+                        try {
+                            if (typeof service.db.runTransaction === 'function' && service.db.delete === service.db.constructor?.prototype?.delete) {
+                                await service.db.runTransaction(['plugin_records', 'deleted_records'], 'readwrite', (tx, stores) => {
+                                    stores.plugin_records.delete(rec.id);
+                                    stores.plugin_records.put(outboxRecord);
+                                    if (service.syncService && !service.syncService.isMuted) {
+                                        stores.deleted_records.put(tombstoneRecord);
+                                    }
+                                });
+                            } else {
+                                if (typeof service.db.delete === 'function') {
+                                    await service.db.delete('plugin_records', rec.id);
+                                } else if (typeof service.db._directDelete === 'function') {
+                                    await service.db._directDelete('plugin_records', rec.id);
+                                } else {
+                                    return false;
+                                }
+                                if (typeof service.db.save === 'function') {
+                                    await service.db.save('plugin_records', outboxRecord);
+                                }
+                            }
+                        } catch (err) {
+                            throw err;
                         }
 
                         // Remove from active in-memory cache ONLY after persistent deletion completes successfully
                         const currIndex = service.records.findIndex(r => r.id === rec.id);
                         if (currIndex !== -1) {
                             service.records.splice(currIndex, 1);
+                        }
+
+                        // Also track outbox record in memory
+                        service.records.push(outboxRecord);
+
+                        // Enqueue delete in SyncService if available
+                        if (service.syncService && !service.syncService.isMuted) {
+                            service.syncService.addToQueue('delete', { id: rec.id }, 'plugin_records', 'high', 'id');
                         }
 
                         return true;

@@ -38,6 +38,43 @@ export class SyncService {
     }
 
     /**
+     * Boot-time reconciliation of durable IndexedDB outbox records into Sync Queue
+     */
+    async reconcileOutboxOnBoot() {
+        const app = this._getApp();
+        if (!app || !app.pluginStorageService) return 0;
+
+        const outboxRecords = app.pluginStorageService.getHostOutboxRecords();
+        if (!outboxRecords || outboxRecords.length === 0) return 0;
+
+        let enqueuedCount = 0;
+        for (const rec of outboxRecords) {
+            const outboxData = rec.data || {};
+            const op = outboxData.op || 'update';
+            const payload = outboxData.payload || rec;
+
+            // Check if operation is already in the sync queue
+            const opId = rec.op_id || rec.data?.op_id;
+            const targetId = payload?.id || rec.id;
+
+            const exists = this._syncQueue.some(q =>
+                q.table === 'plugin_records' &&
+                q.data &&
+                ((opId && q.data.op_id === opId) || (targetId && q.data.id === targetId))
+            );
+
+            if (!exists) {
+                this.addToQueue(op, payload, 'plugin_records', op === 'delete' ? 'high' : 'normal', 'id');
+                enqueuedCount++;
+            }
+        }
+        if (enqueuedCount > 0) {
+            console.log(`[SYNC] 📋 Boot outbox reconciliation: ${enqueuedCount} pending outbox items enqueued.`);
+        }
+        return enqueuedCount;
+    }
+
+    /**
      * Némítás beállítása a fejlesztői generáláshoz
      */
     setMuted(muted) {
@@ -355,6 +392,15 @@ export class SyncService {
             } else {
                 await this.cloud?.upsert(table, data, customKey);
             }
+
+            if (table === 'plugin_records' && data && typeof data === 'object') {
+                const opId = data.op_id || data.id;
+                const app = this._getApp();
+                if (opId && app?.pluginStorageService) {
+                    await app.pluginStorageService.removeHostOutboxRecord(opId);
+                }
+            }
+
             return { success: true };
         } catch (e) {
             return { success: false, error: e.message };
@@ -1065,6 +1111,16 @@ export class SyncService {
                 const isDiff = this._isRecordDifferent(keyMap[key], item);
                 const localTime = new Date(keyMap[key]._updated_at || 0);
                 const cloudTime = new Date(item.updated_at || item.timestamp || 0);
+
+                // Handle plugin_records schema_version protection: local higher version wins over stale cloud version
+                if (table === 'plugin_records') {
+                    const localVer = Number(keyMap[key].schema_version || 1);
+                    const cloudVer = Number(item.schema_version || 1);
+                    if (localVer > cloudVer) {
+                        keyMap[key]._source = 'merged (local wins)';
+                        return;
+                    }
+                }
 
                 if (isDiff) {
                     const label = keyMap[key].name || keyMap[key].item || keyMap[key].comment || key;
