@@ -417,6 +417,77 @@ export class Database {
         });
     }
 
+    /**
+     * Executes an atomic multi-operation transaction over specified store names.
+     * @param {Array<string>|string} storeNames - Target store name or array of store names
+     * @param {string} mode - Transaction mode ('readwrite' or 'readonly')
+     * @param {Function} txFn - Synchronous callback receiving (tx, stores)
+     * @returns {Promise<any>} Resolves when transaction completes successfully
+     */
+    async runTransaction(storeNames, mode = 'readwrite', txFn = null) {
+        const names = Array.isArray(storeNames) ? storeNames : [storeNames];
+        if (typeof txFn !== 'function') {
+            return Promise.reject(new Error('[DB] runTransaction requires a txFn callback function.'));
+        }
+
+        return new Promise((resolve, reject) => {
+            if (this.isMock) {
+                try {
+                    const mockStores = {};
+                    for (const name of names) {
+                        this.mockStore[name] = this.mockStore[name] || {};
+                        mockStores[name] = {
+                            put: (data) => {
+                                let key = data.id;
+                                if (name === 'months') key = data.month;
+                                this.mockStore[name][key] = JSON.parse(JSON.stringify(data));
+                            },
+                            delete: (key) => {
+                                delete this.mockStore[name][key];
+                            },
+                            get: (key, cb) => {
+                                const val = this.mockStore[name][key];
+                                if (cb) cb(val ? JSON.parse(JSON.stringify(val)) : null);
+                            }
+                        };
+                    }
+                    const result = txFn(null, mockStores);
+                    return resolve(result);
+                } catch (mockErr) {
+                    return reject(mockErr);
+                }
+            }
+
+            if (!this.db) return reject(new Error('Nincs adatbázis kapcsolat!'));
+
+            try {
+                const tx = this.db.transaction(names, mode);
+                const stores = {};
+                for (const name of names) {
+                    stores[name] = tx.objectStore(name);
+                }
+
+                let syncFnError = null;
+                tx.oncomplete = () => {
+                    if (syncFnError) reject(syncFnError);
+                    else resolve();
+                };
+                tx.onerror = (e) => reject(e?.target?.error || tx.error || new Error('Transaction error'));
+                tx.onabort = (e) => reject(syncFnError || e?.target?.error || new Error('Transaction aborted'));
+
+                try {
+                    txFn(tx, stores);
+                } catch (fnErr) {
+                    syncFnError = fnErr;
+                    try { tx.abort(); } catch (abortErr) {}
+                    reject(fnErr);
+                }
+            } catch (txInitErr) {
+                reject(txInitErr);
+            }
+        });
+    }
+
     async save(storeName, data) {
         if (!SecurityManager.validateSchema(storeName, data)) {
             return Promise.reject(new Error(`Séma hiba: ${storeName}`));
