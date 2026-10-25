@@ -38,6 +38,19 @@ export class SyncService {
     }
 
     /**
+     * Centralized acknowledgement helper for host outbox records
+     * @param {string} opId - Operation UUID or outbox record ID
+     */
+    async _ackOutboxOperation(opId) {
+        if (!opId) return false;
+        const app = this._getApp();
+        if (app && app.pluginStorageService && typeof app.pluginStorageService.removeHostOutboxRecord === 'function') {
+            return await app.pluginStorageService.removeHostOutboxRecord(opId);
+        }
+        return false;
+    }
+
+    /**
      * Boot-time reconciliation of durable IndexedDB outbox records into Sync Queue
      */
     async reconcileOutboxOnBoot() {
@@ -47,8 +60,15 @@ export class SyncService {
         const outboxRecords = app.pluginStorageService.getHostOutboxRecords();
         if (!outboxRecords || outboxRecords.length === 0) return 0;
 
+        // Sort outbox records chronologically by timestamp ascending (T1 <= T2)
+        const sortedOutbox = [...outboxRecords].sort((a, b) => {
+            const timeA = new Date(a.updated_at || a.created_at || a.data?.payload?.updated_at || 0).getTime();
+            const timeB = new Date(b.updated_at || b.created_at || b.data?.payload?.updated_at || 0).getTime();
+            return timeA - timeB;
+        });
+
         let reconciledCount = 0;
-        for (const rec of outboxRecords) {
+        for (const rec of sortedOutbox) {
             const outboxData = rec.data || {};
             const op = outboxData.op || 'update';
             const opId = rec.op_id || outboxData.op_id;
@@ -86,6 +106,11 @@ export class SyncService {
             }
 
             const targetRecordId = payload.id;
+            const recordTimeStr = rec.updated_at || rec.created_at || payload.updated_at || new Date().toISOString();
+            if (!payload.updated_at) {
+                payload = { ...payload, updated_at: recordTimeStr };
+            }
+            const newOpTimestamp = new Date(recordTimeStr).getTime();
 
             // Operation identity check (op_id)
             const exactOpExists = this._syncQueue.some(q =>
@@ -98,7 +123,7 @@ export class SyncService {
                 continue; // Exact operation already in sync queue
             }
 
-            // Safe Queue Coalescing Rule: check if an older queue item exists for the same target record ID
+            // Safe Queue Coalescing Rule: check if an existing queue item exists for the same target record ID
             const existingRecordIndex = this._syncQueue.findIndex(q =>
                 q.table === 'plugin_records' &&
                 q.data &&
@@ -106,19 +131,32 @@ export class SyncService {
             );
 
             if (existingRecordIndex !== -1) {
-                console.log(`[SYNC] 📋 Boot outbox coalescing: updating queue item for record ${targetRecordId} with newer operation ${opId}`);
-                this._syncQueue[existingRecordIndex] = {
-                    ...this._syncQueue[existingRecordIndex],
-                    operation: op,
-                    data: payload,
-                    timestamp: new Date().toISOString(),
-                    status: 'pending',
-                    retryCount: 0
-                };
-                this._saveSyncQueue();
-                reconciledCount++;
+                const existingItem = this._syncQueue[existingRecordIndex];
+                const existingTimestamp = new Date(existingItem.data?.updated_at || existingItem.data?.payload?.updated_at || existingItem.data?.created_at || existingItem.timestamp || 0).getTime();
+
+                // Bi-Directional Coalescing: update only if new operation is newer or equal timestamp
+                if (newOpTimestamp >= existingTimestamp) {
+                    console.log(`[SYNC] 📋 Boot outbox coalescing: updating queue item for record ${targetRecordId} with newer operation ${opId} (${existingItem.operation} -> ${op})`);
+                    this._syncQueue[existingRecordIndex] = {
+                        ...existingItem,
+                        operation: op,
+                        data: payload,
+                        priority: op === 'delete' ? 'high' : 'normal',
+                        timestamp: recordTimeStr,
+                        status: 'pending',
+                        retryCount: 0
+                    };
+                    this._saveSyncQueue();
+                    reconciledCount++;
+                } else {
+                    console.log(`[SYNC] 📋 Boot outbox coalescing: skipping older outbox operation ${opId} (${newOpTimestamp} < ${existingTimestamp})`);
+                }
             } else {
-                this.addToQueue(op, payload, 'plugin_records', op === 'delete' ? 'high' : 'normal', 'id');
+                const item = this.addToQueue(op, payload, 'plugin_records', op === 'delete' ? 'high' : 'normal', 'id');
+                if (item) {
+                    item.timestamp = recordTimeStr;
+                    this._saveSyncQueue();
+                }
                 reconciledCount++;
             }
         }
@@ -449,10 +487,9 @@ export class SyncService {
             }
 
             if (table === 'plugin_records' && data && typeof data === 'object') {
-                const opId = data.op_id || data.id;
-                const app = this._getApp();
-                if (opId && app?.pluginStorageService) {
-                    await app.pluginStorageService.removeHostOutboxRecord(opId);
+                const opId = data.op_id;
+                if (opId) {
+                    await this._ackOutboxOperation(opId);
                 }
             }
 
@@ -535,6 +572,12 @@ export class SyncService {
                 await this.cloud?.delete(storeName, data, customKey);
             } else {
                 await this.cloud?.upsert(storeName, data, customKey);
+            }
+            if (storeName === 'plugin_records' && data && typeof data === 'object') {
+                const opId = data.op_id;
+                if (opId) {
+                    await this._ackOutboxOperation(opId);
+                }
             }
             console.log(`[SYNC] ${storeName} push successful`);
         } catch (err) {
