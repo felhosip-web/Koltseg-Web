@@ -337,9 +337,9 @@ export class PluginStorageService {
                         // Also track outbox record in memory
                         service.records.push(outboxRecord);
 
-                        // Enqueue delete in SyncService if available
+                        // Enqueue delete in SyncService if available with exact op_id
                         if (service.syncService && !service.syncService.isMuted) {
-                            service.syncService.addToQueue('delete', { id: rec.id }, 'plugin_records', 'high', 'id');
+                            service.syncService.addToQueue('delete', { id: rec.id, op_id: opId }, 'plugin_records', 'high', 'id');
                         }
 
                         return true;

@@ -47,31 +47,86 @@ export class SyncService {
         const outboxRecords = app.pluginStorageService.getHostOutboxRecords();
         if (!outboxRecords || outboxRecords.length === 0) return 0;
 
-        let enqueuedCount = 0;
+        let reconciledCount = 0;
         for (const rec of outboxRecords) {
             const outboxData = rec.data || {};
             const op = outboxData.op || 'update';
-            const payload = outboxData.payload || rec;
+            const opId = rec.op_id || outboxData.op_id;
 
-            // Check if operation is already in the sync queue
-            const opId = rec.op_id || rec.data?.op_id;
-            const targetId = payload?.id || rec.id;
+            // Handle invalid/corrupt outbox entries safely with explicit logging
+            if (!opId) {
+                console.warn('[SYNC] Boot outbox reconciliation skipped corrupt entry missing op_id:', rec);
+                continue;
+            }
 
-            const exists = this._syncQueue.some(q =>
+            let payload = null;
+            if (op === 'delete') {
+                const targetId = outboxData.target_id;
+                if (!targetId) {
+                    console.warn('[SYNC] Boot outbox reconciliation skipped corrupt delete entry missing target_id:', rec);
+                    continue;
+                }
+                if (outboxData.target_collection && outboxData.target_collection.startsWith('__host_')) {
+                    console.warn('[SYNC] Boot outbox reconciliation skipped internal reserved collection delete:', rec);
+                    continue;
+                }
+                payload = { id: targetId, op_id: opId };
+            } else {
+                // update operation
+                payload = outboxData.payload || (rec.collection && !rec.collection.startsWith('__host_') ? rec : null);
+                if (!payload || !payload.id) {
+                    console.warn('[SYNC] Boot outbox reconciliation skipped corrupt update entry missing payload:', rec);
+                    continue;
+                }
+                if (payload.collection && payload.collection.startsWith('__host_')) {
+                    console.warn('[SYNC] Boot outbox reconciliation skipped internal reserved collection update:', rec);
+                    continue;
+                }
+                payload = { ...payload, op_id: opId };
+            }
+
+            const targetRecordId = payload.id;
+
+            // Operation identity check (op_id)
+            const exactOpExists = this._syncQueue.some(q =>
                 q.table === 'plugin_records' &&
                 q.data &&
-                ((opId && q.data.op_id === opId) || (targetId && q.data.id === targetId))
+                q.data.op_id === opId
             );
 
-            if (!exists) {
+            if (exactOpExists) {
+                continue; // Exact operation already in sync queue
+            }
+
+            // Safe Queue Coalescing Rule: check if an older queue item exists for the same target record ID
+            const existingRecordIndex = this._syncQueue.findIndex(q =>
+                q.table === 'plugin_records' &&
+                q.data &&
+                q.data.id === targetRecordId
+            );
+
+            if (existingRecordIndex !== -1) {
+                console.log(`[SYNC] 📋 Boot outbox coalescing: updating queue item for record ${targetRecordId} with newer operation ${opId}`);
+                this._syncQueue[existingRecordIndex] = {
+                    ...this._syncQueue[existingRecordIndex],
+                    operation: op,
+                    data: payload,
+                    timestamp: new Date().toISOString(),
+                    status: 'pending',
+                    retryCount: 0
+                };
+                this._saveSyncQueue();
+                reconciledCount++;
+            } else {
                 this.addToQueue(op, payload, 'plugin_records', op === 'delete' ? 'high' : 'normal', 'id');
-                enqueuedCount++;
+                reconciledCount++;
             }
         }
-        if (enqueuedCount > 0) {
-            console.log(`[SYNC] 📋 Boot outbox reconciliation: ${enqueuedCount} pending outbox items enqueued.`);
+
+        if (reconciledCount > 0) {
+            console.log(`[SYNC] 📋 Boot outbox reconciliation complete: ${reconciledCount} outbox items processed.`);
         }
-        return enqueuedCount;
+        return reconciledCount;
     }
 
     /**
