@@ -38,6 +38,138 @@ export class SyncService {
     }
 
     /**
+     * Centralized acknowledgement helper for host outbox records
+     * @param {string} opId - Operation UUID or outbox record ID
+     */
+    async _ackOutboxOperation(opId) {
+        if (!opId) return false;
+        const app = this._getApp();
+        if (app && app.pluginStorageService && typeof app.pluginStorageService.removeHostOutboxRecord === 'function') {
+            return await app.pluginStorageService.removeHostOutboxRecord(opId);
+        }
+        return false;
+    }
+
+    /**
+     * Boot-time reconciliation of durable IndexedDB outbox records into Sync Queue
+     */
+    async reconcileOutboxOnBoot() {
+        const app = this._getApp();
+        if (!app || !app.pluginStorageService) return 0;
+
+        const outboxRecords = app.pluginStorageService.getHostOutboxRecords();
+        if (!outboxRecords || outboxRecords.length === 0) return 0;
+
+        // Sort outbox records chronologically by timestamp ascending (T1 <= T2)
+        // with deterministic tie-breaking for equal timestamps via record ID
+        const sortedOutbox = [...outboxRecords].sort((a, b) => {
+            const timeA = new Date(a.updated_at || a.created_at || a.data?.payload?.updated_at || 0).getTime();
+            const timeB = new Date(b.updated_at || b.created_at || b.data?.payload?.updated_at || 0).getTime();
+            if (timeA !== timeB) return timeA - timeB;
+            return (a.id || '').localeCompare(b.id || '');
+        });
+
+        let reconciledCount = 0;
+        for (const rec of sortedOutbox) {
+            const outboxData = rec.data || {};
+            const op = outboxData.op || 'update';
+            const opId = rec.op_id || outboxData.op_id;
+
+            // Handle invalid/corrupt outbox entries safely with explicit logging
+            if (!opId) {
+                console.warn('[SYNC] Boot outbox reconciliation skipped corrupt entry missing op_id:', rec);
+                continue;
+            }
+
+            let payload = null;
+            if (op === 'delete') {
+                const targetId = outboxData.target_id;
+                if (!targetId) {
+                    console.warn('[SYNC] Boot outbox reconciliation skipped corrupt delete entry missing target_id:', rec);
+                    continue;
+                }
+                if (outboxData.target_collection && outboxData.target_collection.startsWith('__host_')) {
+                    console.warn('[SYNC] Boot outbox reconciliation skipped internal reserved collection delete:', rec);
+                    continue;
+                }
+                payload = { id: targetId, op_id: opId };
+            } else {
+                // update operation
+                payload = outboxData.payload || (rec.collection && !rec.collection.startsWith('__host_') ? rec : null);
+                if (!payload || !payload.id) {
+                    console.warn('[SYNC] Boot outbox reconciliation skipped corrupt update entry missing payload:', rec);
+                    continue;
+                }
+                if (payload.collection && payload.collection.startsWith('__host_')) {
+                    console.warn('[SYNC] Boot outbox reconciliation skipped internal reserved collection update:', rec);
+                    continue;
+                }
+                payload = { ...payload, op_id: opId };
+            }
+
+            const targetRecordId = payload.id;
+            const recordTimeStr = rec.updated_at || rec.created_at || payload.updated_at || new Date().toISOString();
+            if (!payload.updated_at) {
+                payload = { ...payload, updated_at: recordTimeStr };
+            }
+            const newOpTimestamp = new Date(recordTimeStr).getTime();
+
+            // Operation identity check (op_id)
+            const exactOpExists = this._syncQueue.some(q =>
+                q.table === 'plugin_records' &&
+                q.data &&
+                q.data.op_id === opId
+            );
+
+            if (exactOpExists) {
+                continue; // Exact operation already in sync queue
+            }
+
+            // Safe Queue Coalescing Rule: check if an existing queue item exists for the same target record ID
+            const existingRecordIndex = this._syncQueue.findIndex(q =>
+                q.table === 'plugin_records' &&
+                q.data &&
+                q.data.id === targetRecordId
+            );
+
+            if (existingRecordIndex !== -1) {
+                const existingItem = this._syncQueue[existingRecordIndex];
+                const existingTimestamp = new Date(existingItem.data?.updated_at || existingItem.data?.payload?.updated_at || existingItem.data?.created_at || existingItem.timestamp || 0).getTime();
+
+                // Bi-Directional Coalescing: update only if new operation is newer or equal timestamp
+                if (newOpTimestamp >= existingTimestamp) {
+                    console.log(`[SYNC] 📋 Boot outbox coalescing: updating queue item for record ${targetRecordId} with newer operation ${opId} (${existingItem.operation} -> ${op})`);
+                    this._syncQueue[existingRecordIndex] = {
+                        ...existingItem,
+                        operation: op,
+                        data: payload,
+                        priority: op === 'delete' ? 'high' : 'normal',
+                        timestamp: recordTimeStr,
+                        status: 'pending',
+                        retryCount: 0
+                    };
+                    this._saveSyncQueue();
+                    reconciledCount++;
+                } else {
+                    console.log(`[SYNC] 📋 Boot outbox coalescing: skipping older outbox operation ${opId} (${newOpTimestamp} < ${existingTimestamp})`);
+                }
+            } else {
+                const item = this.addToQueue(op, payload, 'plugin_records', op === 'delete' ? 'high' : 'normal', 'id');
+                if (item) {
+                    item.timestamp = recordTimeStr;
+                    this._saveSyncQueue();
+                }
+                reconciledCount++;
+            }
+        }
+
+        if (reconciledCount > 0) {
+            console.log(`[SYNC] 📋 Boot outbox reconciliation complete: ${reconciledCount} outbox items processed.`);
+        }
+        return reconciledCount;
+    }
+
+    /**
      * Némítás beállítása a fejlesztői generáláshoz
      */
     setMuted(muted) {
@@ -136,7 +268,8 @@ export class SyncService {
         }
 
         const keyValue = typeof data === 'object' && data !== null ? (data[resolvedKeyField] || data.month || data.id) : data;
-        const existingIndex = keyValue ? this._syncQueue.findIndex(i => i.table === table && (i.data[resolvedKeyField] === keyValue || i.data.month === keyValue || i.data.id === keyValue)) : -1;
+        // Do not coalesce into an operation currently in 'processing' state (in flight)
+        const existingIndex = keyValue ? this._syncQueue.findIndex(i => i.status !== 'processing' && i.table === table && (i.data[resolvedKeyField] === keyValue || i.data.month === keyValue || i.data.id === keyValue)) : -1;
         if (existingIndex !== -1) {
             this._syncQueue[existingIndex] = {
                 ...this._syncQueue[existingIndex],
@@ -349,12 +482,20 @@ export class SyncService {
             }
         }
 
+        // Capture exact target op_id before awaiting cloud request to prevent in-flight mutation race
+        const targetOpId = table === 'plugin_records' && data && typeof data === 'object' ? data.op_id : null;
+
         try {
             if (operation === 'delete') {
                 await this.cloud?.delete(table, data, customKey);
             } else {
                 await this.cloud?.upsert(table, data, customKey);
             }
+
+            if (targetOpId) {
+                await this._ackOutboxOperation(targetOpId);
+            }
+
             return { success: true };
         } catch (e) {
             return { success: false, error: e.message };
@@ -429,11 +570,17 @@ export class SyncService {
             return;
         }
 
+        // Capture exact target op_id before awaiting cloud request to prevent in-flight mutation race
+        const targetOpId = storeName === 'plugin_records' && data && typeof data === 'object' ? data.op_id : null;
+
         try {
             if (isDelete) {
                 await this.cloud?.delete(storeName, data, customKey);
             } else {
                 await this.cloud?.upsert(storeName, data, customKey);
+            }
+            if (targetOpId) {
+                await this._ackOutboxOperation(targetOpId);
             }
             console.log(`[SYNC] ${storeName} push successful`);
         } catch (err) {
@@ -1065,6 +1212,16 @@ export class SyncService {
                 const isDiff = this._isRecordDifferent(keyMap[key], item);
                 const localTime = new Date(keyMap[key]._updated_at || 0);
                 const cloudTime = new Date(item.updated_at || item.timestamp || 0);
+
+                // Handle plugin_records schema_version protection: local higher version wins over stale cloud version
+                if (table === 'plugin_records') {
+                    const localVer = Number(keyMap[key].schema_version || 1);
+                    const cloudVer = Number(item.schema_version || 1);
+                    if (localVer > cloudVer) {
+                        keyMap[key]._source = 'merged (local wins)';
+                        return;
+                    }
+                }
 
                 if (isDiff) {
                     const label = keyMap[key].name || keyMap[key].item || keyMap[key].comment || key;

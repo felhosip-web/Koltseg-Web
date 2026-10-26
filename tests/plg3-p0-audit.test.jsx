@@ -287,8 +287,9 @@ test('PLG3-P0 — Storage Data Removal Semantics: Unregistering plugin preserves
     // Unregister plugin from runtime
     runtime.unregisterPlugin('persisted.data.plugin');
 
-    // Verify stored plugin_records entry still exists in DB
-    const dbRecords = await db.getAll('plugin_records');
+    // Verify stored plugin_records entry still exists in DB (filtering out internal __host_ outbox records)
+    const rawDbRecords = await db.getAll('plugin_records');
+    const dbRecords = rawDbRecords.filter(r => !r.collection?.startsWith('__host_'));
     assert.equal(dbRecords.length, 1);
     assert.equal(dbRecords[0].plugin_id, 'persisted.data.plugin');
     assert.equal(dbRecords[0].data.key, 'Important Data');

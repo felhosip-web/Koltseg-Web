@@ -99,6 +99,7 @@ export class BootManager {
                 this.app.pluginStorageService?.load?.(),
                 this.app.workLogManager?.load?.()
             ]);
+            await this.app.syncService?.reconcileOutboxOnBoot?.();
         } finally {
             // Data loading complete
         }
