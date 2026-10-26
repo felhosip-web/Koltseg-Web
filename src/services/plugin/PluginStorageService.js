@@ -240,9 +240,9 @@ export class PluginStorageService {
                         // Also track in in-memory records list for outbox
                         service.records.push(outboxRecord);
 
-                        // Enqueue change in SyncService if available
+                        // Enqueue change in SyncService if available (with isolated record snapshot)
                         if (service.syncService && !service.syncService.isMuted) {
-                            service.syncService.addToQueue('update', rec, 'plugin_records', 'normal', 'id');
+                            service.syncService.addToQueue('update', JSON.parse(JSON.stringify(rec)), 'plugin_records', 'normal', 'id');
                         }
 
                         return JSON.parse(JSON.stringify(rec.data));

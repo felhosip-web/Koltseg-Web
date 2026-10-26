@@ -492,3 +492,70 @@ test('PLG3-P3-1 Req 13 — Deterministic Outbox Reconciliation Ordering & Coales
     const reconciledCountAgain = await syncService.reconcileOutboxOnBoot();
     assert.equal(reconciledCountAgain, 0, 'Repeated reconciliation run on identical queue is an idempotent no-op');
 });
+
+test('PLG3-P3-1 Req 14 — In-Flight ACK Race Fix: Async Upload Pause & Sequential ACK Resolution', async () => {
+    setupEnvironment();
+    const db = new Database('TestDB_InFlightRace_' + Date.now(), 12);
+    await db.connect();
+
+    const config = new ConfigManager();
+    config.useSupabase = true;
+    const syncService = new SyncService(config, null);
+    const storageService = new PluginStorageService(db, syncService);
+    await storageService.load();
+
+    const mockApp = { db, pluginStorageService: storageService };
+    syncService.setApp(mockApp);
+
+    // Controllable Async CloudSync Boundary
+    let resolveUploadA = null;
+    let resolveUploadB = null;
+
+    syncService.cloud = {
+        client: {},
+        upsert: async (table, data) => {
+            if (data.data?.mode === 'light') {
+                return new Promise(res => { resolveUploadA = res; });
+            }
+            if (data.data?.mode === 'dark') {
+                return new Promise(res => { resolveUploadB = res; });
+            }
+        }
+    };
+
+    const pluginStorage = storageService.createPluginStorage('my_plugin');
+    const col = pluginStorage.collection('settings');
+
+    // 1. Edit A creates op_id_A
+    await col.set('theme', { mode: 'light' });
+    const outboxA = storageService.getHostOutboxRecords().find(r => r.data.payload?.data?.mode === 'light');
+    const opIdA = outboxA.op_id;
+
+    // Start processing queue item A (paused in flight)
+    const procPromise = syncService.processQueue(true);
+
+    // 2. Edit B creates op_id_B while A is in flight
+    await col.set('theme', { mode: 'dark' });
+    const outboxB = storageService.getHostOutboxRecords().find(r => r.data.payload?.data?.mode === 'dark');
+    const opIdB = outboxB.op_id;
+
+    assert.notEqual(opIdA, opIdB, 'Operation B has distinct op_id');
+
+    // 3. Resolve upload A
+    resolveUploadA();
+    await procPromise;
+
+    // Assert A's outbox is removed, but B's outbox remains intact with unchanged op_id_B
+    const remainingAfterA = storageService.getHostOutboxRecords().filter(r => r.data.record_key === 'theme');
+    assert.equal(remainingAfterA.length, 1, 'Exactly one outbox entry remains after upload A completes');
+    assert.equal(remainingAfterA[0].op_id, opIdB, 'Remaining outbox entry is operation B');
+    assert.equal(remainingAfterA[0].data.payload.data.mode, 'dark', 'Operation B payload remains dark');
+
+    // 4. Resolve upload B
+    const procPromiseB = syncService.processQueue(true);
+    resolveUploadB();
+    await procPromiseB;
+
+    const remainingAfterB = storageService.getHostOutboxRecords().filter(r => r.data.record_key === 'theme');
+    assert.equal(remainingAfterB.length, 0, 'Outbox completely emptied after operation B ACK completes');
+});

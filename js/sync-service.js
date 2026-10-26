@@ -268,7 +268,8 @@ export class SyncService {
         }
 
         const keyValue = typeof data === 'object' && data !== null ? (data[resolvedKeyField] || data.month || data.id) : data;
-        const existingIndex = keyValue ? this._syncQueue.findIndex(i => i.table === table && (i.data[resolvedKeyField] === keyValue || i.data.month === keyValue || i.data.id === keyValue)) : -1;
+        // Do not coalesce into an operation currently in 'processing' state (in flight)
+        const existingIndex = keyValue ? this._syncQueue.findIndex(i => i.status !== 'processing' && i.table === table && (i.data[resolvedKeyField] === keyValue || i.data.month === keyValue || i.data.id === keyValue)) : -1;
         if (existingIndex !== -1) {
             this._syncQueue[existingIndex] = {
                 ...this._syncQueue[existingIndex],
@@ -481,6 +482,9 @@ export class SyncService {
             }
         }
 
+        // Capture exact target op_id before awaiting cloud request to prevent in-flight mutation race
+        const targetOpId = table === 'plugin_records' && data && typeof data === 'object' ? data.op_id : null;
+
         try {
             if (operation === 'delete') {
                 await this.cloud?.delete(table, data, customKey);
@@ -488,11 +492,8 @@ export class SyncService {
                 await this.cloud?.upsert(table, data, customKey);
             }
 
-            if (table === 'plugin_records' && data && typeof data === 'object') {
-                const opId = data.op_id;
-                if (opId) {
-                    await this._ackOutboxOperation(opId);
-                }
+            if (targetOpId) {
+                await this._ackOutboxOperation(targetOpId);
             }
 
             return { success: true };
@@ -569,17 +570,17 @@ export class SyncService {
             return;
         }
 
+        // Capture exact target op_id before awaiting cloud request to prevent in-flight mutation race
+        const targetOpId = storeName === 'plugin_records' && data && typeof data === 'object' ? data.op_id : null;
+
         try {
             if (isDelete) {
                 await this.cloud?.delete(storeName, data, customKey);
             } else {
                 await this.cloud?.upsert(storeName, data, customKey);
             }
-            if (storeName === 'plugin_records' && data && typeof data === 'object') {
-                const opId = data.op_id;
-                if (opId) {
-                    await this._ackOutboxOperation(opId);
-                }
+            if (targetOpId) {
+                await this._ackOutboxOperation(targetOpId);
             }
             console.log(`[SYNC] ${storeName} push successful`);
         } catch (err) {
