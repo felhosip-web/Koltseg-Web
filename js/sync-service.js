@@ -61,10 +61,12 @@ export class SyncService {
         if (!outboxRecords || outboxRecords.length === 0) return 0;
 
         // Sort outbox records chronologically by timestamp ascending (T1 <= T2)
+        // with deterministic tie-breaking for equal timestamps via record ID
         const sortedOutbox = [...outboxRecords].sort((a, b) => {
             const timeA = new Date(a.updated_at || a.created_at || a.data?.payload?.updated_at || 0).getTime();
             const timeB = new Date(b.updated_at || b.created_at || b.data?.payload?.updated_at || 0).getTime();
-            return timeA - timeB;
+            if (timeA !== timeB) return timeA - timeB;
+            return (a.id || '').localeCompare(b.id || '');
         });
 
         let reconciledCount = 0;

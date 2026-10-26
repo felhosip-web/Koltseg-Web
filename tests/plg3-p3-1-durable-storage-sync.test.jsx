@@ -326,3 +326,169 @@ test('PLG3-P3-1 Req 11 — Version-aware merge policy protects local higher sche
     assert.equal(merged[0]._source, 'merged (local wins)', 'Local V2 schema_version wins over stale Cloud V1 schema_version');
     assert.equal(merged[0].schema_version, 2, 'Schema version 2 preserved');
 });
+
+test('PLG3-P3-1 Req 12 — Execution flow with Mocked CloudSync Boundary (Real Push & Queue Control Flow)', async () => {
+    setupEnvironment();
+    const db = new Database('TestDB_UploadControlFlow_' + Date.now(), 12);
+    await db.connect();
+
+    const config = new ConfigManager();
+    config.useSupabase = true;
+    const syncService = new SyncService(config, null);
+    const storageService = new PluginStorageService(db, syncService);
+    await storageService.load();
+
+    const mockApp = { db, pluginStorageService: storageService };
+    syncService.setApp(mockApp);
+
+    // Mock CloudSync Boundary
+    const uploadedRecords = [];
+    let shouldFailNextUpload = false;
+    syncService.cloud = {
+        client: {},
+        upsert: async (table, data, customKey) => {
+            if (shouldFailNextUpload) {
+                throw new Error('Simulated Cloud Sync Network Failure');
+            }
+            uploadedRecords.push({ action: 'upsert', table, data, customKey });
+        },
+        delete: async (table, data, customKey) => {
+            if (shouldFailNextUpload) {
+                throw new Error('Simulated Cloud Sync Delete Failure');
+            }
+            uploadedRecords.push({ action: 'delete', table, data, customKey });
+        }
+    };
+
+    const pluginStorage = storageService.createPluginStorage('my_plugin');
+    const col = pluginStorage.collection('metrics');
+
+    // 1. Successful upload removes exact op_id from outbox
+    await col.set('metric_1', { value: 100 });
+    const userRec = storageService.getAllRecords().find(r => r.collection === 'metrics');
+    const initialOutbox = storageService.getHostOutboxRecords().find(r => r.data.record_key === 'metric_1');
+    const opId1 = initialOutbox.op_id;
+
+    // Enqueue & execute
+    syncService.addToQueue('update', { ...userRec, op_id: opId1 }, 'plugin_records', 'normal', 'id');
+    const procRes = await syncService.processQueue(true);
+    assert.equal(procRes.succeeded, 1, 'Queue processed successfully via mocked CloudSync boundary');
+
+    const remainingOutbox1 = storageService.getHostOutboxRecords().filter(r => r.op_id === opId1);
+    assert.equal(remainingOutbox1.length, 0, '[Mocked CloudSync Boundary] Exact acknowledged op_id removed from outbox upon successful upload');
+
+    // 2. Failed upload retains outbox operation
+    shouldFailNextUpload = true;
+    await col.set('metric_2', { value: 200 });
+    const failedUserRec = storageService.getAllRecords().find(r => r.record_key === 'metric_2');
+    const failedOutbox = storageService.getHostOutboxRecords().find(r => r.data.record_key === 'metric_2');
+    const opId2 = failedOutbox.op_id;
+
+    const pushErr = await syncService.push('plugin_records', { ...failedUserRec, op_id: opId2 }, false, 'id').catch(e => e);
+    assert.ok(pushErr instanceof Error, 'Push threw simulated network failure');
+
+    const retainedOutbox = storageService.getHostOutboxRecords().filter(r => r.op_id === opId2);
+    assert.equal(retainedOutbox.length, 1, '[Mocked CloudSync Boundary] Failed upload retains outbox operation');
+
+    // 3. Delete target identity and operation identity remain distinct
+    shouldFailNextUpload = false;
+    await col.delete('metric_1');
+    const deleteOutbox = storageService.getHostOutboxRecords().find(r => r.data.op === 'delete');
+    assert.ok(deleteOutbox, 'Delete outbox created');
+    assert.equal(deleteOutbox.data.target_id, userRec.id, 'Delete target identity matches user record target_id');
+    assert.notEqual(deleteOutbox.data.target_id, deleteOutbox.op_id, 'Delete target_id and operation op_id are distinct UUIDs');
+});
+
+test('PLG3-P3-1 Req 13 — Deterministic Outbox Reconciliation Ordering & Coalescing Rules', async () => {
+    setupEnvironment();
+    const db = new Database('TestDB_DeterministicOrdering_' + Date.now(), 12);
+    await db.connect();
+
+    const config = new ConfigManager();
+    const syncService = new SyncService(config, null);
+    const storageService = new PluginStorageService(db, syncService);
+
+    const targetId = generateUUID();
+    const t0 = '2026-01-01T12:00:00.000Z';
+    const t1 = '2026-01-01T12:05:00.000Z';
+
+    // 1. Equal timestamp tie-breaking test
+    const outboxA = {
+        id: 'outbox_A',
+        plugin_id: 'p1',
+        collection: '__host_outbox__',
+        record_key: 'eq_key',
+        op_id: 'op_A',
+        data: { op: 'update', op_id: 'op_A', target_id: 'eq_id', payload: { id: 'eq_id', plugin_id: 'p1', collection: 'c1', record_key: 'eq_key', data: { name: 'A' }, op_id: 'op_A' } },
+        created_at: t0,
+        updated_at: t0
+    };
+
+    const outboxB = {
+        id: 'outbox_B',
+        plugin_id: 'p1',
+        collection: '__host_outbox__',
+        record_key: 'eq_key',
+        op_id: 'op_B',
+        data: { op: 'update', op_id: 'op_B', target_id: 'eq_id', payload: { id: 'eq_id', plugin_id: 'p1', collection: 'c1', record_key: 'eq_key', data: { name: 'B' }, op_id: 'op_B' } },
+        created_at: t0,
+        updated_at: t0
+    };
+
+    // Insert outboxB first into IndexedDB
+    await db.save('plugin_records', outboxB);
+    await db.save('plugin_records', outboxA);
+
+    const mockApp = { db, pluginStorageService: storageService };
+    syncService.setApp(mockApp);
+    await storageService.load();
+
+    await syncService.reconcileOutboxOnBoot();
+
+    const qStatus1 = syncService.getQueueStatus();
+    assert.equal(qStatus1.total, 1);
+    // Tie-breaking: outbox_A comes before outbox_B, so outbox_B is processed second and coalesced as latest
+    assert.equal(qStatus1.items[0].data.op_id, 'op_B', 'Equal timestamp tie-breaking is deterministic based on outbox ID');
+
+    // 2. Update followed by Delete
+    syncService.clearQueue();
+    await db.save('plugin_records', {
+        id: 'outbox_del',
+        plugin_id: 'p1',
+        collection: '__host_outbox__',
+        record_key: 'eq_key',
+        op_id: 'op_del',
+        data: { op: 'delete', op_id: 'op_del', target_id: 'eq_id' },
+        created_at: t1,
+        updated_at: t1
+    });
+    await storageService.load();
+
+    await syncService.reconcileOutboxOnBoot();
+    const qStatus2 = syncService.getQueueStatus();
+    assert.equal(qStatus2.total, 1);
+    assert.equal(qStatus2.items[0].operation, 'delete', 'Update followed by newer Delete coalesces to Delete');
+
+    // 3. Delete followed by Update
+    syncService.clearQueue();
+    await db.save('plugin_records', {
+        id: 'outbox_upd_after_del',
+        plugin_id: 'p1',
+        collection: '__host_outbox__',
+        record_key: 'eq_key',
+        op_id: 'op_upd_after_del',
+        data: { op: 'update', op_id: 'op_upd_after_del', target_id: 'eq_id', payload: { id: 'eq_id', plugin_id: 'p1', collection: 'c1', record_key: 'eq_key', data: { name: 'Recreated' }, op_id: 'op_upd_after_del' } },
+        created_at: '2026-01-01T12:10:00.000Z',
+        updated_at: '2026-01-01T12:10:00.000Z'
+    });
+    await storageService.load();
+
+    await syncService.reconcileOutboxOnBoot();
+    const qStatus3 = syncService.getQueueStatus();
+    assert.equal(qStatus3.total, 1);
+    assert.equal(qStatus3.items[0].operation, 'update', 'Delete followed by newer Update coalesces to Update');
+
+    // 4. Idempotent Repeated Reconciliation
+    const reconciledCountAgain = await syncService.reconcileOutboxOnBoot();
+    assert.equal(reconciledCountAgain, 0, 'Repeated reconciliation run on identical queue is an idempotent no-op');
+});
