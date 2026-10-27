@@ -1,6 +1,24 @@
 -- Migration: Add server-side stale-write and tombstone resurrection protection
 -- PLG3-P4-1 — Server-Side Stale-Write and Tombstone Safety
 
+-- 1. Helper trigger function to serialize tombstone writes on target record key
+CREATE OR REPLACE FUNCTION lock_tombstone_target()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.table_name IS NOT NULL AND NEW.record_id IS NOT NULL THEN
+        PERFORM pg_advisory_xact_lock(hashtext(NEW.table_name), hashtext(NEW.record_id));
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trigger_lock_tombstone ON deleted_records;
+CREATE TRIGGER trigger_lock_tombstone
+BEFORE INSERT OR UPDATE ON deleted_records
+FOR EACH ROW
+EXECUTE FUNCTION lock_tombstone_target();
+
+-- 2. Stale-write and tombstone resurrection protection trigger function
 CREATE OR REPLACE FUNCTION prevent_stale_upsert_and_tombstone_resurrect()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -19,17 +37,19 @@ BEGIN
         RETURN NEW;
     END IF;
 
-    -- 2. Determine incoming timestamp
+    -- 2. Acquire transaction-level advisory lock on target record key to serialize concurrent deletion and upsert operations
+    PERFORM pg_advisory_xact_lock(hashtext(TG_TABLE_NAME), hashtext(rec_id));
+
+    -- 3. Determine incoming timestamp
     incoming_time := COALESCE(NEW.updated_at, NOW());
 
-    -- 3. Check for active tombstone in deleted_records with FOR SHARE lock to prevent concurrent tombstone deletion
+    -- 4. Check for active tombstone in deleted_records
     SELECT deleted_at INTO tombstone_time
     FROM deleted_records
     WHERE table_name = TG_TABLE_NAME
       AND record_id = rec_id
     ORDER BY deleted_at DESC
-    LIMIT 1
-    FOR SHARE;
+    LIMIT 1;
 
     IF tombstone_time IS NOT NULL AND tombstone_time >= incoming_time THEN
         -- Active tombstone exists with deleted_at >= incoming timestamp.
@@ -37,7 +57,7 @@ BEGIN
         RETURN NULL;
     END IF;
 
-    -- 4. For UPDATE operations: check stale-write protection
+    -- 5. For UPDATE operations: check stale-write protection
     IF TG_OP = 'UPDATE' THEN
         IF OLD.updated_at IS NOT NULL AND incoming_time <= OLD.updated_at THEN
             -- Incoming update has older or equal timestamp compared to stored row.

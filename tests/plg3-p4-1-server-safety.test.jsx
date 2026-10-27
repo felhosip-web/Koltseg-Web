@@ -174,13 +174,13 @@ test('REAL SQL PL/pgSQL — Scenario 6: Months table month primary key & plugin_
 
     // 2. plugin_fuel_logs table stale protection
     await pg.exec(`
-        INSERT INTO plugin_fuel_logs (id, odo, liters, price, totalCost, updated_at)
+        INSERT INTO plugin_fuel_logs (id, odo, liters, price, totalcost, updated_at)
         VALUES ('fuel-1', 1000, 40, 600, 24000, '2026-01-01 12:00:00+00');
     `);
 
     // Stale update
     await pg.exec(`
-        INSERT INTO plugin_fuel_logs (id, odo, liters, price, totalCost, updated_at)
+        INSERT INTO plugin_fuel_logs (id, odo, liters, price, totalcost, updated_at)
         VALUES ('fuel-1', 900, 30, 550, 16500, '2026-01-01 10:00:00+00')
         ON CONFLICT (id) DO UPDATE SET
             odo = EXCLUDED.odo,
@@ -216,22 +216,46 @@ test('REAL SQL PL/pgSQL — Scenario 7: Client Sync integration with WASM Postgr
     syncService.cloud = {
         client: {},
         pull: async (table) => {
-            if (table === 'entries') {
-                const r = await pg.query('SELECT * FROM entries;');
-                return r.rows;
-            }
-            return [];
+            const r = await pg.query(`SELECT * FROM ${table};`);
+            return r.rows;
         },
         upsert: async (table, data) => {
+            if (table === 'app_settings') {
+                await pg.query(`
+                    INSERT INTO app_settings (id, settings_json, updated_at)
+                    VALUES ($1, $2, $3)
+                    ON CONFLICT (id) DO UPDATE SET
+                        settings_json = EXCLUDED.settings_json,
+                        updated_at = EXCLUDED.updated_at;
+                `, [data.id, JSON.stringify(data.settings_json || {}), data.updated_at || new Date().toISOString()]);
+                return;
+            }
+            if (table === 'entries') {
+                const sql = `
+                    INSERT INTO entries (id, "cellKey", amount, updated_at)
+                    VALUES ($1, $2, $3, $4)
+                    ON CONFLICT (id) DO UPDATE SET
+                        "cellKey" = EXCLUDED."cellKey",
+                        amount = EXCLUDED.amount,
+                        updated_at = EXCLUDED.updated_at;
+                `;
+                await pg.query(sql, [data.id, data.cellKey || 'c1_m1', data.amount || 0, data.updated_at || new Date().toISOString()]);
+                return;
+            }
+            const keyField = table === 'months' ? 'month' : 'id';
+            const keyVal = data[keyField];
+            if (!keyVal) return;
+            const columns = Object.keys(data).filter(k => !k.startsWith('_'));
+            const colNames = columns.map(c => `"${c}"`).join(', ');
+            const placeholders = columns.map((_, i) => `$${i + 1}`).join(', ');
+            const updateClause = columns.map(c => `"${c}" = EXCLUDED."${c}"`).join(', ');
+            const values = columns.map(c => typeof data[c] === 'object' && data[c] !== null ? JSON.stringify(data[c]) : data[c]);
             const sql = `
-                INSERT INTO entries (id, "cellKey", amount, updated_at)
-                VALUES ($1, $2, $3, $4)
-                ON CONFLICT (id) DO UPDATE SET
-                    "cellKey" = EXCLUDED."cellKey",
-                    amount = EXCLUDED.amount,
-                    updated_at = EXCLUDED.updated_at;
+                INSERT INTO ${table} (${colNames})
+                VALUES (${placeholders})
+                ON CONFLICT ("${keyField}") DO UPDATE SET ${updateClause};
             `;
-            await pg.query(sql, [data.id, data.cellKey || 'c1_m1', data.amount, data.updated_at]);
+            await pg.query(sql, values);
         },
         delete: async () => {}
     };
