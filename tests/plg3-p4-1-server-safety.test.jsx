@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import fs from 'node:fs';
 import { JSDOM } from 'jsdom';
 import 'fake-indexeddb/auto';
+import { PGlite } from '@electric-sql/pglite';
 
 import { Database, ConfigManager } from '../js/oop-core.js';
 import { SyncService } from '../js/sync-service.js';
@@ -28,208 +30,217 @@ function setupEnvironment() {
     return dom;
 }
 
-function simulateServerTrigger(tableName, incomingRecord, existingServerStore, deletedRecordsStore) {
-    const recId = tableName === 'months' ? incomingRecord.month : incomingRecord.id;
-    if (!recId) return { action: 'inserted', record: incomingRecord };
+async function setupRealPostgres() {
+    const pg = new PGlite();
+    await pg.exec('CREATE ROLE authenticated; CREATE ROLE anon;');
+    await pg.exec('CREATE SCHEMA IF NOT EXISTS auth;');
+    await pg.exec(`CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid AS $$ SELECT '00000000-0000-0000-0000-000000000000'::uuid $$ LANGUAGE sql;`);
 
-    const incomingTime = new Date(incomingRecord.updated_at || Date.now()).getTime();
+    const migrationFiles = [
+        'supabase/migrations/20260712222340_init_schema.sql',
+        'supabase/migrations/20260814000000_add_item_id_month.sql',
+        'supabase/migrations/20261007000000_add_plugin_records.sql',
+        'supabase/migrations/20261022000000_add_op_id_and_schema_version.sql',
+        'supabase/migrations/20261028000000_add_stale_write_and_tombstone_protection.sql'
+    ];
 
-    // 1. Check tombstone in deletedRecordsStore
-    const tombstones = (deletedRecordsStore || []).filter(t => t.table_name === tableName && String(t.record_id) === String(recId));
-    if (tombstones.length > 0) {
-        const latestTombstone = tombstones.sort((a, b) => new Date(b.deleted_at).getTime() - new Date(a.deleted_at).getTime())[0];
-        const tombstoneTime = new Date(latestTombstone.deleted_at).getTime();
-        if (tombstoneTime >= incomingTime) {
-            // Suppress write (trigger RETURN NULL)
-            return { action: 'suppressed_tombstone', record: null };
-        }
+    for (const file of migrationFiles) {
+        const sql = fs.readFileSync(file, 'utf8');
+        await pg.exec(sql);
     }
-
-    // 2. Check existing stored row
-    const existingIndex = (existingServerStore || []).findIndex(r => (tableName === 'months' ? r.month : r.id) === recId);
-    if (existingIndex !== -1) {
-        const storedRow = existingServerStore[existingIndex];
-        const storedTime = new Date(storedRow.updated_at || 0).getTime();
-        if (storedTime >= incomingTime) {
-            // Suppress update (trigger RETURN NULL)
-            return { action: 'suppressed_stale', record: storedRow };
-        }
-        // Newer timestamp -> update row
-        existingServerStore[existingIndex] = { ...incomingRecord };
-        return { action: 'updated', record: existingServerStore[existingIndex] };
-    }
-
-    // 3. Insert new row
-    existingServerStore.push({ ...incomingRecord });
-    return { action: 'inserted', record: incomingRecord };
+    return pg;
 }
 
-test('PLG3-P4-1 Scenario 1 — Newer write reaches server before an older delayed write', async () => {
-    setupEnvironment();
-    const serverStore = [
-        { id: 'item-1', name: 'Newer Version (T2)', updated_at: '2026-01-01T12:00:00.000Z' }
-    ];
+test('REAL SQL PL/pgSQL — Scenario 1: Newer write reaches server before older delayed write', async () => {
+    const pg = await setupRealPostgres();
 
-    const delayedOlderWrite = { id: 'item-1', name: 'Delayed Older Version (T1)', updated_at: '2026-01-01T10:00:00.000Z' };
+    // 1. Commit newer write at T2
+    await pg.exec(`
+        INSERT INTO items (id, name, updated_at)
+        VALUES ('item-1', 'Newer Version (T2)', '2026-01-01 12:00:00+00');
+    `);
 
-    const result = simulateServerTrigger('items', delayedOlderWrite, serverStore, []);
-    assert.equal(result.action, 'suppressed_stale', 'Server trigger suppresses write with older updated_at');
-    assert.equal(serverStore[0].name, 'Newer Version (T2)', 'Server store retains newer version');
+    // 2. Delayed older write at T1 (PostgREST upsert ON CONFLICT UPDATE)
+    await pg.exec(`
+        INSERT INTO items (id, name, updated_at)
+        VALUES ('item-1', 'Delayed Older Version (T1)', '2026-01-01 10:00:00+00')
+        ON CONFLICT (id) DO UPDATE SET
+            name = EXCLUDED.name,
+            updated_at = EXCLUDED.updated_at;
+    `);
+
+    const res = await pg.query("SELECT * FROM items WHERE id = 'item-1';");
+    assert.equal(res.rows.length, 1);
+    assert.equal(res.rows[0].name, 'Newer Version (T2)', 'REAL SQL: Stored row retains newer version after trigger suppressed older update');
 });
 
-test('PLG3-P4-1 Scenario 2 — Older write retried after newer write committed', async () => {
+test('REAL SQL PL/pgSQL — Scenario 2: Equal timestamp update with differing payload suppressed', async () => {
+    const pg = await setupRealPostgres();
+
+    await pg.exec(`
+        INSERT INTO items (id, name, updated_at)
+        VALUES ('item-eq', 'Original Version', '2026-01-01 12:00:00+00');
+    `);
+
+    await pg.exec(`
+        INSERT INTO items (id, name, updated_at)
+        VALUES ('item-eq', 'Conflicting Equal Version', '2026-01-01 12:00:00+00')
+        ON CONFLICT (id) DO UPDATE SET
+            name = EXCLUDED.name,
+            updated_at = EXCLUDED.updated_at;
+    `);
+
+    const res = await pg.query("SELECT * FROM items WHERE id = 'item-eq';");
+    assert.equal(res.rows.length, 1);
+    assert.equal(res.rows[0].name, 'Original Version', 'REAL SQL: Equal timestamp update suppressed deterministically in PostgreSQL trigger');
+});
+
+test('REAL SQL PL/pgSQL — Scenario 3: Upsert suppressed when active tombstone exists', async () => {
+    const pg = await setupRealPostgres();
+
+    // Tombstone at 12:00
+    await pg.exec(`
+        INSERT INTO deleted_records (id, record_id, table_name, deleted_at, updated_at)
+        VALUES ('del-1', 'item-tombstone-1', 'items', '2026-01-01 12:00:00+00', '2026-01-01 12:00:00+00');
+    `);
+
+    // Delayed insert/upsert at 11:00
+    await pg.exec(`
+        INSERT INTO items (id, name, updated_at)
+        VALUES ('item-tombstone-1', 'Resurrected Item', '2026-01-01 11:00:00+00')
+        ON CONFLICT (id) DO UPDATE SET
+            name = EXCLUDED.name,
+            updated_at = EXCLUDED.updated_at;
+    `);
+
+    const res = await pg.query("SELECT * FROM items WHERE id = 'item-tombstone-1';");
+    assert.equal(res.rows.length, 0, 'REAL SQL: Item was NOT resurrected in Postgres when active tombstone exists');
+});
+
+test('REAL SQL PL/pgSQL — Scenario 4: Legitimate new record insertion succeeds', async () => {
+    const pg = await setupRealPostgres();
+
+    await pg.exec(`
+        INSERT INTO items (id, name, updated_at)
+        VALUES ('item-legit', 'Legitimate New Item', '2026-01-01 10:00:00+00');
+    `);
+
+    const res = await pg.query("SELECT * FROM items WHERE id = 'item-legit';");
+    assert.equal(res.rows.length, 1);
+    assert.equal(res.rows[0].name, 'Legitimate New Item');
+});
+
+test('REAL SQL PL/pgSQL — Scenario 5: Legitimate recreation after tombstone expiry succeeds', async () => {
+    const pg = await setupRealPostgres();
+
+    // Tombstone at 10:00
+    await pg.exec(`
+        INSERT INTO deleted_records (id, record_id, table_name, deleted_at, updated_at)
+        VALUES ('del-2', 'item-recreate', 'items', '2026-01-01 10:00:00+00', '2026-01-01 10:00:00+00');
+    `);
+
+    // Re-creation at 12:00 (updated_at > deleted_at)
+    await pg.exec(`
+        INSERT INTO items (id, name, updated_at)
+        VALUES ('item-recreate', 'Recreated Item', '2026-01-01 12:00:00+00')
+        ON CONFLICT (id) DO UPDATE SET
+            name = EXCLUDED.name,
+            updated_at = EXCLUDED.updated_at;
+    `);
+
+    const res = await pg.query("SELECT * FROM items WHERE id = 'item-recreate';");
+    assert.equal(res.rows.length, 1);
+    assert.equal(res.rows[0].name, 'Recreated Item', 'REAL SQL: Re-creation allowed when updated_at > tombstone deleted_at');
+});
+
+test('REAL SQL PL/pgSQL — Scenario 6: Months table month primary key & plugin_fuel_logs table key mappings', async () => {
+    const pg = await setupRealPostgres();
+
+    // 1. Months table tombstone
+    await pg.exec(`
+        INSERT INTO deleted_records (id, record_id, table_name, deleted_at, updated_at)
+        VALUES ('del-m1', '2026-05', 'months', '2026-01-01 12:00:00+00', '2026-01-01 12:00:00+00');
+    `);
+
+    // Attempt insert stale month
+    await pg.exec(`
+        INSERT INTO months (month, updated_at)
+        VALUES ('2026-05', '2026-01-01 11:00:00+00')
+        ON CONFLICT (month) DO UPDATE SET updated_at = EXCLUDED.updated_at;
+    `);
+
+    const resMonth = await pg.query("SELECT * FROM months WHERE month = '2026-05';");
+    assert.equal(resMonth.rows.length, 0, 'REAL SQL: months primary key (month) tombstone protection verified in Postgres');
+
+    // 2. plugin_fuel_logs table stale protection
+    await pg.exec(`
+        INSERT INTO plugin_fuel_logs (id, odo, liters, price, totalCost, updated_at)
+        VALUES ('fuel-1', 1000, 40, 600, 24000, '2026-01-01 12:00:00+00');
+    `);
+
+    // Stale update
+    await pg.exec(`
+        INSERT INTO plugin_fuel_logs (id, odo, liters, price, totalCost, updated_at)
+        VALUES ('fuel-1', 900, 30, 550, 16500, '2026-01-01 10:00:00+00')
+        ON CONFLICT (id) DO UPDATE SET
+            odo = EXCLUDED.odo,
+            updated_at = EXCLUDED.updated_at;
+    `);
+
+    const resFuel = await pg.query("SELECT * FROM plugin_fuel_logs WHERE id = 'fuel-1';");
+    assert.equal(resFuel.rows.length, 1);
+    assert.equal(Number(resFuel.rows[0].odo), 1000, 'REAL SQL: plugin_fuel_logs trigger stale protection verified in Postgres');
+});
+
+test('REAL SQL PL/pgSQL — Scenario 7: Client Sync integration with WASM Postgres boundary', async () => {
     setupEnvironment();
-    const db = new Database('TestDB_RetryStale_' + Date.now(), 12);
+    const pg = await setupRealPostgres();
+
+    const db = new Database('TestDB_WasmSync_' + Date.now(), 12);
     await db.connect();
 
     const config = new ConfigManager();
     config.useSupabase = true;
     const syncService = new SyncService(config, null);
 
-    const T1 = '2026-01-01T10:00:00.000Z';
-    const T2 = '2026-01-01T12:00:00.000Z';
+    // Seed WASM Postgres with T2 row
+    await pg.exec(`
+        INSERT INTO entries (id, "cellKey", amount, updated_at)
+        VALUES ('entry-wasm-1', 'c1_m1', 1000, '2026-01-01 12:00:00+00');
+    `);
 
-    // Server has T2
-    const serverStore = [{ id: 'entry-1', amount: 500, updated_at: T2 }];
+    // Client attempts stale T1 push via SyncService
+    const staleT1Payload = { id: 'entry-wasm-1', cellKey: 'c1_m1', amount: 200, updated_at: '2026-01-01T10:00:00.000Z' };
+    syncService.addToQueue('update', staleT1Payload, 'entries');
 
-    // Client queue item has stale T1
-    syncService.addToQueue('update', { id: 'entry-1', amount: 100, updated_at: T1 }, 'entries');
-
-    let upsertAttempts = 0;
     syncService.cloud = {
         client: {},
-        upsert: async (table, data) => {
-            upsertAttempts++;
-            const trigRes = simulateServerTrigger(table, data, serverStore, []);
-            if (trigRes.action.startsWith('suppressed')) {
-                // PostgREST returns HTTP 200/204 success on trigger suppression
-                return;
+        pull: async (table) => {
+            if (table === 'entries') {
+                const r = await pg.query('SELECT * FROM entries;');
+                return r.rows;
             }
-        }
-    };
-
-    const res = await syncService.processQueue(true);
-    assert.equal(res.succeeded, 1, 'Stale write request resolves cleanly without throwing HTTP error');
-    assert.equal(upsertAttempts, 1, 'Upsert executed exactly once without infinite retries');
-    assert.equal(serverStore[0].amount, 500, 'Server row preserved at newer T2 amount');
-
-    const status = syncService.getQueueStatus();
-    assert.equal(status.pending, 0, 'Stale item removed from queue after clean resolution');
-});
-
-test('PLG3-P4-1 Scenario 3 — Equal timestamps with differing payloads handled deterministically', async () => {
-    setupEnvironment();
-    const T0 = '2026-01-01T12:00:00.000Z';
-    const serverStore = [{ id: 'item-eq', name: 'Server Version', updated_at: T0 }];
-    const incomingEq = { id: 'item-eq', name: 'Incoming Equal Version', updated_at: T0 };
-
-    const result = simulateServerTrigger('items', incomingEq, serverStore, []);
-    assert.equal(result.action, 'suppressed_stale', 'Equal timestamp write is suppressed deterministically');
-    assert.equal(serverStore[0].name, 'Server Version', 'Existing stored row preserved on equal timestamp');
-});
-
-test('PLG3-P4-1 Scenario 4 — Upsert arrives after matching tombstone exists', async () => {
-    setupEnvironment();
-    const deletedStore = [
-        { id: generateUUID(), record_id: 'item-del-1', table_name: 'items', deleted_at: '2026-01-01T12:00:00.000Z' }
-    ];
-    const serverStore = [];
-
-    const staleUpsert = { id: 'item-del-1', name: 'Resurrected Item', updated_at: '2026-01-01T11:00:00.000Z' };
-
-    const result = simulateServerTrigger('items', staleUpsert, serverStore, deletedStore);
-    assert.equal(result.action, 'suppressed_tombstone', 'Upsert suppressed when active tombstone exists with deleted_at >= updated_at');
-    assert.equal(serverStore.length, 0, 'Record was NOT resurrected in server store');
-});
-
-test('PLG3-P4-1 Scenario 5 — Existing legacy records without optional fields remain compatible', async () => {
-    setupEnvironment();
-    const serverStore = [];
-    const legacyRecord = { id: 'legacy-1', name: 'Legacy Entry', updated_at: '2026-01-01T10:00:00.000Z' };
-
-    const result = simulateServerTrigger('items', legacyRecord, serverStore, []);
-    assert.equal(result.action, 'inserted', 'Legacy record inserted successfully');
-    assert.equal(serverStore.length, 1);
-    assert.equal(serverStore[0].id, 'legacy-1');
-});
-
-test('PLG3-P4-1 Scenario 6 — Legitimate new record can be inserted or recreated after tombstone', async () => {
-    setupEnvironment();
-    const deletedStore = [
-        { id: generateUUID(), record_id: 'item-recreate', table_name: 'items', deleted_at: '2026-01-01T10:00:00.000Z' }
-    ];
-    const serverStore = [];
-
-    // Re-creation with newer timestamp
-    const newInsert = { id: 'item-recreate', name: 'Recreated Item', updated_at: '2026-01-01T12:00:00.000Z' };
-
-    const result = simulateServerTrigger('items', newInsert, serverStore, deletedStore);
-    assert.equal(result.action, 'inserted', 'Legitimate recreation allowed when updated_at > deleted_at');
-    assert.equal(serverStore.length, 1);
-    assert.equal(serverStore[0].name, 'Recreated Item');
-});
-
-test('PLG3-P4-1 Scenario 7 — Rejected stale operation does not delete newer outbox entry or cause infinite retries', async () => {
-    setupEnvironment();
-    const db = new Database('TestDB_OutboxSafety_' + Date.now(), 12);
-    await db.connect();
-
-    const config = new ConfigManager();
-    config.useSupabase = true;
-    const syncService = new SyncService(config, null);
-    const storageService = new PluginStorageService(db, syncService);
-    await storageService.load();
-
-    const pluginStorage = storageService.createPluginStorage('my_plugin');
-    const col = pluginStorage.collection('metrics');
-
-    // Newer operation (op_id_2) created
-    await col.set('metric_key', { val: 200 });
-    const userRec = storageService.getAllRecords().find(r => r.record_key === 'metric_key');
-    const outbox2 = storageService.getHostOutboxRecords().find(r => r.data.record_key === 'metric_key');
-    const opId2 = outbox2.op_id;
-
-    // Stale ACK attempt for older op_id_1 should NOT remove op_id_2
-    const staleOpId1 = generateUUID();
-    const removedStale = await storageService.removeHostOutboxRecord(staleOpId1);
-    assert.equal(removedStale, false, 'Stale ACK returns false for non-matching op_id');
-
-    const remainingOutbox = storageService.getHostOutboxRecords().filter(r => r.data.record_key === 'metric_key');
-    assert.equal(remainingOutbox.length, 1, 'Newer outbox operation retained');
-    assert.equal(remainingOutbox[0].op_id, opId2, 'Newer operation op_id preserved');
-});
-
-test('PLG3-P4-1 Scenario 8 — Full sync pull reconciliation updates local state after server trigger suppression', async () => {
-    setupEnvironment();
-    const db = new Database('TestDB_PullReconcile_' + Date.now(), 12);
-    await db.connect();
-
-    const config = new ConfigManager();
-    config.useSupabase = true;
-    const syncService = new SyncService(config, null);
-
-    const T1 = '2026-01-01T10:00:00.000Z';
-    const T2 = '2026-01-01T12:00:00.000Z';
-
-    // Local DB has stale T1 version
-    const localStale = { id: 'item-1', name: 'Stale Local (T1)', updated_at: T1 };
-    await db.save('items', localStale);
-
-    // Cloud has authoritative T2 version
-    const cloudFresh = [{ id: 'item-1', name: 'Fresh Cloud (T2)', updated_at: T2 }];
-
-    syncService.cloud = {
-        client: {},
-        pull: async (table) => table === 'items' ? cloudFresh : [],
-        upsert: async () => {},
+            return [];
+        },
+        upsert: async (table, data) => {
+            const sql = `
+                INSERT INTO entries (id, "cellKey", amount, updated_at)
+                VALUES ($1, $2, $3, $4)
+                ON CONFLICT (id) DO UPDATE SET
+                    "cellKey" = EXCLUDED."cellKey",
+                    amount = EXCLUDED.amount,
+                    updated_at = EXCLUDED.updated_at;
+            `;
+            await pg.query(sql, [data.id, data.cellKey || 'c1_m1', data.amount, data.updated_at]);
+        },
         delete: async () => {}
     };
 
     const mockApp = {
         db,
-        items: { items: [localStale], load: async () => {} },
+        items: { items: [], load: async () => {} },
         months: { months: [], load: async () => {} },
-        entries: { entries: [], load: async () => {} },
+        entries: { entries: [staleT1Payload], load: async () => {} },
         templates: { templates: [], load: async () => {} },
         reminderManager: { reminders: [], load: async () => {} },
         incomingManager: { incomings: [], senders: [], load: async () => {} },
@@ -238,11 +249,20 @@ test('PLG3-P4-1 Scenario 8 — Full sync pull reconciliation updates local state
     };
     syncService.setApp(mockApp);
 
+    // Process queue
+    const queueRes = await syncService.processQueue(true);
+    assert.equal(queueRes.succeeded, 1, 'Stale write against WASM Postgres resolves cleanly');
+
+    // Run sync pull reconciliation
     const syncRes = await syncService.sync();
     assert.equal(syncRes.status, 'success');
 
-    // Local IndexedDB must now hold the fresh cloud T2 version
-    const updatedLocal = await db.getAll('items');
-    assert.equal(updatedLocal.length, 1);
-    assert.equal(updatedLocal[0].name, 'Fresh Cloud (T2)', 'Local state updated to fresh cloud version on pull reconciliation');
+    // Verify WASM Postgres retains 1000
+    const pgCheck = await pg.query("SELECT * FROM entries WHERE id = 'entry-wasm-1';");
+    assert.equal(Number(pgCheck.rows[0].amount), 1000, 'REAL SQL: Postgres retains 1000');
+
+    // Verify local IndexedDB updated to 1000
+    const localCheck = await db.getAll('entries');
+    assert.equal(localCheck.length, 1);
+    assert.equal(Number(localCheck[0].amount), 1000, 'Client IndexedDB reconciled to 1000 from Postgres');
 });

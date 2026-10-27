@@ -22,13 +22,14 @@ BEGIN
     -- 2. Determine incoming timestamp
     incoming_time := COALESCE(NEW.updated_at, NOW());
 
-    -- 3. Check for active tombstone in deleted_records
+    -- 3. Check for active tombstone in deleted_records with FOR SHARE lock to prevent concurrent tombstone deletion
     SELECT deleted_at INTO tombstone_time
     FROM deleted_records
     WHERE table_name = TG_TABLE_NAME
       AND record_id = rec_id
     ORDER BY deleted_at DESC
-    LIMIT 1;
+    LIMIT 1
+    FOR SHARE;
 
     IF tombstone_time IS NOT NULL AND tombstone_time >= incoming_time THEN
         -- Active tombstone exists with deleted_at >= incoming timestamp.
@@ -118,5 +119,12 @@ EXECUTE FUNCTION prevent_stale_upsert_and_tombstone_resurrect();
 DROP TRIGGER IF EXISTS trigger_prevent_stale_plugin_records ON plugin_records;
 CREATE TRIGGER trigger_prevent_stale_plugin_records
 BEFORE INSERT OR UPDATE ON plugin_records
+FOR EACH ROW
+EXECUTE FUNCTION prevent_stale_upsert_and_tombstone_resurrect();
+
+-- 11. plugin_fuel_logs
+DROP TRIGGER IF EXISTS trigger_prevent_stale_plugin_fuel_logs ON plugin_fuel_logs;
+CREATE TRIGGER trigger_prevent_stale_plugin_fuel_logs
+BEFORE INSERT OR UPDATE ON plugin_fuel_logs
 FOR EACH ROW
 EXECUTE FUNCTION prevent_stale_upsert_and_tombstone_resurrect();
