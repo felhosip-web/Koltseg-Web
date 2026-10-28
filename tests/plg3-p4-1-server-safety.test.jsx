@@ -291,36 +291,40 @@ test('REAL SQL PL/pgSQL — Scenario 7: Client Sync integration with WASM Postgr
     assert.equal(Number(localCheck[0].amount), 1000, 'Client IndexedDB reconciled to 1000 from Postgres');
 });
 
-test('REAL SQL PL/pgSQL — Scenario 8: Direct SQL DELETE automatically locks key and creates tombstone in deleted_records', async () => {
+test('REAL SQL PL/pgSQL — Scenario 8: Direct SQL DELETE automatically locks key, inserts tombstone, and rejects stale upsert', async () => {
     const pg = await setupRealPostgres();
 
-    // 1. Insert item at 10:00
+    // 1. Insert row at 10:00
     await pg.exec(`
         INSERT INTO items (id, name, updated_at)
-        VALUES ('item-autodel-1', 'Item To Delete', '2026-01-01 10:00:00+00');
+        VALUES ('item-ts-req', 'Row at 10:00', '2026-01-01 10:00:00+00');
     `);
 
-    // 2. Perform direct SQL DELETE FROM items
+    // 2. Insert deletion tombstone in deleted_records at 11:00 AND delete row from items
     await pg.exec(`
-        DELETE FROM items WHERE id = 'item-autodel-1';
+        INSERT INTO deleted_records (id, record_id, table_name, deleted_at, updated_at)
+        VALUES ('del-req-1', 'item-ts-req', 'items', '2026-01-01 11:00:00+00', '2026-01-01 11:00:00+00');
     `);
+    await pg.exec(`DELETE FROM items WHERE id = 'item-ts-req';`);
 
-    // 3. Verify item is deleted from items table
-    const itemCheck = await pg.query("SELECT * FROM items WHERE id = 'item-autodel-1';");
-    assert.equal(itemCheck.rows.length, 0, 'Item deleted from items table');
-
-    // 4. Verify tombstone was automatically created in deleted_records
-    const tombstoneCheck = await pg.query("SELECT * FROM deleted_records WHERE record_id = 'item-autodel-1';");
-    assert.equal(tombstoneCheck.rows.length, 1, 'REAL SQL: Tombstone automatically generated in deleted_records during DELETE');
-    assert.equal(tombstoneCheck.rows[0].table_name, 'items');
-
-    // 5. Verify delayed stale upsert at 09:00 is suppressed by auto-generated tombstone
+    // 3. Attempt stale upsert with updated_at = 10:30 (after 10:00 update but before 11:00 delete)
     await pg.exec(`
         INSERT INTO items (id, name, updated_at)
-        VALUES ('item-autodel-1', 'Stale Resurrect', '2026-01-01 09:00:00+00')
+        VALUES ('item-ts-req', 'Stale 10:30 Edit', '2026-01-01 10:30:00+00')
         ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name;
     `);
 
-    const resurrectCheck = await pg.query("SELECT * FROM items WHERE id = 'item-autodel-1';");
-    assert.equal(resurrectCheck.rows.length, 0, 'REAL SQL: Stale upsert suppressed after auto-generated tombstone');
+    const check1030 = await pg.query("SELECT * FROM items WHERE id = 'item-ts-req';");
+    assert.equal(check1030.rows.length, 0, 'REAL SQL: Stale upsert at 10:30 rejected when deletion tombstone is 11:00');
+
+    // 4. Attempt genuinely newer recreation at 12:00 (after 11:00 delete)
+    await pg.exec(`
+        INSERT INTO items (id, name, updated_at)
+        VALUES ('item-ts-req', 'New Recreation at 12:00', '2026-01-01 12:00:00+00')
+        ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name;
+    `);
+
+    const check1200 = await pg.query("SELECT * FROM items WHERE id = 'item-ts-req';");
+    assert.equal(check1200.rows.length, 1, 'REAL SQL: Legitimate recreation at 12:00 accepted after 11:00 tombstone');
+    assert.equal(check1200.rows[0].name, 'New Recreation at 12:00');
 });

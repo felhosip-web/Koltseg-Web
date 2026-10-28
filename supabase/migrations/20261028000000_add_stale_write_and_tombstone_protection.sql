@@ -24,6 +24,7 @@ RETURNS TRIGGER AS $$
 DECLARE
     rec_id TEXT;
     del_time TIMESTAMPTZ;
+    existing_tombstone TIMESTAMPTZ;
 BEGIN
     IF TG_TABLE_NAME = 'months' THEN
         rec_id := OLD.month;
@@ -38,15 +39,17 @@ BEGIN
     -- Acquire transaction advisory lock on target record key to serialize concurrent deletion and upsert operations
     PERFORM pg_advisory_xact_lock(hashtext(TG_TABLE_NAME), hashtext(rec_id));
 
-    del_time := COALESCE(OLD.updated_at, NOW());
+    -- Check if a tombstone already exists in deleted_records for this record
+    SELECT deleted_at INTO existing_tombstone
+    FROM deleted_records
+    WHERE table_name = TG_TABLE_NAME
+      AND record_id = rec_id
+    ORDER BY deleted_at DESC
+    LIMIT 1;
 
-    -- Automatically record tombstone in deleted_records within the same atomic transaction
-    IF NOT EXISTS (
-        SELECT 1 FROM deleted_records
-        WHERE table_name = TG_TABLE_NAME
-          AND record_id = rec_id
-          AND deleted_at >= del_time
-    ) THEN
+    -- Only insert an automatic tombstone at database deletion time if no tombstone exists yet
+    IF existing_tombstone IS NULL THEN
+        del_time := NOW();
         INSERT INTO deleted_records (id, record_id, table_name, deleted_at, updated_at)
         VALUES (
             gen_random_uuid()::text,
