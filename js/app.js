@@ -559,10 +559,56 @@ export class App {
             calendarEvents = safeJsonParse('calendar_events', []);
         }
 
+        const entries = this.entries?.entries || [];
+        let items = this.items?.items || [];
+        let months = this.months?.months || [];
+
+        // Öngyógyító védelem: ha bejegyzések léteznek, de a hónapok tömb üres (pl. hiányzó 'months' rekordok miatt), levezetjük a bejegyzésekből
+        if ((!months || months.length === 0) && entries.length > 0) {
+            const derivedMonthSet = new Set();
+            entries.forEach(e => {
+                let m = e.month;
+                if (!m && e.cellKey) {
+                    const parts = e.cellKey.split('_');
+                    if (parts.length >= 2 && /^[0-9]{4}-[0-9]{2}$/.test(parts[1])) {
+                        m = parts[1];
+                    } else if (/^[0-9]{4}-[0-9]{2}$/.test(parts[0])) {
+                        m = parts[0];
+                    }
+                }
+                if (m) derivedMonthSet.add(m);
+            });
+            if (derivedMonthSet.size > 0) {
+                months = Array.from(derivedMonthSet).sort();
+            }
+        }
+
+        // Öngyógyító védelem: ha bejegyzések léteznek, de az kategória tömb üres
+        if ((!items || items.length === 0) && entries.length > 0) {
+            const itemMap = new Map();
+            entries.forEach(e => {
+                let itemId = e.itemId;
+                if (!itemId && e.cellKey) {
+                    const parts = e.cellKey.split('_');
+                    if (parts.length >= 2 && /^[0-9]{4}-[0-9]{2}$/.test(parts[1])) {
+                        itemId = parts[0];
+                    } else if (parts.length >= 2 && /^[0-9]{4}-[0-9]{2}$/.test(parts[0])) {
+                        itemId = parts[1];
+                    }
+                }
+                if (itemId && !itemMap.has(itemId)) {
+                    itemMap.set(itemId, { id: itemId, name: itemId, color: '#dbeafe', updated_at: new Date().toISOString() });
+                }
+            });
+            if (itemMap.size > 0) {
+                items = Array.from(itemMap.values());
+            }
+        }
+
         return {
-            entries: this.entries?.entries || [],
-            items: this.items?.items || [],
-            months: this.months?.months || [],
+            entries: entries,
+            items: items,
+            months: months,
             incomings: this.incomingManager?.incomings || [],
             eurRate: this.config?.eurRate || 400,
             reminders: this.reminderManager?.reminders || [],

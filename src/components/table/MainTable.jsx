@@ -21,7 +21,50 @@ export default function MainTable() {
         }
     }, [snapshot]);
 
-    if (!snapshot || !snapshot.items || snapshot.items.length === 0 || !snapshot.months || snapshot.months.length === 0) {
+    const entries = snapshot?.entries || [];
+    let items = snapshot?.items || [];
+    let months = snapshot?.months || [];
+
+    // Ha a hónapok tömb üres, de léteznek bejegyzések, levezetjük a hónapokat a bejegyzésekből
+    if ((!months || months.length === 0) && entries.length > 0) {
+        const derivedMonths = Array.from(new Set(
+            entries.map(e => {
+                if (e.month) return e.month;
+                if (e.cellKey) {
+                    const parts = e.cellKey.split('_');
+                    if (parts.length >= 2 && /^[0-9]{4}-[0-9]{2}$/.test(parts[1])) return parts[1];
+                    if (/^[0-9]{4}-[0-9]{2}$/.test(parts[0])) return parts[0];
+                }
+                return null;
+            }).filter(Boolean)
+        )).sort();
+        if (derivedMonths.length > 0) {
+            months = derivedMonths;
+        }
+    }
+
+    // Ha az kategóriák tömb üres, de léteznek bejegyzések, levezetjük a kategóriákat a bejegyzésekből
+    if ((!items || items.length === 0) && entries.length > 0) {
+        const derivedItemMap = new Map();
+        entries.forEach(e => {
+            let itemId = e.itemId;
+            if (!itemId && e.cellKey) {
+                const parts = e.cellKey.split('_');
+                if (parts.length >= 2 && /^[0-9]{4}-[0-9]{2}$/.test(parts[1])) itemId = parts[0];
+                else if (parts.length >= 2 && /^[0-9]{4}-[0-9]{2}$/.test(parts[0])) itemId = parts[1];
+            }
+            if (itemId && !derivedItemMap.has(itemId)) {
+                derivedItemMap.set(itemId, { id: itemId, name: itemId, color: '#dbeafe' });
+            }
+        });
+        if (derivedItemMap.size > 0) {
+            items = Array.from(derivedItemMap.values());
+        }
+    }
+
+    const hasData = items.length > 0 && months.length > 0;
+
+    if (!snapshot || !hasData) {
         return (
             <div id="mainTableContainer" className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-visible p-0 md:p-2">
                  <div className="p-12 text-center text-gray-400">
@@ -37,7 +80,7 @@ export default function MainTable() {
         );
     }
 
-    const visibleMonths = snapshot.months.slice(0, loadedMonths);
+    const visibleMonths = months.slice(0, loadedMonths);
 
     return (
         <div id="mainTableContainer" className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-visible p-0 md:p-2">
@@ -54,8 +97,8 @@ export default function MainTable() {
                         </tr>
                     </thead>
                     <tbody id="vtTbody">
-                        {snapshot.items.map(item => (
-                            <TableRow key={item.id} item={item} visibleMonths={visibleMonths} entries={snapshot.entries} eurRate={snapshot.eurRate} />
+                        {items.map(item => (
+                            <TableRow key={item.id} item={item} visibleMonths={visibleMonths} entries={entries} eurRate={snapshot.eurRate} />
                         ))}
                     </tbody>
                 </table>
