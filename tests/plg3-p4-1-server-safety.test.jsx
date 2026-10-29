@@ -337,3 +337,50 @@ test('REAL SQL PL/pgSQL — Scenario 8: Direct SQL DELETE automatically locks ke
     assert.equal(checkRecreationRes.rows.length, 1, 'REAL SQL: Legitimate recreation post-deletion accepted');
     assert.equal(checkRecreationRes.rows[0].name, 'New Recreation Post-Delete');
 });
+
+test('REAL SQL PL/pgSQL — Scenario 9: Domain deletion with an existing older tombstone updates tombstone state to current deletion time', async () => {
+    const pg = await setupRealPostgres();
+
+    // 1. Insert domain row with updated_at = NOW() - INTERVAL '2 hours' (10:00)
+    await pg.exec(`
+        INSERT INTO items (id, name, updated_at)
+        VALUES ('item-old-ts', 'Row Recreated at 10:00', NOW() - INTERVAL '2 hours');
+    `);
+
+    // 2. Insert an OLD tombstone for the same key with deleted_at = NOW() - INTERVAL '3 hours' (09:00)
+    await pg.exec(`
+        INSERT INTO deleted_records (id, record_id, table_name, deleted_at, updated_at)
+        VALUES ('old-tombstone-1', 'item-old-ts', 'items', NOW() - INTERVAL '3 hours', NOW() - INTERVAL '3 hours');
+    `);
+
+    // 3. Delete the domain row at NOW() (12:00)
+    await pg.exec(`DELETE FROM items WHERE id = 'item-old-ts';`);
+
+    // 4. Verify tombstone state in deleted_records
+    const tombstones = await pg.query("SELECT * FROM deleted_records WHERE record_id = 'item-old-ts' ORDER BY deleted_at DESC;");
+    assert.ok(tombstones.rows.length >= 2, 'REAL SQL: New tombstone created at current deletion time alongside old tombstone');
+    const latestDeletedAt = new Date(tombstones.rows[0].deleted_at).getTime();
+    const oldDeletedAt = new Date('2020-01-01').getTime();
+    assert.ok(latestDeletedAt > oldDeletedAt, 'REAL SQL: Latest tombstone represents current deletion time');
+
+    // 5. Attempt stale upsert with updated_at = NOW() - INTERVAL '1 hour' (11:00, predating server delete NOW() 12:00)
+    await pg.exec(`
+        INSERT INTO items (id, name, updated_at)
+        VALUES ('item-old-ts', 'Stale 11:00 Upsert', NOW() - INTERVAL '1 hour')
+        ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name;
+    `);
+
+    const checkStale = await pg.query("SELECT * FROM items WHERE id = 'item-old-ts';");
+    assert.equal(checkStale.rows.length, 0, 'REAL SQL: Stale upsert at 11:00 rejected because server deletion timestamp was updated to NOW() (12:00)');
+
+    // 6. Attempt genuinely newer recreation at NOW() + INTERVAL '1 hour' (13:00)
+    await pg.exec(`
+        INSERT INTO items (id, name, updated_at)
+        VALUES ('item-old-ts', 'Genuinely Newer Recreation 13:00', NOW() + INTERVAL '1 hour')
+        ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name;
+    `);
+
+    const checkNewer = await pg.query("SELECT * FROM items WHERE id = 'item-old-ts';");
+    assert.equal(checkNewer.rows.length, 1, 'REAL SQL: Genuinely newer recreation at 13:00 accepted post-deletion');
+    assert.equal(checkNewer.rows[0].name, 'Genuinely Newer Recreation 13:00');
+});

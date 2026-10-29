@@ -39,17 +39,19 @@ BEGIN
     -- Acquire transaction advisory lock on target record key to serialize concurrent deletion and upsert operations
     PERFORM pg_advisory_xact_lock(hashtext(TG_TABLE_NAME), hashtext(rec_id));
 
-    -- Check if a tombstone already exists in deleted_records for this record
+    del_time := NOW();
+
+    -- Check if a tombstone already exists with deleted_at >= del_time
     SELECT deleted_at INTO existing_tombstone
     FROM deleted_records
     WHERE table_name = TG_TABLE_NAME
       AND record_id = rec_id
+      AND deleted_at >= del_time
     ORDER BY deleted_at DESC
     LIMIT 1;
 
-    -- Only insert an automatic tombstone at database deletion time if no tombstone exists yet
+    -- If no tombstone exists for this deletion time (e.g. only older tombstones exist), insert new tombstone at NOW()
     IF existing_tombstone IS NULL THEN
-        del_time := NOW();
         INSERT INTO deleted_records (id, record_id, table_name, deleted_at, updated_at)
         VALUES (
             gen_random_uuid()::text,
