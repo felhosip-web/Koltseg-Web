@@ -291,40 +291,49 @@ test('REAL SQL PL/pgSQL — Scenario 7: Client Sync integration with WASM Postgr
     assert.equal(Number(localCheck[0].amount), 1000, 'Client IndexedDB reconciled to 1000 from Postgres');
 });
 
-test('REAL SQL PL/pgSQL — Scenario 8: Direct SQL DELETE automatically locks key, inserts tombstone, and rejects stale upsert', async () => {
+test('REAL SQL PL/pgSQL — Scenario 8: Direct SQL DELETE automatically locks key, creates tombstone at NOW(), and suppresses stale upsert', async () => {
     const pg = await setupRealPostgres();
 
-    // 1. Insert row at 10:00
+    // 1. Insert domain row with updated_at = NOW() - INTERVAL '2 hours'
     await pg.exec(`
         INSERT INTO items (id, name, updated_at)
-        VALUES ('item-ts-req', 'Row at 10:00', '2026-01-01 10:00:00+00');
+        VALUES ('item-autodel-sc8', 'Item To Delete', NOW() - INTERVAL '2 hours');
     `);
 
-    // 2. Insert deletion tombstone in deleted_records at 11:00 AND delete row from items
-    await pg.exec(`
-        INSERT INTO deleted_records (id, record_id, table_name, deleted_at, updated_at)
-        VALUES ('del-req-1', 'item-ts-req', 'items', '2026-01-01 11:00:00+00', '2026-01-01 11:00:00+00');
-    `);
-    await pg.exec(`DELETE FROM items WHERE id = 'item-ts-req';`);
+    const insertedRes = await pg.query("SELECT * FROM items WHERE id = 'item-autodel-sc8';");
+    assert.equal(insertedRes.rows.length, 1);
+    const previousUpdatedAt = new Date(insertedRes.rows[0].updated_at).getTime();
 
-    // 3. Attempt stale upsert with updated_at = 10:30 (after 10:00 update but before 11:00 delete)
+    // 2. Delete row using ONLY DELETE FROM items (NO manual tombstone insert)
+    await pg.exec(`DELETE FROM items WHERE id = 'item-autodel-sc8';`);
+
+    // 3. Query deleted_records and assert automatic tombstone creation
+    const tombstoneRes = await pg.query("SELECT * FROM deleted_records WHERE record_id = 'item-autodel-sc8';");
+    assert.equal(tombstoneRes.rows.length, 1, 'REAL SQL: Tombstone automatically created in deleted_records by lock_and_tombstone_on_delete() trigger');
+    assert.equal(tombstoneRes.rows[0].table_name, 'items');
+
+    // 4. Assert generated deleted_at represents server-side deletion time (NOW()), newer than row's previous updated_at
+    const tombstoneDeletedAt = new Date(tombstoneRes.rows[0].deleted_at).getTime();
+    assert.ok(tombstoneDeletedAt > previousUpdatedAt, 'REAL SQL: Generated deleted_at represents server-side deletion time (NOW()), newer than previous updated_at');
+
+    // 5. Attempt upsert with updated_at = NOW() - INTERVAL '1 hour' (predates deletion time NOW())
     await pg.exec(`
         INSERT INTO items (id, name, updated_at)
-        VALUES ('item-ts-req', 'Stale 10:30 Edit', '2026-01-01 10:30:00+00')
+        VALUES ('item-autodel-sc8', 'Stale 1h Predating Delete', NOW() - INTERVAL '1 hour')
         ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name;
     `);
 
-    const check1030 = await pg.query("SELECT * FROM items WHERE id = 'item-ts-req';");
-    assert.equal(check1030.rows.length, 0, 'REAL SQL: Stale upsert at 10:30 rejected when deletion tombstone is 11:00');
+    const checkStaleRes = await pg.query("SELECT * FROM items WHERE id = 'item-autodel-sc8';");
+    assert.equal(checkStaleRes.rows.length, 0, 'REAL SQL: Stale upsert predating deletion time is rejected');
 
-    // 4. Attempt genuinely newer recreation at 12:00 (after 11:00 delete)
+    // 6. Attempt genuinely newer recreation with updated_at = NOW() + INTERVAL '1 hour'
     await pg.exec(`
         INSERT INTO items (id, name, updated_at)
-        VALUES ('item-ts-req', 'New Recreation at 12:00', '2026-01-01 12:00:00+00')
+        VALUES ('item-autodel-sc8', 'New Recreation Post-Delete', NOW() + INTERVAL '1 hour')
         ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name;
     `);
 
-    const check1200 = await pg.query("SELECT * FROM items WHERE id = 'item-ts-req';");
-    assert.equal(check1200.rows.length, 1, 'REAL SQL: Legitimate recreation at 12:00 accepted after 11:00 tombstone');
-    assert.equal(check1200.rows[0].name, 'New Recreation at 12:00');
+    const checkRecreationRes = await pg.query("SELECT * FROM items WHERE id = 'item-autodel-sc8';");
+    assert.equal(checkRecreationRes.rows.length, 1, 'REAL SQL: Legitimate recreation post-deletion accepted');
+    assert.equal(checkRecreationRes.rows[0].name, 'New Recreation Post-Delete');
 });
