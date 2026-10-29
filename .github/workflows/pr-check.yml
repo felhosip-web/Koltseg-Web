@@ -49,6 +49,7 @@ jobs:
         if: always()
         run: |
           git checkout -f ${{ github.sha }}
+          npm ci
           echo "=== PR CHECKOUT RESTORED ==="
           git rev-parse HEAD
           git status --short
