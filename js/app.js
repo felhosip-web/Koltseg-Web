@@ -563,41 +563,31 @@ export class App {
         let items = this.items?.items || [];
         let months = this.months?.months || [];
 
-        // Öngyógyító védelem: ha bejegyzések léteznek, de a hónapok tömb üres (pl. hiányzó 'months' rekordok miatt), levezetjük a bejegyzésekből
+        // Öngyógyító védelem: kanonikus parseCellKey segítségével levezetjük a hiányzó hónapokat és kategóriákat
         if ((!months || months.length === 0) && entries.length > 0) {
             const derivedMonthSet = new Set();
             entries.forEach(e => {
-                let m = e.month;
-                if (!m && e.cellKey) {
-                    const parts = e.cellKey.split('_');
-                    if (parts.length >= 2 && /^[0-9]{4}-[0-9]{2}$/.test(parts[1])) {
-                        m = parts[1];
-                    } else if (/^[0-9]{4}-[0-9]{2}$/.test(parts[0])) {
-                        m = parts[0];
-                    }
-                }
-                if (m) derivedMonthSet.add(m);
+                const parsed = parseCellKey(e);
+                if (parsed.month) derivedMonthSet.add(parsed.month);
             });
             if (derivedMonthSet.size > 0) {
                 months = Array.from(derivedMonthSet).sort();
             }
         }
 
-        // Öngyógyító védelem: ha bejegyzések léteznek, de az kategória tömb üres
+        // Öngyógyító védelem: ha bejegyzések léteznek, de a kategória tömb üres, szintetikus átmeneti kategóriákat készítünk (NEM mentjük az DB-be)
         if ((!items || items.length === 0) && entries.length > 0) {
             const itemMap = new Map();
             entries.forEach(e => {
-                let itemId = e.itemId;
-                if (!itemId && e.cellKey) {
-                    const parts = e.cellKey.split('_');
-                    if (parts.length >= 2 && /^[0-9]{4}-[0-9]{2}$/.test(parts[1])) {
-                        itemId = parts[0];
-                    } else if (parts.length >= 2 && /^[0-9]{4}-[0-9]{2}$/.test(parts[0])) {
-                        itemId = parts[1];
-                    }
-                }
-                if (itemId && !itemMap.has(itemId)) {
-                    itemMap.set(itemId, { id: itemId, name: itemId, color: '#dbeafe', updated_at: new Date().toISOString() });
+                const parsed = parseCellKey(e);
+                if (parsed.itemId && !itemMap.has(parsed.itemId)) {
+                    itemMap.set(parsed.itemId, {
+                        id: parsed.itemId,
+                        name: parsed.itemId,
+                        color: '#dbeafe',
+                        updated_at: new Date().toISOString(),
+                        _isSynthetic: true
+                    });
                 }
             });
             if (itemMap.size > 0) {

@@ -87,30 +87,32 @@ export class BootManager {
      * @returns {Promise<void>}
      */
     async _loadAllData() {
-        try {
-            const results = await Promise.allSettled([
-                this.app.reminderManager?.load?.() || Promise.resolve(),
-                this.app.items?.load?.() || Promise.resolve(),
-                this.app.months?.load?.() || Promise.resolve(),
-                this.app.entries?.load?.() || Promise.resolve(),
-                this.app.templates?.load?.() || Promise.resolve(),
-                this.app.incomingManager?.load?.() || Promise.resolve(),
-                this.app.pluginStorage?.init?.() || Promise.resolve(),
-                this.app.pluginStorageService?.load?.() || Promise.resolve(),
-                this.app.workLogManager?.load?.() || Promise.resolve()
-            ]);
+        // 1. KRITIKUS DOMAIN ADATBETÖLTÉS: items, months, entries
+        // Ha ezek bármelyike meghiúsul, a kivétel elkapásra kerül, így a kritikus hiba látható marad.
+        await Promise.all([
+            this.app.items?.load?.() || Promise.resolve(),
+            this.app.months?.load?.() || Promise.resolve(),
+            this.app.entries?.load?.() || Promise.resolve()
+        ]);
 
-            const rejected = results.filter(r => r.status === 'rejected');
-            if (rejected.length > 0) {
-                console.warn(`[BOOT-BACKGROUND] ${rejected.length} adatbetöltési feladat meghiúsult:`, rejected.map(r => r.reason));
-            }
+        // 2. OPCIONÁLIS HÁTTÉRSZOLGÁLTATÁSOK BETÖLTÉSE: hiba esetén nem szakítják meg a fő adatok megjelenítését
+        const optionalResults = await Promise.allSettled([
+            this.app.reminderManager?.load?.() || Promise.resolve(),
+            this.app.templates?.load?.() || Promise.resolve(),
+            this.app.incomingManager?.load?.() || Promise.resolve(),
+            this.app.pluginStorage?.init?.() || Promise.resolve(),
+            this.app.pluginStorageService?.load?.() || Promise.resolve(),
+            this.app.workLogManager?.load?.() || Promise.resolve()
+        ]);
 
-            await this.app.syncService?.reconcileOutboxOnBoot?.().catch(e => {
-                console.warn('[BOOT-BACKGROUND] Hiba az outbox egyeztetése közben:', e);
-            });
-        } finally {
-            // Data loading complete
+        const rejectedOptional = optionalResults.filter(r => r.status === 'rejected');
+        if (rejectedOptional.length > 0) {
+            console.warn(`[BOOT-BACKGROUND] ${rejectedOptional.length} opcionális háttérszolgáltatás betöltése meghiúsult:`, rejectedOptional.map(r => r.reason));
         }
+
+        await this.app.syncService?.reconcileOutboxOnBoot?.().catch(e => {
+            console.warn('[BOOT-BACKGROUND] Hiba az outbox egyeztetése közben:', e);
+        });
     }
 
     /**

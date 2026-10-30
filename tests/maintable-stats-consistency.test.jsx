@@ -5,27 +5,32 @@ import { JSDOM } from 'jsdom';
 import Dexie from 'dexie';
 import 'fake-indexeddb/auto';
 import { Database, ItemManager, MonthManager, EntryManager } from '../js/oop-core.js';
-import { appService } from '../src/services/appService.js';
+import { parseCellKey } from '../js/utils/cell-key-utils.js';
 
-test('Regression Guard — getAppSnapshot() auto-derives months and items when entries exist but months/items is empty', async () => {
-    const dom = new JSDOM(`<!DOCTYPE html><html><body><div id="root"></div></body></html>`, { url: 'http://localhost/' });
+test('Critical Data Failure — entries.load() rejection is detected and throws an error', async () => {
+    const dom = new JSDOM(`<!DOCTYPE html><html><body></body></html>`, { url: 'http://localhost/' });
     globalThis.window = dom.window;
     globalThis.document = dom.window.document;
     globalThis.localStorage = dom.window.localStorage;
     globalThis.window.__DISABLE_AUTO_INIT__ = true;
 
-    const [{ App }] = await Promise.all([
-        import('../js/app.js')
+    const [{ App }, { BootManager }] = await Promise.all([
+        import('../js/app.js'),
+        import('../js/boot-manager.js')
     ]);
 
     const db = new Database();
     db._enableMockDb();
 
     const app = Object.create(App.prototype);
-    const mockSyncService = { push: async () => {} };
-    const items = new ItemManager(db, mockSyncService);
-    const months = new MonthManager(db, mockSyncService);
-    const entries = new EntryManager(db, mockSyncService);
+    const mockSync = { push: async () => {} };
+    const items = new ItemManager(db, mockSync);
+    const months = new MonthManager(db, mockSync);
+    const entries = new EntryManager(db, mockSync);
+
+    entries.load = async () => {
+        throw new Error('IndexedDB corrupt entries read error');
+    };
 
     Object.assign(app, {
         db,
@@ -36,43 +41,43 @@ test('Regression Guard — getAppSnapshot() auto-derives months and items when e
         isBooted: true
     });
 
-    entries.entries = [
-        { id: 'e1', itemId: 'item_1', month: '2026-08', cellKey: 'item_1_2026-08', amount: 15000, currency: 'HUF' },
-        { id: 'e2', itemId: 'item_2', month: '2026-09', cellKey: 'item_2_2026-09', amount: 25000, currency: 'HUF' }
-    ];
-    items.items = [];
-    months.months = [];
+    const bootManager = new BootManager(app);
 
-    const snapshot = app.getAppSnapshot();
-
-    assert.equal(snapshot.entries.length, 2, 'Entries preserved in snapshot');
-    assert.deepEqual(snapshot.months, ['2026-08', '2026-09'], 'Months auto-derived from entries when months array was empty');
-    assert.equal(snapshot.items.length, 2, 'Items auto-derived from entries when items array was empty');
-    assert.equal(snapshot.items[0].id, 'item_1');
-    assert.equal(snapshot.items[1].id, 'item_2');
+    await assert.rejects(
+        async () => {
+            await bootManager._loadAllData();
+        },
+        /IndexedDB corrupt entries read error/,
+        'Critical failure in entries.load() must throw and not be silently suppressed'
+    );
 
     dom.window.close();
 });
 
-test('Regression Guard — Genuinely empty database preserves empty snapshot', async () => {
-    const dom = new JSDOM(`<!DOCTYPE html><html><body><div id="root"></div></body></html>`, { url: 'http://localhost/' });
+test('Critical Data Failure — items.load() rejection is detected and throws an error', async () => {
+    const dom = new JSDOM(`<!DOCTYPE html><html><body></body></html>`, { url: 'http://localhost/' });
     globalThis.window = dom.window;
     globalThis.document = dom.window.document;
     globalThis.localStorage = dom.window.localStorage;
     globalThis.window.__DISABLE_AUTO_INIT__ = true;
 
-    const [{ App }] = await Promise.all([
-        import('../js/app.js')
+    const [{ App }, { BootManager }] = await Promise.all([
+        import('../js/app.js'),
+        import('../js/boot-manager.js')
     ]);
 
     const db = new Database();
     db._enableMockDb();
 
     const app = Object.create(App.prototype);
-    const mockSyncService = { push: async () => {} };
-    const items = new ItemManager(db, mockSyncService);
-    const months = new MonthManager(db, mockSyncService);
-    const entries = new EntryManager(db, mockSyncService);
+    const mockSync = { push: async () => {} };
+    const items = new ItemManager(db, mockSync);
+    const months = new MonthManager(db, mockSync);
+    const entries = new EntryManager(db, mockSync);
+
+    items.load = async () => {
+        throw new Error('IndexedDB items read error');
+    };
 
     Object.assign(app, {
         db,
@@ -83,21 +88,21 @@ test('Regression Guard — Genuinely empty database preserves empty snapshot', a
         isBooted: true
     });
 
-    entries.entries = [];
-    items.items = [];
-    months.months = [];
+    const bootManager = new BootManager(app);
 
-    const snapshot = app.getAppSnapshot();
-
-    assert.equal(snapshot.entries.length, 0);
-    assert.equal(snapshot.items.length, 0);
-    assert.equal(snapshot.months.length, 0);
+    await assert.rejects(
+        async () => {
+            await bootManager._loadAllData();
+        },
+        /IndexedDB items read error/,
+        'Critical failure in items.load() must throw and not be silently suppressed'
+    );
 
     dom.window.close();
 });
 
-test('BootManager — updateReactStore() is guaranteed to execute in finally block even if background tasks fail', async () => {
-    const dom = new JSDOM(`<!DOCTYPE html><html><body><div id="root"></div></body></html>`, { url: 'http://localhost/' });
+test('Optional Service Resilience — failure in optional workLogManager or cloud sync does not prevent publishing loaded local data', async () => {
+    const dom = new JSDOM(`<!DOCTYPE html><html><body></body></html>`, { url: 'http://localhost/' });
     globalThis.window = dom.window;
     globalThis.document = dom.window.document;
     globalThis.localStorage = dom.window.localStorage;
@@ -113,16 +118,21 @@ test('BootManager — updateReactStore() is guaranteed to execute in finally blo
 
     let reactStoreUpdatedCount = 0;
     const app = Object.create(App.prototype);
-    const mockSyncService = { push: async () => {} };
-    const items = new ItemManager(db, mockSyncService);
-    const months = new MonthManager(db, mockSyncService);
-    const entries = new EntryManager(db, mockSyncService);
+    const mockSync = { push: async () => {} };
+    const items = new ItemManager(db, mockSync);
+    const months = new MonthManager(db, mockSync);
+    const entries = new EntryManager(db, mockSync);
 
     Object.assign(app, {
         db,
         items,
         months,
         entries,
+        workLogManager: {
+            load: async () => {
+                throw new Error('Optional workLogManager failure');
+            }
+        },
         config: { eurRate: 400 },
         isBooted: true,
         updateReactStore: () => { reactStoreUpdatedCount++; },
@@ -138,14 +148,89 @@ test('BootManager — updateReactStore() is guaranteed to execute in finally blo
         throw new Error('Simulated cloud service failure during boot');
     };
 
+    // Should load critical data successfully despite optional workLogManager failure
     await bootManager._runBackgroundBootTasks();
 
-    assert.ok(reactStoreUpdatedCount > 0, 'updateReactStore() was executed in finally block despite cloud service failure');
+    assert.ok(reactStoreUpdatedCount > 0, 'updateReactStore() was executed in finally block publishing local data despite optional service failure');
 
     dom.window.close();
 });
 
-test('MainTable — renders table rows consistently with StatsTab when entries exist without explicit months store records', async () => {
+test('cellKey Parsing — parseCellKey() consistently parses standard and legacy cellKey formats', () => {
+    // Standard format: itemId_month
+    const std1 = parseCellKey('catX_2026-08');
+    assert.equal(std1.itemId, 'catX');
+    assert.equal(std1.month, '2026-08');
+
+    // Standard format with timestamp: itemId_month_timestamp
+    const std2 = parseCellKey('catX_2026-08_1700000000');
+    assert.equal(std2.itemId, 'catX');
+    assert.equal(std2.month, '2026-08');
+
+    // Legacy format: month_itemId_timestamp
+    const leg = parseCellKey('2026-08_catY_1700000000');
+    assert.equal(leg.itemId, 'catY');
+    assert.equal(leg.month, '2026-08');
+
+    // Object entry with cellKey fallback
+    const obj = parseCellKey({ cellKey: '2026-09_catZ_123' });
+    assert.equal(obj.itemId, 'catZ');
+    assert.equal(obj.month, '2026-09');
+});
+
+test('Snapshot & Synthetic Guard — getAppSnapshot() auto-derives months and items marked as _isSynthetic without persisting them to IndexedDB', async () => {
+    const dom = new JSDOM(`<!DOCTYPE html><html><body></body></html>`, { url: 'http://localhost/' });
+    globalThis.window = dom.window;
+    globalThis.document = dom.window.document;
+    globalThis.localStorage = dom.window.localStorage;
+    globalThis.window.__DISABLE_AUTO_INIT__ = true;
+
+    const [{ App }] = await Promise.all([
+        import('../js/app.js')
+    ]);
+
+    const db = new Database();
+    db._enableMockDb();
+
+    const app = Object.create(App.prototype);
+    const mockSync = { push: async () => {} };
+    const items = new ItemManager(db, mockSync);
+    const months = new MonthManager(db, mockSync);
+    const entries = new EntryManager(db, mockSync);
+
+    Object.assign(app, {
+        db,
+        items,
+        months,
+        entries,
+        config: { eurRate: 400 },
+        isBooted: true
+    });
+
+    // Entries with standard and legacy cellKey formats
+    entries.entries = [
+        { id: 'e1', cellKey: 'itemA_2026-08_100', amount: 12000, currency: 'HUF' },
+        { id: 'e2', cellKey: '2026-09_itemB_200', amount: 18000, currency: 'HUF' }
+    ];
+    items.items = [];
+    months.months = [];
+
+    const snapshot = app.getAppSnapshot();
+
+    assert.equal(snapshot.entries.length, 2);
+    assert.deepEqual(snapshot.months, ['2026-08', '2026-09']);
+    assert.equal(snapshot.items.length, 2);
+    assert.equal(snapshot.items[0]._isSynthetic, true, 'Synthetic category marked with transient _isSynthetic flag');
+    assert.equal(snapshot.items[1]._isSynthetic, true);
+
+    // Verify IndexedDB items store remains empty (synthetic categories were NOT persisted)
+    const storedItemsInDb = await db.getAll('items');
+    assert.equal(storedItemsInDb.length, 0, 'Synthetic categories MUST NOT be persisted to IndexedDB store');
+
+    dom.window.close();
+});
+
+test('MainTable — renders correct category/month intersections when entries exist and preserves genuinely empty state when database is empty', async () => {
     const dom = new JSDOM(`<!DOCTYPE html><html><body><div id="root"></div></body></html>`, { url: 'http://localhost/' });
     globalThis.window = dom.window;
     globalThis.document = dom.window.document;
@@ -159,7 +244,8 @@ test('MainTable — renders table rows consistently with StatsTab when entries e
         import('../src/components/table/MainTable.jsx')
     ]);
 
-    const mockSnapshot = {
+    // 1. Populated entries render table rows
+    const mockPopulatedSnapshot = {
         entries: [
             { id: 'e1', itemId: 'cat_1', month: '2026-08', cellKey: 'cat_1_2026-08', amount: 50000, currency: 'HUF' }
         ],
@@ -168,7 +254,7 @@ test('MainTable — renders table rows consistently with StatsTab when entries e
         eurRate: 400
     };
 
-    useAppStore.getState().setSnapshot(mockSnapshot);
+    useAppStore.getState().setSnapshot(mockPopulatedSnapshot);
 
     const root = createRoot(document.getElementById('root'));
     const { act } = React;
@@ -178,9 +264,16 @@ test('MainTable — renders table rows consistently with StatsTab when entries e
     });
 
     const tableEl = document.getElementById('vtTable');
-    assert.ok(tableEl, 'MainTable vtTable element should exist');
-    assert.ok(document.body.innerHTML.includes('Élelmiszer'), 'MainTable should render category row for Élelmiszer');
-    assert.ok(document.body.innerHTML.includes('2026-08'), 'MainTable should render auto-derived month header 2026-08');
+    assert.ok(tableEl, 'MainTable vtTable element should exist when entries exist');
+    assert.ok(document.body.innerHTML.includes('Élelmiszer'), 'MainTable renders Élelmiszer row');
+    assert.ok(document.body.innerHTML.includes('50') && document.body.innerHTML.includes('000 Ft'), 'MainTable renders entry amount cell 50 000 Ft');
+
+    // 2. Genuinely empty snapshot renders empty state banner
+    await act(async () => {
+        useAppStore.getState().setSnapshot({ entries: [], items: [], months: [], eurRate: 400 });
+    });
+
+    assert.ok(document.body.innerHTML.includes('Nincs még adat'), 'Genuinely empty state renders Nincs még adat banner');
 
     await act(async () => {
         root.unmount();

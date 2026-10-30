@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { CategoryIcons } from '../../../js/category-icons.js';
+import { parseCellKey } from '../../../js/utils/cell-key-utils.js';
 import { useAppStore } from '../../store/useAppStore.js';
 import { appService } from '../../services/appService.js';
 
@@ -25,36 +26,28 @@ export default function MainTable() {
     let items = snapshot?.items || [];
     let months = snapshot?.months || [];
 
-    // Ha a hónapok tömb üres, de léteznek bejegyzések, levezetjük a hónapokat a bejegyzésekből
+    // Ha a hónapok tömb üres, de léteznek bejegyzések, kanonikus parseCellKey segítségével levezetjük a hónapokat
     if ((!months || months.length === 0) && entries.length > 0) {
         const derivedMonths = Array.from(new Set(
-            entries.map(e => {
-                if (e.month) return e.month;
-                if (e.cellKey) {
-                    const parts = e.cellKey.split('_');
-                    if (parts.length >= 2 && /^[0-9]{4}-[0-9]{2}$/.test(parts[1])) return parts[1];
-                    if (/^[0-9]{4}-[0-9]{2}$/.test(parts[0])) return parts[0];
-                }
-                return null;
-            }).filter(Boolean)
+            entries.map(e => parseCellKey(e).month).filter(Boolean)
         )).sort();
         if (derivedMonths.length > 0) {
             months = derivedMonths;
         }
     }
 
-    // Ha az kategóriák tömb üres, de léteznek bejegyzések, levezetjük a kategóriákat a bejegyzésekből
+    // Ha a kategóriák tömb üres, de léteznek bejegyzések, kanonikus parseCellKey segítségével szintetikus átmeneti nézetet képezünk
     if ((!items || items.length === 0) && entries.length > 0) {
         const derivedItemMap = new Map();
         entries.forEach(e => {
-            let itemId = e.itemId;
-            if (!itemId && e.cellKey) {
-                const parts = e.cellKey.split('_');
-                if (parts.length >= 2 && /^[0-9]{4}-[0-9]{2}$/.test(parts[1])) itemId = parts[0];
-                else if (parts.length >= 2 && /^[0-9]{4}-[0-9]{2}$/.test(parts[0])) itemId = parts[1];
-            }
-            if (itemId && !derivedItemMap.has(itemId)) {
-                derivedItemMap.set(itemId, { id: itemId, name: itemId, color: '#dbeafe' });
+            const parsed = parseCellKey(e);
+            if (parsed.itemId && !derivedItemMap.has(parsed.itemId)) {
+                derivedItemMap.set(parsed.itemId, {
+                    id: parsed.itemId,
+                    name: parsed.itemId,
+                    color: '#dbeafe',
+                    _isSynthetic: true
+                });
             }
         });
         if (derivedItemMap.size > 0) {
@@ -130,6 +123,10 @@ function CategoryCell({ item }) {
             data-itemid={item.id} data-itemname={item.name}
             onDoubleClick={async (e) => {
                 if (e.target.closest('button')) return;
+                if (item._isSynthetic) {
+                    appService.showToast('Ez egy levezetett ideiglenes kategória. Hozz létre valódi kategóriát a szerkesztéshez.', 'info');
+                    return;
+                }
                 const action = await appService.showCategoryActionsModal(item.name);
                 if (action === 'rename') {
                     document.dispatchEvent(new CustomEvent('hmi-input-open', { detail: { type: 'rename', itemId: item.id, currentName: item.name } }));
