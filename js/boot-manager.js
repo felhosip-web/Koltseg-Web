@@ -73,6 +73,7 @@ export class BootManager {
 
         } catch (error) {
             console.error('[BOOT-BACKGROUND] Hiba a háttérbetöltés során:', error);
+            this.app._bootError = error.message || 'Adatbetöltési hiba';
             this.app.hmiNotif?.showToast('Az adatok betöltése nem sikerült!', 'error');
             this.app.setSystemStatus?.('Adatbetöltési hiba', true);
         } finally {

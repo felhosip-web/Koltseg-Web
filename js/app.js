@@ -608,6 +608,8 @@ export class App {
             fuelLogs: this.fuelLogs || safeJsonParse('plugin_fuel_logs', []),
             works: this.workLogManager?.works || [],
             isBooted: this.isBooted,
+            isBootError: Boolean(this._bootError),
+            bootErrorMessage: this._bootError || null,
             timeTracker: timeTrackerState,
             lastSyncTime: this.syncService?.lastSyncTime || null,
             dayjs: window.dayjs

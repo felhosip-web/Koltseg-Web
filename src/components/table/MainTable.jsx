@@ -57,6 +57,15 @@ export default function MainTable() {
 
     const hasData = items.length > 0 && months.length > 0;
 
+    if (snapshot?.isBootError) {
+        return (
+            <div id="mainTableContainer" className="bg-white rounded-2xl shadow-xl border border-red-200 overflow-visible p-8 text-center">
+                <div className="text-xl font-bold text-red-600 mb-2">⚠️ Adatbetöltési hiba</div>
+                <div className="text-gray-500 mb-4">Nem sikerült betölteni a helyi adatbázis rekordjait. Kérjük, frissítsd az oldalt!</div>
+            </div>
+        );
+    }
+
     if (!snapshot || !hasData) {
         return (
             <div id="mainTableContainer" className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-visible p-0 md:p-2">
@@ -149,8 +158,8 @@ function CategoryCell({ item }) {
 function DataCell({ itemId, month, entries, eurRate }) {
     const cellBaseKey = `${itemId}_${month}`;
     const cellEntries = entries.filter(e => {
-        if (!e.cellKey) return false;
-        return e.cellKey === cellBaseKey || e.cellKey.startsWith(cellBaseKey + '_');
+        const parsed = parseCellKey(e);
+        return parsed.itemId === itemId && parsed.month === month;
     });
 
     let huf = 0, eur = 0;
