@@ -1,6 +1,8 @@
 // js/cell-modal-controller.js
 // Cell Modal Controller - Rész-tételek kezelése egy cellában (2026-os javított verzió)
 
+import { parseCellKey } from './utils/cell-key-utils.js';
+
 export class CellModalController {
     /**
      * Konstruktor - Cell Modal vezérlő inicializálása
@@ -267,6 +269,15 @@ export class CellModalController {
         const stornoCheckbox = document.getElementById('cellIsStorno');
         const isStorno = stornoCheckbox ? stornoCheckbox.checked : false;
 
+        const parsedCell = parseCellKey(this.currentCellBaseKey);
+        if (!parsedCell.itemId || !parsedCell.month) {
+            this.app.hmiNotif?.showToast('Érvénytelen cella azonosító!', 'error');
+            return;
+        }
+
+        const itemId = parsedCell.itemId;
+        const month = parsedCell.month;
+
         let entryData;
 
         if (this.editingEntryId !== null) {
@@ -275,15 +286,15 @@ export class CellModalController {
             entryData = {
                 id: this.editingEntryId,
                 cellKey: oldEntry ? oldEntry.cellKey : `${this.currentCellBaseKey}_${Date.now()}`,
-                itemId: this.currentCellBaseKey.split('_')[0],
-                month: this.currentCellBaseKey.split('_')[1],
+                itemId,
+                month,
                 amount,
                 currency,
                 paymentMethod,
                 note,
                 color: this._normalizeColor(this.selectedColor),
                 isStorno,
-                timestamp: new Date().toISOString(),
+                timestamp: oldEntry?.timestamp || new Date().toISOString(),
                 updated_at: new Date().toISOString()
             };
 
@@ -292,8 +303,8 @@ export class CellModalController {
             // Új tétel
             entryData = {
                 cellKey: `${this.currentCellBaseKey}_${Date.now()}`,
-                itemId: this.currentCellBaseKey.split('_')[0],
-                month: this.currentCellBaseKey.split('_')[1],
+                itemId,
+                month,
                 amount,
                 currency,
                 paymentMethod,

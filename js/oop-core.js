@@ -375,20 +375,28 @@ export class Database {
 
     async getByCellKey(cellKeyPrefix) {
         return new Promise((resolve) => {
+            const target = parseCellKey(cellKeyPrefix);
+            if (!target.itemId || !target.month) return resolve([]);
             if (this.isMock) {
-                const results = Object.values(this.mockStore.entries).filter(entry => 
-                    entry && entry.cellKey && entry.cellKey.startsWith(cellKeyPrefix)
-                );
+                const results = Object.values(this.mockStore.entries).filter(entry => {
+                    const parsed = parseCellKey(entry);
+                    return parsed.itemId === target.itemId && parsed.month === target.month;
+                });
                 return resolve(results);
             }
             if (!this.db) return resolve([]);
             try {
                 const tx = this.db.transaction('entries', 'readonly');
                 const store = tx.objectStore('entries');
-                const index = store.index('cellKey');
-                const range = IDBKeyRange.bound(cellKeyPrefix, cellKeyPrefix + '\uffff');
-                const req = index.getAll(range);
-                req.onsuccess = () => resolve(req.result || []);
+                const req = store.getAll();
+                req.onsuccess = () => {
+                    const all = req.result || [];
+                    const matched = all.filter(entry => {
+                        const parsed = parseCellKey(entry);
+                        return parsed.itemId === target.itemId && parsed.month === target.month;
+                    });
+                    resolve(matched);
+                };
                 req.onerror = () => resolve([]);
             } catch (e) {
                 console.warn('[DB] getByCellKey hiba:', e);
@@ -1030,10 +1038,12 @@ export class EntryManager {
     }
     
     async getByCellKey(cellKeyPrefix) {
-        return this.entries.filter(e => 
-            e.cellKey === cellKeyPrefix || 
-            (e.cellKey && e.cellKey.startsWith(cellKeyPrefix + '_'))
-        );
+        const target = parseCellKey(cellKeyPrefix);
+        if (!target.itemId || !target.month) return [];
+        return this.entries.filter(e => {
+            const parsed = parseCellKey(e);
+            return parsed.itemId === target.itemId && parsed.month === target.month;
+        });
     }
     
     async saveEntry(entry) {
@@ -1045,15 +1055,9 @@ export class EntryManager {
             if (entry.itemId && entry.month && !entry.cellKey) {
                 entry.cellKey = `${entry.itemId}_${entry.month}_${Date.now()}`;
             } else if (entry.cellKey && (!entry.itemId || !entry.month)) {
-                const parts = entry.cellKey.split('_');
-                let tempItemId = parts[0];
-                let tempMonth = parts[1];
-                if (!/^[0-9]+$/.test(tempItemId) && parts.length >= 2 && /^[0-9]{4}-[0-9]{2}$/.test(parts[0])) {
-                    tempMonth = parts[0];
-                    tempItemId = parts[1];
-                }
-                if (!entry.itemId) entry.itemId = tempItemId;
-                if (!entry.month) entry.month = tempMonth;
+                const parsed = parseCellKey(entry);
+                if (!entry.itemId) entry.itemId = parsed.itemId;
+                if (!entry.month) entry.month = parsed.month;
             }
             await this.db.save('entries', entry);
 
