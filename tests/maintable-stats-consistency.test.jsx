@@ -354,3 +354,86 @@ test('8. Existing successful empty-state behavior remains unchanged when databas
 
     dom.window.close();
 });
+
+test('9. Derived-month horizontal lazy loading and pagination in MainTable', async () => {
+    const dom = new JSDOM(`<!DOCTYPE html><html><body><div id="root"></div></body></html>`, { url: 'http://localhost/' });
+    globalThis.window = dom.window;
+    globalThis.document = dom.window.document;
+    globalThis.localStorage = dom.window.localStorage;
+    globalThis.window.Dexie = Dexie;
+    globalThis.window.__DISABLE_AUTO_INIT__ = true;
+
+    const [{ createRoot }, { useAppStore }, { default: MainTable }] = await Promise.all([
+        import('react-dom/client'),
+        import('../src/store/useAppStore.js'),
+        import('../src/components/table/MainTable.jsx')
+    ]);
+
+    // Create 20 distinct months of entries: 2025-01 through 2026-08
+    const mockEntries = [];
+    const generatedMonths = [];
+    for (let yr = 2025; yr <= 2026; yr++) {
+        for (let m = 1; m <= 12; m++) {
+            if (yr === 2026 && m > 8) break;
+            const monthStr = `${yr}-${String(m).padStart(2, '0')}`;
+            generatedMonths.push(monthStr);
+            mockEntries.push({
+                id: `entry_${monthStr}`,
+                itemId: 'catPagination',
+                month: monthStr,
+                cellKey: `catPagination_${monthStr}`,
+                amount: 1000 * m,
+                currency: 'HUF'
+            });
+        }
+    }
+
+    assert.equal(generatedMonths.length, 20, '20 distinct months generated');
+
+    // Empty snapshot.months: months MUST be derived from entries
+    const mockSnapshot = {
+        entries: mockEntries,
+        items: [{ id: 'catPagination', name: 'Pagination Test' }],
+        months: [], // empty!
+        eurRate: 400
+    };
+
+    useAppStore.getState().setSnapshot(mockSnapshot);
+
+    const root = createRoot(document.getElementById('root'));
+    const { act } = React;
+
+    await act(async () => {
+        root.render(React.createElement(MainTable, null));
+    });
+
+    // Initial render should show the initial limit of 15 months
+    let monthHeaders = document.querySelectorAll('th.dblclick-month-purge');
+    assert.equal(monthHeaders.length, 15, 'Initially exactly 15 derived months are visible');
+    assert.ok(document.body.innerHTML.includes(generatedMonths[0]), 'First month is visible');
+    assert.ok(document.body.innerHTML.includes(generatedMonths[14]), '15th month is visible');
+    assert.ok(!document.body.innerHTML.includes(generatedMonths[19]), '20th month is not yet visible before scroll');
+
+    // Simulate scrolling near the horizontal end on #vtWrapper
+    const wrapper = document.getElementById('vtWrapper');
+    assert.ok(wrapper, 'Wrapper element #vtWrapper exists');
+
+    Object.defineProperty(wrapper, 'scrollWidth', { value: 2000, configurable: true });
+    Object.defineProperty(wrapper, 'clientWidth', { value: 1000, configurable: true });
+    Object.defineProperty(wrapper, 'scrollLeft', { value: 700, configurable: true }); // 700 + 1000 = 1700 > 2000 - 400
+
+    await act(async () => {
+        wrapper.dispatchEvent(new dom.window.Event('scroll'));
+    });
+
+    // After scroll, loadedMonths increments from 15 to min(15 + 8, 20) = 20
+    monthHeaders = document.querySelectorAll('th.dblclick-month-purge');
+    assert.equal(monthHeaders.length, 20, 'After horizontal scroll, all 20 derived months become visible');
+    assert.ok(document.body.innerHTML.includes(generatedMonths[19]), '20th month is now visible in the DOM');
+
+    await act(async () => {
+        root.unmount();
+    });
+
+    dom.window.close();
+});

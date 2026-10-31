@@ -10,31 +10,35 @@ export default function MainTable() {
     const [loadedMonths, setLoadedMonths] = useState(15);
     const wrapperRef = useRef(null);
 
+    const entries = snapshot?.entries || [];
+    let items = snapshot?.items || [];
+    const rawMonths = snapshot?.months || [];
+
+    // Ha a hónapok tömb üres, de léteznek bejegyzések, kanonikus parseCellKey segítségével levezetjük a hónapokat
+    const months = React.useMemo(() => {
+        if (rawMonths && rawMonths.length > 0) {
+            return rawMonths;
+        }
+        if (entries.length > 0) {
+            const derived = Array.from(new Set(
+                entries.map(e => parseCellKey(e).month).filter(Boolean)
+            )).sort();
+            if (derived.length > 0) return derived;
+        }
+        return [];
+    }, [rawMonths, entries]);
+
     const handleScroll = useCallback(() => {
         if (!wrapperRef.current || !snapshot) return;
         const wrapper = wrapperRef.current;
         if (wrapper.scrollLeft + wrapper.clientWidth > wrapper.scrollWidth - 400) {
             setLoadedMonths(prev => {
-                const max = snapshot.months.length;
+                const max = months.length;
                 if (prev >= max) return prev;
                 return Math.min(prev + 8, max);
             });
         }
-    }, [snapshot]);
-
-    const entries = snapshot?.entries || [];
-    let items = snapshot?.items || [];
-    let months = snapshot?.months || [];
-
-    // Ha a hónapok tömb üres, de léteznek bejegyzések, kanonikus parseCellKey segítségével levezetjük a hónapokat
-    if ((!months || months.length === 0) && entries.length > 0) {
-        const derivedMonths = Array.from(new Set(
-            entries.map(e => parseCellKey(e).month).filter(Boolean)
-        )).sort();
-        if (derivedMonths.length > 0) {
-            months = derivedMonths;
-        }
-    }
+    }, [snapshot, months]);
 
     // Ha a kategóriák tömb üres, de léteznek bejegyzések, kanonikus parseCellKey segítségével szintetikus átmeneti nézetet képezünk
     if ((!items || items.length === 0) && entries.length > 0) {
