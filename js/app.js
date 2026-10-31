@@ -559,10 +559,46 @@ export class App {
             calendarEvents = safeJsonParse('calendar_events', []);
         }
 
+        const entries = this.entries?.entries || [];
+        let items = this.items?.items || [];
+        let months = this.months?.months || [];
+
+        // Öngyógyító védelem: kanonikus parseCellKey segítségével levezetjük a hiányzó hónapokat és kategóriákat
+        if ((!months || months.length === 0) && entries.length > 0) {
+            const derivedMonthSet = new Set();
+            entries.forEach(e => {
+                const parsed = parseCellKey(e);
+                if (parsed.month) derivedMonthSet.add(parsed.month);
+            });
+            if (derivedMonthSet.size > 0) {
+                months = Array.from(derivedMonthSet).sort();
+            }
+        }
+
+        // Öngyógyító védelem: ha bejegyzések léteznek, de a kategória tömb üres, szintetikus átmeneti kategóriákat készítünk (NEM mentjük az DB-be)
+        if ((!items || items.length === 0) && entries.length > 0) {
+            const itemMap = new Map();
+            entries.forEach(e => {
+                const parsed = parseCellKey(e);
+                if (parsed.itemId && !itemMap.has(parsed.itemId)) {
+                    itemMap.set(parsed.itemId, {
+                        id: parsed.itemId,
+                        name: parsed.itemId,
+                        color: '#dbeafe',
+                        updated_at: new Date().toISOString(),
+                        _isSynthetic: true
+                    });
+                }
+            });
+            if (itemMap.size > 0) {
+                items = Array.from(itemMap.values());
+            }
+        }
+
         return {
-            entries: this.entries?.entries || [],
-            items: this.items?.items || [],
-            months: this.months?.months || [],
+            entries: entries,
+            items: items,
+            months: months,
             incomings: this.incomingManager?.incomings || [],
             eurRate: this.config?.eurRate || 400,
             reminders: this.reminderManager?.reminders || [],
@@ -572,6 +608,8 @@ export class App {
             fuelLogs: this.fuelLogs || safeJsonParse('plugin_fuel_logs', []),
             works: this.workLogManager?.works || [],
             isBooted: this.isBooted,
+            isBootError: Boolean(this._bootError),
+            bootErrorMessage: this._bootError || null,
             timeTracker: timeTrackerState,
             lastSyncTime: this.syncService?.lastSyncTime || null,
             dayjs: window.dayjs

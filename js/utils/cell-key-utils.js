@@ -49,16 +49,36 @@ function parseCellKeyString(cellKey) {
     const parts = cellKey.split('_');
     if (parts.length < 2) return { itemId: null, month: null };
 
-    let itemId = parts[0];
-    let month = parts[1];
+    const monthRegex = /^[0-9]{4}-[0-9]{2}$/;
 
-    // Check for legacy format: YYYY-MM_itemId...
-    if (!/^[0-9]+$/.test(itemId) && /^[0-9]{4}-[0-9]{2}$/.test(parts[0])) {
-        month = parts[0];
-        itemId = parts[1];
+    // 1. Legacy format: YYYY-MM_itemId or YYYY-MM_itemId_timestamp
+    if (monthRegex.test(parts[0])) {
+        const month = parts[0];
+        if (parts.length > 2 && /^[0-9]+$/.test(parts[parts.length - 1])) {
+            const itemId = parts.slice(1, -1).join('_');
+            return { itemId: itemId || null, month };
+        } else {
+            const itemId = parts.slice(1).join('_');
+            return { itemId: itemId || null, month };
+        }
     }
 
-    return { itemId, month };
+    // 2. Standard format: itemId_YYYY-MM or itemId_YYYY-MM_timestamp (supporting itemIds containing underscores)
+    let monthIdx = -1;
+    for (let i = 0; i < parts.length; i++) {
+        if (monthRegex.test(parts[i])) {
+            monthIdx = i;
+            break;
+        }
+    }
+
+    if (monthIdx !== -1) {
+        const month = parts[monthIdx];
+        const itemId = parts.slice(0, monthIdx).join('_');
+        return { itemId: itemId || null, month };
+    }
+
+    return { itemId: parts[0] || null, month: parts[1] || null };
 }
 
 /**
