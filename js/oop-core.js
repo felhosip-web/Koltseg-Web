@@ -1018,15 +1018,20 @@ export class EntryManager {
     async load() { 
         try {
             const data = await this.db.getAll('entries');
-            // Normalize cellKey to explicit itemId and month fields and vice versa
+            // Normalize cellKey and coordinates: explicit valid itemId and month are authoritative
+            const monthRegex = /^[0-9]{4}-[0-9]{2}$/;
             data.forEach(e => {
-                if (!e.cellKey && e.itemId && e.month) {
-                    e.cellKey = `${e.itemId}_${e.month}`;
-                }
-                if (e.cellKey && (!e.itemId || !e.month)) {
-                    const parsed = parseCellKey(e);
-                    if (!e.itemId) e.itemId = parsed.itemId;
-                    if (!e.month) e.month = parsed.month;
+                const hasValidExplicit = e.itemId && typeof e.itemId === 'string' && e.month && monthRegex.test(e.month);
+                if (hasValidExplicit) {
+                    // Explicit coordinates are authoritative. Keep cellKey aligned if missing or if it doesn't match
+                    if (!e.cellKey) {
+                        e.cellKey = `${e.itemId}_${e.month}`;
+                    }
+                } else if (e.cellKey) {
+                    // Derive missing or invalid explicit coordinates from cellKey
+                    const parsed = parseCellKey(e.cellKey);
+                    if (!e.itemId && parsed.itemId) e.itemId = parsed.itemId;
+                    if ((!e.month || !monthRegex.test(e.month)) && parsed.month) e.month = parsed.month;
                 }
             });
             this.entries = data;
@@ -1051,13 +1056,17 @@ export class EntryManager {
             if (!entry.id) entry.id = generateUUID();
             if (!entry.updated_at) entry.updated_at = new Date().toISOString();
 
-            // Explicit field generation
-            if (entry.itemId && entry.month && !entry.cellKey) {
-                entry.cellKey = `${entry.itemId}_${entry.month}_${Date.now()}`;
-            } else if (entry.cellKey && (!entry.itemId || !entry.month)) {
-                const parsed = parseCellKey(entry);
-                if (!entry.itemId) entry.itemId = parsed.itemId;
-                if (!entry.month) entry.month = parsed.month;
+            // Canonical coordinate resolution: valid explicit itemId and month are authoritative
+            const monthRegex = /^[0-9]{4}-[0-9]{2}$/;
+            const hasValidExplicit = entry.itemId && typeof entry.itemId === 'string' && entry.month && monthRegex.test(entry.month);
+            if (hasValidExplicit) {
+                if (!entry.cellKey) {
+                    entry.cellKey = `${entry.itemId}_${entry.month}_${Date.now()}`;
+                }
+            } else if (entry.cellKey) {
+                const parsed = parseCellKey(entry.cellKey);
+                if (!entry.itemId && parsed.itemId) entry.itemId = parsed.itemId;
+                if ((!entry.month || !monthRegex.test(entry.month)) && parsed.month) entry.month = parsed.month;
             }
             await this.db.save('entries', entry);
 

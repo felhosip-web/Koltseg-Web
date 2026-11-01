@@ -54,6 +54,28 @@ export default function MainTable() {
         }
     }, [months.length, loadedMonths]);
 
+    const visibleMonths = React.useMemo(() => {
+        return months.slice(0, loadedMonths);
+    }, [months, loadedMonths]);
+
+    // Build an indexed lookup Map keyed by itemId + month, recomputed only when entries changes
+    const cellEntriesMap = React.useMemo(() => {
+        const map = new Map();
+        entries.forEach(e => {
+            const parsed = parseCellKey(e);
+            if (parsed.itemId && parsed.month) {
+                const key = `${parsed.itemId}_${parsed.month}`;
+                let list = map.get(key);
+                if (!list) {
+                    list = [];
+                    map.set(key, list);
+                }
+                list.push(e);
+            }
+        });
+        return map;
+    }, [entries]);
+
     // Ha a kategóriák tömb üres, de léteznek bejegyzések, kanonikus parseCellKey segítségével szintetikus átmeneti nézetet képezünk
     if ((!items || items.length === 0) && entries.length > 0) {
         const derivedItemMap = new Map();
@@ -100,8 +122,6 @@ export default function MainTable() {
         );
     }
 
-    const visibleMonths = months.slice(0, loadedMonths);
-
     return (
         <div id="mainTableContainer" className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-visible p-0 md:p-2">
             <div id="vtWrapper" ref={wrapperRef} onScroll={handleScroll} className="overflow-auto rounded-3xl border border-gray-200 bg-white shadow-sm relative" style={{ maxHeight: '76vh', contain: 'layout paint' }}>
@@ -118,7 +138,7 @@ export default function MainTable() {
                     </thead>
                     <tbody id="vtTbody">
                         {items.map(item => (
-                            <TableRow key={item.id} item={item} visibleMonths={visibleMonths} entries={entries} eurRate={snapshot.eurRate} />
+                            <TableRow key={item.id} item={item} visibleMonths={visibleMonths} cellEntriesMap={cellEntriesMap} eurRate={snapshot.eurRate} />
                         ))}
                     </tbody>
                 </table>
@@ -127,12 +147,12 @@ export default function MainTable() {
     );
 }
 
-const TableRow = React.memo(({ item, visibleMonths, entries, eurRate }) => {
+const TableRow = React.memo(({ item, visibleMonths, cellEntriesMap, eurRate }) => {
     return (
         <tr className="hover:bg-gray-50/80 transition-colors" style={{ height: '53px' }}>
             <CategoryCell item={item} />
             {visibleMonths.map(month => (
-                <DataCell key={`${item.id}_${month}`} itemId={item.id} month={month} entries={entries} eurRate={eurRate} />
+                <DataCell key={`${item.id}_${month}`} itemId={item.id} month={month} cellEntries={cellEntriesMap.get(`${item.id}_${month}`) || []} eurRate={eurRate} />
             ))}
         </tr>
     );
@@ -173,12 +193,8 @@ function CategoryCell({ item }) {
     );
 }
 
-function DataCell({ itemId, month, entries, eurRate }) {
+function DataCell({ itemId, month, cellEntries, eurRate }) {
     const cellBaseKey = `${itemId}_${month}`;
-    const cellEntries = entries.filter(e => {
-        const parsed = parseCellKey(e);
-        return parsed.itemId === itemId && parsed.month === month;
-    });
 
     let huf = 0, eur = 0;
     let hasStorno = false;
@@ -251,6 +267,8 @@ function DataCell({ itemId, month, entries, eurRate }) {
     return (
         <td className="cell-interactive px-4 py-4 text-center border-l border-gray-100 cursor-pointer w-40 min-w-[160px] max-w-[160px]"
             data-cellbasekey={cellBaseKey}
+            data-itemid={itemId}
+            data-month={month}
             style={style}
             onClick={(e) => {
                 appService.handleCellClick(e.currentTarget);

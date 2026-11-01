@@ -7,6 +7,7 @@ import 'fake-indexeddb/auto';
 
 import { Database, ItemManager, MonthManager, EntryManager } from '../js/oop-core.js';
 import { CellModalController } from '../js/cell-modal-controller.js';
+import { parseCellKey } from '../js/utils/cell-key-utils.js';
 
 function setupEnvironment() {
     const dom = new JSDOM(`
@@ -337,7 +338,94 @@ test('D. Selective editing — editing one entry preserves sibling ID, amount, a
     dom.window.close();
 });
 
-test('E. Selective deletion — deleting one entry from 3-item cell preserves the other two and updates cell total', async () => {
+test('E. Selective deletion — deleting one entry from 3-item cell preserves the other two and updates cell total in DB and rendered MainTable UI', async () => {
+    const dom = setupEnvironment();
+    const db = new Database();
+    db._enableMockDb();
+
+    const [{ createRoot }, { useAppStore }, { default: MainTable }] = await Promise.all([
+        import('react-dom/client'),
+        import('../src/store/useAppStore.js'),
+        import('../src/components/table/MainTable.jsx')
+    ]);
+
+    const mockSync = { push: async () => {} };
+    const entries = new EntryManager(db, mockSync);
+
+    const app = {
+        db,
+        entries,
+        items: { items: [{ id: 'catDel', name: 'Törlés Kategória' }] },
+        months: { months: ['2026-08'] },
+        hmiNotif: { showToast: () => {}, showConfirm: async () => true },
+        updateReactStore: () => {
+            useAppStore.getState().setSnapshot({
+                items: [{ id: 'catDel', name: 'Törlés Kategória' }],
+                months: ['2026-08'],
+                entries: [...entries.entries],
+                eurRate: 400
+            });
+        }
+    };
+
+    const e1 = await entries.saveEntry({ itemId: 'catDel', month: '2026-08', cellKey: 'catDel_2026-08_1', amount: 5000 });
+    const e2 = await entries.saveEntry({ itemId: 'catDel', month: '2026-08', cellKey: 'catDel_2026-08_2', amount: 15000 });
+    const e3 = await entries.saveEntry({ itemId: 'catDel', month: '2026-08', cellKey: 'catDel_2026-08_3', amount: 25000 });
+
+    app.updateReactStore();
+
+    // Render MainTable in React root container
+    const rootDiv = document.createElement('div');
+    rootDiv.id = 'reactRoot';
+    document.body.appendChild(rootDiv);
+
+    const root = createRoot(rootDiv);
+    const { act } = React;
+
+    await act(async () => {
+        root.render(React.createElement(MainTable, null));
+    });
+
+    // Check UI before deletion: 5000 + 15000 + 25000 = 45000 Ft
+    let targetCell = rootDiv.querySelector('td[data-cellbasekey="catDel_2026-08"]');
+    assert.ok(targetCell, 'Target cell exists in rendered MainTable');
+    assert.ok(targetCell.textContent.includes('45'), 'Rendered UI initially displays total of 45 000 Ft');
+
+    const controller = new CellModalController(app);
+    controller.currentCellBaseKey = 'catDel_2026-08';
+
+    // Delete e2
+    await act(async () => {
+        await controller.deleteEntry(e2.id);
+    });
+
+    // Assert data layer
+    assert.equal(entries.entries.length, 2, 'Cell now contains 2 entries');
+    assert.ok(!entries.entries.some(e => e.id === e2.id), 'Deleted entry e2 is removed');
+
+    const remainingE1 = entries.entries.find(e => e.id === e1.id);
+    const remainingE3 = entries.entries.find(e => e.id === e3.id);
+    assert.ok(remainingE1, 'Entry e1 remains intact');
+    assert.ok(remainingE3, 'Entry e3 remains intact');
+
+    // Verify cell total recalculation (5000 + 25000 = 30000) in data layer
+    const activeEntries = await entries.getByCellKey('catDel_2026-08');
+    const recalculatedTotal = activeEntries.reduce((acc, e) => acc + e.amount, 0);
+    assert.equal(recalculatedTotal, 30000, 'Cell total correctly recalculated to 30000 after deletion');
+
+    // Assert UI layer: rendered MainTable cell now displays 30 000 Ft and NOT 45 000 Ft
+    targetCell = rootDiv.querySelector('td[data-cellbasekey="catDel_2026-08"]');
+    assert.ok(targetCell.textContent.includes('30'), 'Rendered UI cell updated to display recalculated total 30 000 Ft');
+    assert.ok(!targetCell.textContent.includes('45'), 'Old total 45 000 Ft is no longer displayed in UI');
+
+    await act(async () => {
+        root.unmount();
+    });
+    rootDiv.remove();
+    dom.window.close();
+});
+
+test('F. Embedded YYYY-MM in itemId — parseCellKey and modal flow correctly isolate month without corruption', async () => {
     const dom = setupEnvironment();
     const db = new Database();
     db._enableMockDb();
@@ -348,32 +436,90 @@ test('E. Selective deletion — deleting one entry from 3-item cell preserves th
     const app = {
         db,
         entries,
-        hmiNotif: { showToast: () => {}, showConfirm: async () => true },
+        hmiNotif: { showToast: () => {} },
         updateReactStore: () => {}
     };
 
-    const e1 = await entries.saveEntry({ itemId: 'catDel', month: '2026-08', cellKey: 'catDel_2026-08_1', amount: 5000 });
-    const e2 = await entries.saveEntry({ itemId: 'catDel', month: '2026-08', cellKey: 'catDel_2026-08_2', amount: 15000 });
-    const e3 = await entries.saveEntry({ itemId: 'catDel', month: '2026-08', cellKey: 'catDel_2026-08_3', amount: 25000 });
+    const complexItemId = 'archive_2025-01_misc';
+    const targetMonth = '2026-08';
+    const cellKey = `${complexItemId}_${targetMonth}`;
 
+    // 1. Direct parseCellKey test
+    const parsedKey = parseCellKey(cellKey);
+    assert.equal(parsedKey.itemId, complexItemId, 'Correctly isolates itemId containing embedded date');
+    assert.equal(parsedKey.month, targetMonth, 'Correctly isolates target month 2026-08');
+
+    // 2. Direct parseCellKey with timestamp
+    const parsedKeyTs = parseCellKey(`${complexItemId}_${targetMonth}_1700000000`);
+    assert.equal(parsedKeyTs.itemId, complexItemId, 'Timestamped key isolates itemId with embedded date');
+    assert.equal(parsedKeyTs.month, targetMonth, 'Timestamped key isolates target month 2026-08');
+
+    // 3. Save entry using EntryManager
+    const saved = await entries.saveEntry({
+        itemId: complexItemId,
+        month: targetMonth,
+        amount: 88000,
+        currency: 'HUF'
+    });
+
+    assert.equal(saved.itemId, complexItemId);
+    assert.equal(saved.month, targetMonth);
+
+    // 4. Modal controller creation flow with explicit attributes
     const controller = new CellModalController(app);
-    controller.currentCellBaseKey = 'catDel_2026-08';
+    const mockCellEl = dom.window.document.createElement('td');
+    mockCellEl.setAttribute('data-cellbasekey', cellKey);
+    mockCellEl.setAttribute('data-itemid', complexItemId);
+    mockCellEl.setAttribute('data-month', targetMonth);
 
-    // Delete e2
-    await controller.deleteEntry(e2.id);
+    globalThis.CustomEvent = dom.window.CustomEvent;
+    controller.open(mockCellEl);
+    assert.equal(controller.currentExplicitItemId, complexItemId);
+    assert.equal(controller.currentExplicitMonth, targetMonth);
 
-    assert.equal(entries.entries.length, 2, 'Cell now contains 2 entries');
-    assert.ok(!entries.entries.some(e => e.id === e2.id), 'Deleted entry e2 is removed');
+    document.getElementById('cellAmountInput').value = '42000';
+    await controller.save();
 
-    const remainingE1 = entries.entries.find(e => e.id === e1.id);
-    const remainingE3 = entries.entries.find(e => e.id === e3.id);
-    assert.ok(remainingE1, 'Entry e1 remains intact');
-    assert.ok(remainingE3, 'Entry e3 remains intact');
+    const lookupResults = await entries.getByCellKey(cellKey);
+    assert.equal(lookupResults.length, 2, 'Both entries for archive_2025-01_misc / 2026-08 found');
+    assert.ok(lookupResults.some(e => e.amount === 88000));
+    assert.ok(lookupResults.some(e => e.amount === 42000));
 
-    // Verify cell total recalculation (5000 + 25000 = 30000)
-    const activeEntries = await entries.getByCellKey('catDel_2026-08');
-    const recalculatedTotal = activeEntries.reduce((acc, e) => acc + e.amount, 0);
-    assert.equal(recalculatedTotal, 30000, 'Cell total correctly recalculated to 30000 after deletion');
+    dom.window.close();
+});
+
+test('G. Canonical coordinate precedence — explicit valid coordinates override conflicting legacy cellKey', async () => {
+    const dom = setupEnvironment();
+    const db = new Database();
+    db._enableMockDb();
+
+    const mockSync = { push: async () => {} };
+    const entries = new EntryManager(db, mockSync);
+
+    // Seed conflicting entry: explicit itemId 'itemReal' & month '2026-08', but legacy cellKey points to 'stale_2025-01'
+    const conflictingEntry = {
+        id: 'conflict-1',
+        itemId: 'itemReal',
+        month: '2026-08',
+        cellKey: 'stale_2025-01_999',
+        amount: 55000,
+        currency: 'HUF'
+    };
+
+    await db.save('entries', conflictingEntry);
+    await entries.load();
+
+    const loaded = entries.entries.find(e => e.id === 'conflict-1');
+    assert.equal(loaded.itemId, 'itemReal', 'Explicit itemId preserved over conflicting cellKey');
+    assert.equal(loaded.month, '2026-08', 'Explicit month preserved over conflicting cellKey');
+
+    // getByCellKey lookup with explicit target
+    const foundInTarget = await entries.getByCellKey('itemReal_2026-08');
+    assert.equal(foundInTarget.length, 1, 'Entry found in its canonical coordinates');
+    assert.equal(foundInTarget[0].id, 'conflict-1');
+
+    const foundInStale = await entries.getByCellKey('stale_2025-01');
+    assert.equal(foundInStale.length, 0, 'Entry is not erroneously placed in stale cell coordinates');
 
     dom.window.close();
 });

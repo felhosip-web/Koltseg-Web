@@ -63,12 +63,29 @@ function parseCellKeyString(cellKey) {
         }
     }
 
-    // 2. Standard format: itemId_YYYY-MM or itemId_YYYY-MM_timestamp (supporting itemIds containing underscores)
+    // 2. Standard format: itemId_YYYY-MM or itemId_YYYY-MM_timestamp (supporting itemIds containing underscores or date-like substrings)
+    // To avoid picking an embedded YYYY-MM substring from itemId (e.g., archive_2025-01_misc_2026-08),
+    // we search for the month segment from right-to-left, taking optional timestamp into account.
     let monthIdx = -1;
-    for (let i = 0; i < parts.length; i++) {
+    for (let i = parts.length - 1; i >= 1; i--) {
         if (monthRegex.test(parts[i])) {
-            monthIdx = i;
-            break;
+            // Check if this could be the month token. If it's at the end, or the only segment after it is a numeric timestamp
+            const isAtEnd = (i === parts.length - 1);
+            const isTimestampAfter = (i === parts.length - 2 && /^[0-9]+$/.test(parts[parts.length - 1]));
+            if (isAtEnd || isTimestampAfter) {
+                monthIdx = i;
+                break;
+            }
+        }
+    }
+
+    // Fallback if not matched at end/pre-timestamp: search right-to-left for any matching month token after index 0
+    if (monthIdx === -1) {
+        for (let i = parts.length - 1; i >= 1; i--) {
+            if (monthRegex.test(parts[i])) {
+                monthIdx = i;
+                break;
+            }
         }
     }
 

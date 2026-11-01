@@ -25,6 +25,8 @@ export class CellModalController {
      */
     open(cellElement) {
         this.currentCellBaseKey = cellElement.getAttribute('data-cellbasekey');
+        this.currentExplicitItemId = cellElement.getAttribute('data-itemid') || null;
+        this.currentExplicitMonth = cellElement.getAttribute('data-month') || null;
 
         const modalRoot = document.getElementById('costAppCellEditorRoot');
         if (!modalRoot) {
@@ -269,15 +271,20 @@ export class CellModalController {
         const stornoCheckbox = document.getElementById('cellIsStorno');
         const isStorno = stornoCheckbox ? stornoCheckbox.checked : false;
 
-        const parsedCell = parseCellKey(this.currentCellBaseKey);
         const monthRegex = /^[0-9]{4}-[0-9]{2}$/;
-        if (!parsedCell.itemId || !parsedCell.month || !monthRegex.test(parsedCell.month)) {
-            this.app.hmiNotif?.showToast('Érvénytelen cella azonosító!', 'error');
-            return;
-        }
+        // Prefer explicit coordinates from DOM element if valid, otherwise parse cell base key
+        let itemId = this.currentExplicitItemId;
+        let month = this.currentExplicitMonth;
 
-        const itemId = parsedCell.itemId;
-        const month = parsedCell.month;
+        if (!itemId || !month || !monthRegex.test(month)) {
+            const parsedCell = parseCellKey(this.currentCellBaseKey);
+            if (!parsedCell.itemId || !parsedCell.month || !monthRegex.test(parsedCell.month)) {
+                this.app.hmiNotif?.showToast('Érvénytelen cella azonosító!', 'error');
+                return;
+            }
+            itemId = parsedCell.itemId;
+            month = parsedCell.month;
+        }
 
         let entryData;
 
