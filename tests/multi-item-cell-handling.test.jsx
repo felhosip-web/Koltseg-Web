@@ -521,5 +521,70 @@ test('G. Canonical coordinate precedence — explicit valid coordinates override
     const foundInStale = await entries.getByCellKey('stale_2025-01');
     assert.equal(foundInStale.length, 0, 'Entry is not erroneously placed in stale cell coordinates');
 
+    // Verify cellKey was normalized and persisted to DB
+    const persisted = await db.getAll('entries');
+    const persistedConf = persisted.find(e => e.id === 'conflict-1');
+    assert.equal(persistedConf.cellKey, 'itemReal_2026-08_999', 'Conflicting cellKey normalized in storage with timestamp preserved');
+
+    dom.window.close();
+});
+
+test('H. Invalid explicit month values fallback to valid parsed cellKey', () => {
+    // 1. Invalid month > 12
+    const res1 = parseCellKey({ itemId: 'itemA', month: '2026-13', cellKey: 'itemA_2026-08_123' });
+    assert.equal(res1.itemId, 'itemA');
+    assert.equal(res1.month, '2026-08', '2026-13 falls back to valid parsed month 2026-08');
+
+    // 2. Invalid month 00
+    const res2 = parseCellKey({ itemId: 'itemA', month: '2026-00', cellKey: 'itemA_2026-08_123' });
+    assert.equal(res2.month, '2026-08', '2026-00 falls back to valid parsed month 2026-08');
+
+    // 3. Malformed string
+    const res3 = parseCellKey({ itemId: 'itemA', month: 'not_a_month', cellKey: 'itemA_2026-08_123' });
+    assert.equal(res3.month, '2026-08', 'Malformed string falls back to valid parsed month');
+
+    // 4. Empty string
+    const res4 = parseCellKey({ itemId: 'itemA', month: '', cellKey: 'itemA_2026-08_123' });
+    assert.equal(res4.month, '2026-08', 'Empty string falls back to valid parsed month');
+});
+
+test('I. Real IndexedDB — Database.prototype.getByCellKey uses index queries and avoids getAll()', async () => {
+    const dom = setupEnvironment();
+    dom.window.indexedDB = globalThis.indexedDB;
+    dom.window.IDBKeyRange = globalThis.IDBKeyRange;
+
+    const dbName = `test_index_lookup_${Date.now()}`;
+    const db = new Database(dbName, 12);
+    await db.connect();
+
+    // Persist standard and legacy entries
+    await db.save('entries', { id: 'idx-1', itemId: 'itemTarget', month: '2026-08', cellKey: 'itemTarget_2026-08_100', amount: 10000 });
+    await db.save('entries', { id: 'idx-2', itemId: 'itemTarget', month: '2026-08', cellKey: '2026-08_itemTarget_200', amount: 20000 });
+    await db.save('entries', { id: 'idx-other', itemId: 'other', month: '2026-08', cellKey: 'other_2026-08_300', amount: 30000 });
+
+    // Spy on objectStore.getAll to verify it is NOT called during getByCellKey
+    let getAllCalled = false;
+    const origTx = db.db.transaction.bind(db.db);
+    db.db.transaction = function(storeNames, mode) {
+        const tx = origTx(storeNames, mode);
+        const origStore = tx.objectStore.bind(tx);
+        tx.objectStore = function(name) {
+            const store = origStore(name);
+            if (name === 'entries') {
+                const origGetAll = store.getAll.bind(store);
+                store.getAll = function(...args) {
+                    getAllCalled = true;
+                    return origGetAll(...args);
+                };
+            }
+            return store;
+        };
+        return tx;
+    };
+
+    const results = await db.getByCellKey('itemTarget_2026-08');
+    assert.equal(results.length, 2, 'Returns both matching standard and legacy entries');
+    assert.equal(getAllCalled, false, 'store.getAll() was NOT called because cellKey index was used');
+
     dom.window.close();
 });
