@@ -29,6 +29,8 @@ function setupEnvironment() {
     globalThis.window = dom.window;
     globalThis.document = dom.window.document;
     globalThis.localStorage = dom.window.localStorage;
+    globalThis.window.indexedDB = globalThis.indexedDB;
+    globalThis.window.IDBKeyRange = globalThis.IDBKeyRange;
     globalThis.window.Dexie = Dexie;
     globalThis.window.__DISABLE_AUTO_INIT__ = true;
     return dom;
@@ -87,6 +89,95 @@ test('A. Underscore-containing item ID — saving sub-entry preserves exact item
     const oldEntry = entries.entries.find(e => e.id === preExistingId);
     assert.equal(oldEntry.itemId, 'cat_food');
     assert.equal(oldEntry.amount, 8000, 'Pre-existing sibling entry remains unchanged');
+
+    dom.window.close();
+});
+
+test('F. Real IndexedDB — Database.prototype.getByCellKey exercises non-mock store.getAll coordinate filtering', async () => {
+    const dom = setupEnvironment();
+    const dbName = 'RealIndexedDB_MultiItem_' + Date.now();
+    const db = new Database(dbName, 12);
+    await db.connect();
+
+    // Verify this is a real IndexedDB instance, NOT running in mock mode
+    assert.equal(db.isMock, undefined, 'Database MUST NOT be in mock mode');
+    assert.ok(db.db && typeof db.db.transaction === 'function', 'Real IDBDatabase connection must be established');
+
+    // 1. Standard key: itemId_month
+    const stdEntry = {
+        id: 'real-std-1',
+        itemId: 'cat_real',
+        month: '2026-08',
+        cellKey: 'cat_real_2026-08',
+        amount: 14000,
+        currency: 'HUF',
+        updated_at: new Date().toISOString()
+    };
+
+    // 2. Timestamp-suffixed standard key: itemId_month_timestamp
+    const tsEntry = {
+        id: 'real-ts-2',
+        itemId: 'cat_real',
+        month: '2026-08',
+        cellKey: 'cat_real_2026-08_1700000001',
+        amount: 26000,
+        currency: 'HUF',
+        updated_at: new Date().toISOString()
+    };
+
+    // 3. Legacy month-first key: month_itemId_timestamp
+    const legEntry = {
+        id: 'real-leg-3',
+        itemId: 'cat_real',
+        month: '2026-08',
+        cellKey: '2026-08_cat_real_1700000002',
+        amount: 32000,
+        currency: 'HUF',
+        updated_at: new Date().toISOString()
+    };
+
+    // 4. Entry belonging to another month: 2026-09
+    const otherMonthEntry = {
+        id: 'real-other-4',
+        itemId: 'cat_real',
+        month: '2026-09',
+        cellKey: 'cat_real_2026-09_1700000003',
+        amount: 99000,
+        currency: 'HUF',
+        updated_at: new Date().toISOString()
+    };
+
+    // Persist all 4 entries to real IndexedDB
+    await db.save('entries', stdEntry);
+    await db.save('entries', tsEntry);
+    await db.save('entries', legEntry);
+    await db.save('entries', otherMonthEntry);
+
+    // Call Database.prototype.getByCellKey on real IndexedDB instance
+    const results = await db.getByCellKey('cat_real_2026-08');
+
+    // Assert exactly 3 matching records are returned
+    assert.equal(results.length, 3, 'Exactly 3 entries belonging to cat_real/2026-08 are returned');
+
+    // Assert the unrelated month is excluded
+    assert.ok(!results.some(r => r.id === 'real-other-4'), 'Unrelated month entry (2026-09) is excluded');
+
+    // Assert IDs and amounts are preserved
+    const foundStd = results.find(r => r.id === 'real-std-1');
+    const foundTs = results.find(r => r.id === 'real-ts-2');
+    const foundLeg = results.find(r => r.id === 'real-leg-3');
+
+    assert.ok(foundStd && foundStd.amount === 14000, 'Standard key entry preserved with correct amount');
+    assert.ok(foundTs && foundTs.amount === 26000, 'Timestamped key entry preserved with correct amount');
+    assert.ok(foundLeg && foundLeg.amount === 32000, 'Legacy month-first key entry preserved with correct amount');
+
+    // Reload / reopen real database to verify persistence
+    const reloadedDb = new Database(dbName, 12);
+    await reloadedDb.connect();
+    assert.equal(reloadedDb.isMock, undefined, 'Reloaded database is also real IndexedDB');
+
+    const reloadedResults = await reloadedDb.getByCellKey('cat_real_2026-08');
+    assert.equal(reloadedResults.length, 3, 'Post-reload lookup returns all 3 persisted entries');
 
     dom.window.close();
 });
