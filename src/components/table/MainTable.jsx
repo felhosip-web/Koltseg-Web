@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { CategoryIcons } from '../../../js/category-icons.js';
-import { parseCellKey } from '../../../js/utils/cell-key-utils.js';
+import { parseCellKey, isValidMonth } from '../../../js/utils/cell-key-utils.js';
 import { useAppStore } from '../../store/useAppStore.js';
 import { appService } from '../../services/appService.js';
 
@@ -14,16 +14,14 @@ export default function MainTable() {
     let items = snapshot?.items || [];
     const rawMonths = snapshot?.months || [];
 
-    const monthRegex = /^[0-9]{4}-[0-9]{2}$/;
-
-    // Ha a hónapok tömb üres, de léteznek bejegyzések, kanonikus parseCellKey segítségével levezetjük a hónapokat (csak érvényes YYYY-MM formátum)
+    // Ha a hónapok tömb üres, de léteznek bejegyzések, kanonikus parseCellKey segítségével levezetjük a hónapokat (csak érvényes naptári hónap: YYYY-MM 01-12)
     const months = React.useMemo(() => {
         if (rawMonths && rawMonths.length > 0) {
-            return rawMonths.filter(m => typeof m === 'string' && monthRegex.test(m));
+            return rawMonths.filter(m => isValidMonth(m));
         }
         if (entries.length > 0) {
             const derived = Array.from(new Set(
-                entries.map(e => parseCellKey(e).month).filter(m => m && monthRegex.test(m))
+                entries.map(e => parseCellKey(e).month).filter(m => isValidMonth(m))
             )).sort();
             if (derived.length > 0) return derived;
         }

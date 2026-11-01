@@ -643,11 +643,31 @@ test('13. Cell save validation — malformed month input in CellModalController.
 
     const controller = new CellModalController(app);
 
-    // Malformed cell key missing YYYY-MM month
+    // 1. Malformed cell key missing YYYY-MM month
     controller.currentCellBaseKey = 'invalid_notamonth';
     await controller.save();
 
     assert.equal(entrySaved, false, 'Entry was NOT saved on malformed cell key');
+    assert.equal(toastShown?.type, 'error');
+    assert.equal(toastShown?.msg, 'Érvénytelen cella azonosító!');
+
+    // 2. Out of range calendar month: 2026-13
+    controller.currentCellBaseKey = 'item_2026-13';
+    controller.currentExplicitMonth = '2026-13';
+    toastShown = null;
+    await controller.save();
+
+    assert.equal(entrySaved, false, 'Entry was NOT saved for out of range month 2026-13');
+    assert.equal(toastShown?.type, 'error');
+    assert.equal(toastShown?.msg, 'Érvénytelen cella azonosító!');
+
+    // 3. Out of range calendar month: 2026-00
+    controller.currentCellBaseKey = 'item_2026-00';
+    controller.currentExplicitMonth = '2026-00';
+    toastShown = null;
+    await controller.save();
+
+    assert.equal(entrySaved, false, 'Entry was NOT saved for out of range month 2026-00');
     assert.equal(toastShown?.type, 'error');
     assert.equal(toastShown?.msg, 'Érvénytelen cella azonosító!');
 
@@ -668,9 +688,12 @@ test('14. Non-overflow horizontal pagination in MainTable — bounded useEffect 
         import('../src/components/table/MainTable.jsx')
     ]);
 
-    // Create 18 distinct months
+    // Create 18 distinct valid calendar months across 2024 and 2025
     const months18 = [];
-    for (let i = 1; i <= 18; i++) {
+    for (let i = 1; i <= 12; i++) {
+        months18.push(`2024-${String(i).padStart(2, '0')}`);
+    }
+    for (let i = 1; i <= 6; i++) {
         months18.push(`2025-${String(i).padStart(2, '0')}`);
     }
 

@@ -546,6 +546,20 @@ test('H. Invalid explicit month values fallback to valid parsed cellKey', () => 
     // 4. Empty string
     const res4 = parseCellKey({ itemId: 'itemA', month: '', cellKey: 'itemA_2026-08_123' });
     assert.equal(res4.month, '2026-08', 'Empty string falls back to valid parsed month');
+
+    // 5. parseCellKeyString fallback branch never returns invalid month
+    const res5 = parseCellKey('itemA_2026-13');
+    assert.equal(res5.month, null, 'parseCellKeyString("itemA_2026-13") returns null for invalid month');
+
+    const res6 = parseCellKey('itemA_2026-00');
+    assert.equal(res6.month, null, 'parseCellKeyString("itemA_2026-00") returns null for invalid month 00');
+
+    // 6. Valid months 2026-01 and 2026-12 are preserved
+    const res7 = parseCellKey('itemA_2026-01');
+    assert.equal(res7.month, '2026-01', '2026-01 is a valid month');
+
+    const res8 = parseCellKey('itemA_2026-12');
+    assert.equal(res8.month, '2026-12', '2026-12 is a valid month');
 });
 
 test('I. Real IndexedDB — Database.prototype.getByCellKey uses index queries and avoids getAll()', async () => {

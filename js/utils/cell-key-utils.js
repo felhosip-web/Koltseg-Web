@@ -114,10 +114,12 @@ function parseCellKeyString(cellKey) {
     if (monthIdx !== -1) {
         const month = parts[monthIdx];
         const itemId = parts.slice(0, monthIdx).join('_');
-        return { itemId: itemId || null, month };
+        return { itemId: isValidItemId(itemId) ? itemId : null, month: isValidMonth(month) ? month : null };
     }
 
-    return { itemId: parts[0] || null, month: parts[1] || null };
+    const fallbackItemId = isValidItemId(parts[0]) ? parts[0] : null;
+    const fallbackMonth = isValidMonth(parts[1]) ? parts[1] : null;
+    return { itemId: fallbackItemId, month: fallbackMonth };
 }
 
 /**

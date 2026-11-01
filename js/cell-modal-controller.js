@@ -1,7 +1,7 @@
 // js/cell-modal-controller.js
 // Cell Modal Controller - Rész-tételek kezelése egy cellában (2026-os javított verzió)
 
-import { parseCellKey } from './utils/cell-key-utils.js';
+import { parseCellKey, isValidMonth, isValidItemId } from './utils/cell-key-utils.js';
 
 export class CellModalController {
     /**
@@ -271,14 +271,13 @@ export class CellModalController {
         const stornoCheckbox = document.getElementById('cellIsStorno');
         const isStorno = stornoCheckbox ? stornoCheckbox.checked : false;
 
-        const monthRegex = /^[0-9]{4}-[0-9]{2}$/;
         // Prefer explicit coordinates from DOM element if valid, otherwise parse cell base key
         let itemId = this.currentExplicitItemId;
         let month = this.currentExplicitMonth;
 
-        if (!itemId || !month || !monthRegex.test(month)) {
+        if (!isValidItemId(itemId) || !isValidMonth(month)) {
             const parsedCell = parseCellKey(this.currentCellBaseKey);
-            if (!parsedCell.itemId || !parsedCell.month || !monthRegex.test(parsedCell.month)) {
+            if (!isValidItemId(parsedCell.itemId) || !isValidMonth(parsedCell.month)) {
                 this.app.hmiNotif?.showToast('Érvénytelen cella azonosító!', 'error');
                 return;
             }
