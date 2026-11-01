@@ -55,7 +55,10 @@ export class BootManager {
 
             await this._loadAllData();
 
-            console.log('[BOOT-BACKGROUND] Adatok betöltve, UI frissítése...');
+            console.log('[BOOT-BACKGROUND] Adatok betöltve, UI azonnali frissítése...');
+            // AZONNALI KÖZZÉTÉTEL: A helyi adatok azonnal megjelennek az UI-ban a felhő/backup késleltetés előtt
+            this.app.updateReactStore?.();
+            this.app.updateReminderStatus?.();
             this.app.setSystemStatus?.('Adatok betöltve', false);
 
             // További háttérfolyamatok: felhő, szinkronizáció, backup
@@ -77,7 +80,7 @@ export class BootManager {
             this.app.hmiNotif?.showToast('Az adatok betöltése nem sikerült!', 'error');
             this.app.setSystemStatus?.('Adatbetöltési hiba', true);
         } finally {
-            // Garantáltan közzétesszük a betöltött állapotot a React Zustand store felé
+            // Garantáltan közzétesszük a lezárult állapotot a React Zustand store felé
             this.app.updateReactStore?.();
             this.app.updateReminderStatus?.();
         }
@@ -88,19 +91,19 @@ export class BootManager {
      * @returns {Promise<void>}
      */
     async _loadAllData() {
-        // 1. KRITIKUS DOMAIN ADATBETÖLTÉS: items, months, entries
-        // Ha ezek bármelyike meghiúsul, a kivétel elkapásra kerül, így a kritikus hiba látható marad.
+        // 1. KRITIKUS DOMAIN ADATBETÖLTÉS: items, months, entries, incomingManager
+        // Az incomingManager a Dashboard és StatsTab egyenlegszámításának alapja, kiesése hamis pénzügyi állapotot eredményez.
         await Promise.all([
             this.app.items?.load?.() || Promise.resolve(),
             this.app.months?.load?.() || Promise.resolve(),
-            this.app.entries?.load?.() || Promise.resolve()
+            this.app.entries?.load?.() || Promise.resolve(),
+            this.app.incomingManager?.load?.() || Promise.resolve()
         ]);
 
         // 2. OPCIONÁLIS HÁTTÉRSZOLGÁLTATÁSOK BETÖLTÉSE: hiba esetén nem szakítják meg a fő adatok megjelenítését
         const optionalResults = await Promise.allSettled([
             this.app.reminderManager?.load?.() || Promise.resolve(),
             this.app.templates?.load?.() || Promise.resolve(),
-            this.app.incomingManager?.load?.() || Promise.resolve(),
             this.app.pluginStorage?.init?.() || Promise.resolve(),
             this.app.pluginStorageService?.load?.() || Promise.resolve(),
             this.app.workLogManager?.load?.() || Promise.resolve()

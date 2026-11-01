@@ -14,14 +14,16 @@ export default function MainTable() {
     let items = snapshot?.items || [];
     const rawMonths = snapshot?.months || [];
 
-    // Ha a hónapok tömb üres, de léteznek bejegyzések, kanonikus parseCellKey segítségével levezetjük a hónapokat
+    const monthRegex = /^[0-9]{4}-[0-9]{2}$/;
+
+    // Ha a hónapok tömb üres, de léteznek bejegyzések, kanonikus parseCellKey segítségével levezetjük a hónapokat (csak érvényes YYYY-MM formátum)
     const months = React.useMemo(() => {
         if (rawMonths && rawMonths.length > 0) {
-            return rawMonths;
+            return rawMonths.filter(m => typeof m === 'string' && monthRegex.test(m));
         }
         if (entries.length > 0) {
             const derived = Array.from(new Set(
-                entries.map(e => parseCellKey(e).month).filter(Boolean)
+                entries.map(e => parseCellKey(e).month).filter(m => m && monthRegex.test(m))
             )).sort();
             if (derived.length > 0) return derived;
         }
@@ -39,6 +41,18 @@ export default function MainTable() {
             });
         }
     }, [snapshot, months]);
+
+    // Ha a wrapper nem görgethető (nem lép fel overflow), de több hónap létezik mint a jelenleg betöltött, lépésenként felfedjük a maradék hónapokat
+    useEffect(() => {
+        if (!wrapperRef.current || months.length <= loadedMonths) return;
+        const wrapper = wrapperRef.current;
+        if (wrapper.clientWidth > 0 && wrapper.scrollWidth <= wrapper.clientWidth) {
+            setLoadedMonths(prev => {
+                if (prev >= months.length) return prev;
+                return Math.min(prev + 8, months.length);
+            });
+        }
+    }, [months.length, loadedMonths]);
 
     // Ha a kategóriák tömb üres, de léteznek bejegyzések, kanonikus parseCellKey segítségével szintetikus átmeneti nézetet képezünk
     if ((!items || items.length === 0) && entries.length > 0) {

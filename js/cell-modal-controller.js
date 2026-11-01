@@ -270,7 +270,8 @@ export class CellModalController {
         const isStorno = stornoCheckbox ? stornoCheckbox.checked : false;
 
         const parsedCell = parseCellKey(this.currentCellBaseKey);
-        if (!parsedCell.itemId || !parsedCell.month) {
+        const monthRegex = /^[0-9]{4}-[0-9]{2}$/;
+        if (!parsedCell.itemId || !parsedCell.month || !monthRegex.test(parsedCell.month)) {
             this.app.hmiNotif?.showToast('Érvénytelen cella azonosító!', 'error');
             return;
         }

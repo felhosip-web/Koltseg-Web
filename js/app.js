@@ -563,12 +563,16 @@ export class App {
         let items = this.items?.items || [];
         let months = this.months?.months || [];
 
+        const monthRegex = /^[0-9]{4}-[0-9]{2}$/;
+
         // Öngyógyító védelem: kanonikus parseCellKey segítségével levezetjük a hiányzó hónapokat és kategóriákat
         if ((!months || months.length === 0) && entries.length > 0) {
             const derivedMonthSet = new Set();
             entries.forEach(e => {
                 const parsed = parseCellKey(e);
-                if (parsed.month) derivedMonthSet.add(parsed.month);
+                if (parsed.month && monthRegex.test(parsed.month)) {
+                    derivedMonthSet.add(parsed.month);
+                }
             });
             if (derivedMonthSet.size > 0) {
                 months = Array.from(derivedMonthSet).sort();
@@ -870,6 +874,9 @@ async reload() {
         
         await Promise.all(loadPromises);
 
+        // Sikeres újratöltés esetén töröljük a korábbi boot hibát
+        this._bootError = null;
+        this.setSystemStatus?.('Adatok frissítve', false);
         this.updateReactStore();
         
         if (typeof this.updateReminderStatus === 'function') {
