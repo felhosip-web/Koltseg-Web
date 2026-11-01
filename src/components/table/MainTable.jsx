@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { CategoryIcons } from '../../../js/category-icons.js';
+import { parseCellKey, isValidMonth } from '../../../js/utils/cell-key-utils.js';
 import { useAppStore } from '../../store/useAppStore.js';
 import { appService } from '../../services/appService.js';
 
@@ -9,19 +10,101 @@ export default function MainTable() {
     const [loadedMonths, setLoadedMonths] = useState(15);
     const wrapperRef = useRef(null);
 
+    const entries = snapshot?.entries || [];
+    let items = snapshot?.items || [];
+    const rawMonths = snapshot?.months || [];
+
+    // Ha a hónapok tömb üres, de léteznek bejegyzések, kanonikus parseCellKey segítségével levezetjük a hónapokat (csak érvényes naptári hónap: YYYY-MM 01-12)
+    const months = React.useMemo(() => {
+        if (rawMonths && rawMonths.length > 0) {
+            return rawMonths.filter(m => isValidMonth(m));
+        }
+        if (entries.length > 0) {
+            const derived = Array.from(new Set(
+                entries.map(e => parseCellKey(e).month).filter(m => isValidMonth(m))
+            )).sort();
+            if (derived.length > 0) return derived;
+        }
+        return [];
+    }, [rawMonths, entries]);
+
     const handleScroll = useCallback(() => {
         if (!wrapperRef.current || !snapshot) return;
         const wrapper = wrapperRef.current;
         if (wrapper.scrollLeft + wrapper.clientWidth > wrapper.scrollWidth - 400) {
             setLoadedMonths(prev => {
-                const max = snapshot.months.length;
+                const max = months.length;
                 if (prev >= max) return prev;
                 return Math.min(prev + 8, max);
             });
         }
-    }, [snapshot]);
+    }, [snapshot, months]);
 
-    if (!snapshot || !snapshot.items || snapshot.items.length === 0 || !snapshot.months || snapshot.months.length === 0) {
+    // Ha a wrapper nem görgethető (nem lép fel overflow), de több hónap létezik mint a jelenleg betöltött, lépésenként felfedjük a maradék hónapokat
+    useEffect(() => {
+        if (!wrapperRef.current || months.length <= loadedMonths) return;
+        const wrapper = wrapperRef.current;
+        if (wrapper.clientWidth > 0 && wrapper.scrollWidth <= wrapper.clientWidth) {
+            setLoadedMonths(prev => {
+                if (prev >= months.length) return prev;
+                return Math.min(prev + 8, months.length);
+            });
+        }
+    }, [months.length, loadedMonths]);
+
+    const visibleMonths = React.useMemo(() => {
+        return months.slice(0, loadedMonths);
+    }, [months, loadedMonths]);
+
+    // Build an indexed lookup Map keyed by itemId + month, recomputed only when entries changes
+    const cellEntriesMap = React.useMemo(() => {
+        const map = new Map();
+        entries.forEach(e => {
+            const parsed = parseCellKey(e);
+            if (parsed.itemId && parsed.month) {
+                const key = `${parsed.itemId}_${parsed.month}`;
+                let list = map.get(key);
+                if (!list) {
+                    list = [];
+                    map.set(key, list);
+                }
+                list.push(e);
+            }
+        });
+        return map;
+    }, [entries]);
+
+    // Ha a kategóriák tömb üres, de léteznek bejegyzések, kanonikus parseCellKey segítségével szintetikus átmeneti nézetet képezünk
+    if ((!items || items.length === 0) && entries.length > 0) {
+        const derivedItemMap = new Map();
+        entries.forEach(e => {
+            const parsed = parseCellKey(e);
+            if (parsed.itemId && !derivedItemMap.has(parsed.itemId)) {
+                derivedItemMap.set(parsed.itemId, {
+                    id: parsed.itemId,
+                    name: parsed.itemId,
+                    color: '#dbeafe',
+                    _isSynthetic: true
+                });
+            }
+        });
+        if (derivedItemMap.size > 0) {
+            items = Array.from(derivedItemMap.values());
+        }
+    }
+
+    const hasData = items.length > 0 && months.length > 0;
+
+    if (snapshot?.isBootError) {
+        return (
+            <div id="mainTableContainer" className="bg-white rounded-2xl shadow-xl border border-red-200 overflow-visible p-8 text-center">
+                <div className="text-xl font-bold text-red-600 mb-2">⚠️ Adatbetöltési hiba</div>
+                <div className="text-gray-500 mb-4">Nem sikerült betölteni a helyi adatbázis rekordjait. Kérjük, frissítsd az oldalt!</div>
+            </div>
+        );
+    }
+
+    if (!snapshot || !hasData) {
         return (
             <div id="mainTableContainer" className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-visible p-0 md:p-2">
                  <div className="p-12 text-center text-gray-400">
@@ -36,8 +119,6 @@ export default function MainTable() {
             </div>
         );
     }
-
-    const visibleMonths = snapshot.months.slice(0, loadedMonths);
 
     return (
         <div id="mainTableContainer" className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-visible p-0 md:p-2">
@@ -54,8 +135,8 @@ export default function MainTable() {
                         </tr>
                     </thead>
                     <tbody id="vtTbody">
-                        {snapshot.items.map(item => (
-                            <TableRow key={item.id} item={item} visibleMonths={visibleMonths} entries={snapshot.entries} eurRate={snapshot.eurRate} />
+                        {items.map(item => (
+                            <TableRow key={item.id} item={item} visibleMonths={visibleMonths} cellEntriesMap={cellEntriesMap} eurRate={snapshot.eurRate} />
                         ))}
                     </tbody>
                 </table>
@@ -64,12 +145,12 @@ export default function MainTable() {
     );
 }
 
-const TableRow = React.memo(({ item, visibleMonths, entries, eurRate }) => {
+const TableRow = React.memo(({ item, visibleMonths, cellEntriesMap, eurRate }) => {
     return (
         <tr className="hover:bg-gray-50/80 transition-colors" style={{ height: '53px' }}>
             <CategoryCell item={item} />
             {visibleMonths.map(month => (
-                <DataCell key={`${item.id}_${month}`} itemId={item.id} month={month} entries={entries} eurRate={eurRate} />
+                <DataCell key={`${item.id}_${month}`} itemId={item.id} month={month} cellEntries={cellEntriesMap.get(`${item.id}_${month}`) || []} eurRate={eurRate} />
             ))}
         </tr>
     );
@@ -87,6 +168,10 @@ function CategoryCell({ item }) {
             data-itemid={item.id} data-itemname={item.name}
             onDoubleClick={async (e) => {
                 if (e.target.closest('button')) return;
+                if (item._isSynthetic) {
+                    appService.showToast('Ez egy levezetett ideiglenes kategória. Hozz létre valódi kategóriát a szerkesztéshez.', 'info');
+                    return;
+                }
                 const action = await appService.showCategoryActionsModal(item.name);
                 if (action === 'rename') {
                     document.dispatchEvent(new CustomEvent('hmi-input-open', { detail: { type: 'rename', itemId: item.id, currentName: item.name } }));
@@ -106,12 +191,8 @@ function CategoryCell({ item }) {
     );
 }
 
-function DataCell({ itemId, month, entries, eurRate }) {
+function DataCell({ itemId, month, cellEntries, eurRate }) {
     const cellBaseKey = `${itemId}_${month}`;
-    const cellEntries = entries.filter(e => {
-        if (!e.cellKey) return false;
-        return e.cellKey === cellBaseKey || e.cellKey.startsWith(cellBaseKey + '_');
-    });
 
     let huf = 0, eur = 0;
     let hasStorno = false;
@@ -184,6 +265,8 @@ function DataCell({ itemId, month, entries, eurRate }) {
     return (
         <td className="cell-interactive px-4 py-4 text-center border-l border-gray-100 cursor-pointer w-40 min-w-[160px] max-w-[160px]"
             data-cellbasekey={cellBaseKey}
+            data-itemid={itemId}
+            data-month={month}
             style={style}
             onClick={(e) => {
                 appService.handleCellClick(e.currentTarget);

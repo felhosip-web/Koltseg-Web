@@ -1,0 +1,604 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import React from 'react';
+import { JSDOM } from 'jsdom';
+import Dexie from 'dexie';
+import 'fake-indexeddb/auto';
+
+import { Database, ItemManager, MonthManager, EntryManager } from '../js/oop-core.js';
+import { CellModalController } from '../js/cell-modal-controller.js';
+import { parseCellKey } from '../js/utils/cell-key-utils.js';
+
+function setupEnvironment() {
+    const dom = new JSDOM(`
+        <!DOCTYPE html>
+        <html>
+        <body>
+            <div id="costAppCellEditorRoot"></div>
+            <div id="subEntriesContainer"></div>
+            <input id="cellAmountInput" value="" />
+            <select id="cellCurrencyInput"><option value="HUF" selected>HUF</option></select>
+            <select id="cellMethodInput"><option value="Kártya" selected>Kártya</option></select>
+            <input id="cellNoteInput" value="" />
+            <input type="checkbox" id="cellIsStorno" />
+            <button id="btnSaveCellModal">Tétel Hozzáadása</button>
+            <div id="root"></div>
+        </body>
+        </html>
+    `, { url: 'http://localhost/' });
+
+    globalThis.window = dom.window;
+    globalThis.document = dom.window.document;
+    globalThis.localStorage = dom.window.localStorage;
+    globalThis.window.indexedDB = globalThis.indexedDB;
+    globalThis.window.IDBKeyRange = globalThis.IDBKeyRange;
+    globalThis.window.Dexie = Dexie;
+    globalThis.window.__DISABLE_AUTO_INIT__ = true;
+    return dom;
+}
+
+test('A. Underscore-containing item ID — saving sub-entry preserves exact itemId and month', async () => {
+    const dom = setupEnvironment();
+    const db = new Database();
+    db._enableMockDb();
+
+    const mockSync = { push: async () => {} };
+    const entries = new EntryManager(db, mockSync);
+    const items = new ItemManager(db, mockSync);
+    const months = new MonthManager(db, mockSync);
+
+    const app = {
+        db,
+        entries,
+        items,
+        months,
+        hmiNotif: { showToast: () => {}, showConfirm: async () => true },
+        updateReactStore: () => {},
+        setSystemStatus: () => {}
+    };
+
+    // Pre-seed an existing entry in the same cell
+    await entries.saveEntry({
+        itemId: 'cat_food',
+        month: '2026-08',
+        cellKey: 'cat_food_2026-08_100',
+        amount: 8000,
+        currency: 'HUF'
+    });
+    const preExistingId = entries.entries[0].id;
+
+    const controller = new CellModalController(app);
+    controller.currentCellBaseKey = 'cat_food_2026-08';
+
+    // Simulate user input in modal form
+    document.getElementById('cellAmountInput').value = '4500';
+    document.getElementById('cellNoteInput').value = 'Konzerv és táp';
+    document.getElementById('cellCurrencyInput').value = 'HUF';
+    document.getElementById('cellMethodInput').value = 'Kártya';
+
+    await controller.save();
+
+    assert.equal(entries.entries.length, 2, 'Cell now contains 2 entries');
+
+    const newEntry = entries.entries.find(e => e.id !== preExistingId);
+    assert.ok(newEntry, 'New entry created');
+    assert.equal(newEntry.itemId, 'cat_food', 'Stored itemId is exactly "cat_food" despite underscores');
+    assert.equal(newEntry.month, '2026-08', 'Stored month is exactly "2026-08"');
+    assert.equal(newEntry.amount, 4500);
+    assert.equal(newEntry.note, 'Konzerv és táp');
+
+    const oldEntry = entries.entries.find(e => e.id === preExistingId);
+    assert.equal(oldEntry.itemId, 'cat_food');
+    assert.equal(oldEntry.amount, 8000, 'Pre-existing sibling entry remains unchanged');
+
+    dom.window.close();
+});
+
+test('F. Real IndexedDB — Database.prototype.getByCellKey exercises non-mock store.getAll coordinate filtering', async () => {
+    const dom = setupEnvironment();
+    const dbName = 'RealIndexedDB_MultiItem_' + Date.now();
+    const db = new Database(dbName, 12);
+    await db.connect();
+
+    // Verify this is a real IndexedDB instance, NOT running in mock mode
+    assert.equal(db.isMock, undefined, 'Database MUST NOT be in mock mode');
+    assert.ok(db.db && typeof db.db.transaction === 'function', 'Real IDBDatabase connection must be established');
+
+    // 1. Standard key: itemId_month
+    const stdEntry = {
+        id: 'real-std-1',
+        itemId: 'cat_real',
+        month: '2026-08',
+        cellKey: 'cat_real_2026-08',
+        amount: 14000,
+        currency: 'HUF',
+        updated_at: new Date().toISOString()
+    };
+
+    // 2. Timestamp-suffixed standard key: itemId_month_timestamp
+    const tsEntry = {
+        id: 'real-ts-2',
+        itemId: 'cat_real',
+        month: '2026-08',
+        cellKey: 'cat_real_2026-08_1700000001',
+        amount: 26000,
+        currency: 'HUF',
+        updated_at: new Date().toISOString()
+    };
+
+    // 3. Legacy month-first key: month_itemId_timestamp
+    const legEntry = {
+        id: 'real-leg-3',
+        itemId: 'cat_real',
+        month: '2026-08',
+        cellKey: '2026-08_cat_real_1700000002',
+        amount: 32000,
+        currency: 'HUF',
+        updated_at: new Date().toISOString()
+    };
+
+    // 4. Entry belonging to another month: 2026-09
+    const otherMonthEntry = {
+        id: 'real-other-4',
+        itemId: 'cat_real',
+        month: '2026-09',
+        cellKey: 'cat_real_2026-09_1700000003',
+        amount: 99000,
+        currency: 'HUF',
+        updated_at: new Date().toISOString()
+    };
+
+    // Persist all 4 entries to real IndexedDB
+    await db.save('entries', stdEntry);
+    await db.save('entries', tsEntry);
+    await db.save('entries', legEntry);
+    await db.save('entries', otherMonthEntry);
+
+    // Call Database.prototype.getByCellKey on real IndexedDB instance
+    const results = await db.getByCellKey('cat_real_2026-08');
+
+    // Assert exactly 3 matching records are returned
+    assert.equal(results.length, 3, 'Exactly 3 entries belonging to cat_real/2026-08 are returned');
+
+    // Assert the unrelated month is excluded
+    assert.ok(!results.some(r => r.id === 'real-other-4'), 'Unrelated month entry (2026-09) is excluded');
+
+    // Assert IDs and amounts are preserved
+    const foundStd = results.find(r => r.id === 'real-std-1');
+    const foundTs = results.find(r => r.id === 'real-ts-2');
+    const foundLeg = results.find(r => r.id === 'real-leg-3');
+
+    assert.ok(foundStd && foundStd.amount === 14000, 'Standard key entry preserved with correct amount');
+    assert.ok(foundTs && foundTs.amount === 26000, 'Timestamped key entry preserved with correct amount');
+    assert.ok(foundLeg && foundLeg.amount === 32000, 'Legacy month-first key entry preserved with correct amount');
+
+    // Reload / reopen real database to verify persistence
+    const reloadedDb = new Database(dbName, 12);
+    await reloadedDb.connect();
+    assert.equal(reloadedDb.isMock, undefined, 'Reloaded database is also real IndexedDB');
+
+    const reloadedResults = await reloadedDb.getByCellKey('cat_real_2026-08');
+    assert.equal(reloadedResults.length, 3, 'Post-reload lookup returns all 3 persisted entries');
+
+    dom.window.close();
+});
+
+test('B. Legacy month-first key — getByCellKey("cat1_2026-08") returns legacy entry', async () => {
+    const dom = setupEnvironment();
+    const db = new Database();
+    db._enableMockDb();
+
+    const mockSync = { push: async () => {} };
+    const entries = new EntryManager(db, mockSync);
+
+    // Save legacy entry with month-first key format
+    await entries.saveEntry({
+        id: 'legacy-1',
+        cellKey: '2026-08_cat1_123',
+        amount: 19000,
+        currency: 'HUF'
+    });
+
+    // Lookup using standard cell base key
+    const found = await entries.getByCellKey('cat1_2026-08');
+    assert.equal(found.length, 1, 'Legacy month-first entry returned by standard coordinate lookup');
+    assert.equal(found[0].id, 'legacy-1');
+    assert.equal(found[0].amount, 19000);
+
+    // Also verify Database.prototype.getByCellKey
+    const dbFound = await db.getByCellKey('cat1_2026-08');
+    assert.equal(dbFound.length, 1, 'Database.prototype.getByCellKey returns legacy entry');
+
+    dom.window.close();
+});
+
+test('C. Mixed-format multi-item cell — canonical and legacy entries appear in cell modal without duplicates', async () => {
+    const dom = setupEnvironment();
+    const db = new Database();
+    db._enableMockDb();
+
+    const mockSync = { push: async () => {} };
+    const entries = new EntryManager(db, mockSync);
+
+    const app = {
+        db,
+        entries,
+        hmiNotif: { showToast: () => {} },
+        updateReactStore: () => {}
+    };
+
+    // 1. Standard key without timestamp
+    await entries.saveEntry({
+        id: 'ent-std-1',
+        itemId: 'catMix',
+        month: '2026-08',
+        cellKey: 'catMix_2026-08',
+        amount: 5000,
+        currency: 'HUF'
+    });
+
+    // 2. Standard key with timestamp
+    await entries.saveEntry({
+        id: 'ent-std-2',
+        cellKey: 'catMix_2026-08_1700000001',
+        amount: 7500,
+        currency: 'HUF'
+    });
+
+    // 3. Legacy month-first key
+    await entries.saveEntry({
+        id: 'ent-leg-3',
+        cellKey: '2026-08_catMix_1700000002',
+        amount: 11000,
+        currency: 'HUF'
+    });
+
+    // 4. Entry belonging to another month
+    await entries.saveEntry({
+        id: 'ent-other',
+        cellKey: 'catMix_2026-09_1700000003',
+        amount: 99999,
+        currency: 'HUF'
+    });
+
+    const controller = new CellModalController(app);
+    controller.currentCellBaseKey = 'catMix_2026-08';
+
+    await controller.refreshList();
+
+    const container = document.getElementById('subEntriesContainer');
+    const renderedButtons = container.querySelectorAll('.btn-edit-sub-entry');
+
+    assert.equal(renderedButtons.length, 3, 'Exactly 3 sub-entries rendered in modal list');
+    assert.ok(container.innerHTML.includes('5') && container.innerHTML.includes('000 HUF'));
+    assert.ok(container.innerHTML.includes('7') && container.innerHTML.includes('500 HUF'));
+    assert.ok(container.innerHTML.includes('11') && container.innerHTML.includes('000 HUF'));
+    assert.ok(!container.innerHTML.includes('99999'), 'Other month entry is not included');
+
+    dom.window.close();
+});
+
+test('D. Selective editing — editing one entry preserves sibling ID, amount, and note', async () => {
+    const dom = setupEnvironment();
+    const db = new Database();
+    db._enableMockDb();
+
+    const mockSync = { push: async () => {} };
+    const entries = new EntryManager(db, mockSync);
+
+    const app = {
+        db,
+        entries,
+        hmiNotif: { showToast: () => {} },
+        updateReactStore: () => {}
+    };
+
+    const entry1 = await entries.saveEntry({
+        itemId: 'catA',
+        month: '2026-08',
+        cellKey: 'catA_2026-08_100',
+        amount: 10000,
+        note: 'Tétel 1 eredeti',
+        currency: 'HUF'
+    });
+
+    const entry2 = await entries.saveEntry({
+        itemId: 'catA',
+        month: '2026-08',
+        cellKey: 'catA_2026-08_200',
+        amount: 20000,
+        note: 'Tétel 2 érintetlen',
+        currency: 'HUF'
+    });
+
+    const controller = new CellModalController(app);
+    controller.currentCellBaseKey = 'catA_2026-08';
+
+    // Start editing entry 1
+    controller.editEntry(entry1.id);
+    assert.equal(controller.editingEntryId, entry1.id);
+
+    // Change amount and note
+    document.getElementById('cellAmountInput').value = '15000';
+    document.getElementById('cellNoteInput').value = 'Tétel 1 módosítva';
+
+    await controller.save();
+
+    // Verify entry 1 was updated
+    const updated1 = entries.entries.find(e => e.id === entry1.id);
+    assert.equal(updated1.amount, 15000);
+    assert.equal(updated1.note, 'Tétel 1 módosítva');
+
+    // Verify entry 2 retains exact original ID, amount, and note
+    const sibling2 = entries.entries.find(e => e.id === entry2.id);
+    assert.equal(sibling2.id, entry2.id);
+    assert.equal(sibling2.amount, 20000, 'Sibling amount preserved');
+    assert.equal(sibling2.note, 'Tétel 2 érintetlen', 'Sibling note preserved');
+
+    dom.window.close();
+});
+
+test('E. Selective deletion — deleting one entry from 3-item cell preserves the other two and updates cell total in DB and rendered MainTable UI', async () => {
+    const dom = setupEnvironment();
+    const db = new Database();
+    db._enableMockDb();
+
+    const [{ createRoot }, { useAppStore }, { default: MainTable }] = await Promise.all([
+        import('react-dom/client'),
+        import('../src/store/useAppStore.js'),
+        import('../src/components/table/MainTable.jsx')
+    ]);
+
+    const mockSync = { push: async () => {} };
+    const entries = new EntryManager(db, mockSync);
+
+    const app = {
+        db,
+        entries,
+        items: { items: [{ id: 'catDel', name: 'Törlés Kategória' }] },
+        months: { months: ['2026-08'] },
+        hmiNotif: { showToast: () => {}, showConfirm: async () => true },
+        updateReactStore: () => {
+            useAppStore.getState().setSnapshot({
+                items: [{ id: 'catDel', name: 'Törlés Kategória' }],
+                months: ['2026-08'],
+                entries: [...entries.entries],
+                eurRate: 400
+            });
+        }
+    };
+
+    const e1 = await entries.saveEntry({ itemId: 'catDel', month: '2026-08', cellKey: 'catDel_2026-08_1', amount: 5000 });
+    const e2 = await entries.saveEntry({ itemId: 'catDel', month: '2026-08', cellKey: 'catDel_2026-08_2', amount: 15000 });
+    const e3 = await entries.saveEntry({ itemId: 'catDel', month: '2026-08', cellKey: 'catDel_2026-08_3', amount: 25000 });
+
+    app.updateReactStore();
+
+    // Render MainTable in React root container
+    const rootDiv = document.createElement('div');
+    rootDiv.id = 'reactRoot';
+    document.body.appendChild(rootDiv);
+
+    const root = createRoot(rootDiv);
+    const { act } = React;
+
+    await act(async () => {
+        root.render(React.createElement(MainTable, null));
+    });
+
+    // Check UI before deletion: 5000 + 15000 + 25000 = 45000 Ft
+    let targetCell = rootDiv.querySelector('td[data-cellbasekey="catDel_2026-08"]');
+    assert.ok(targetCell, 'Target cell exists in rendered MainTable');
+    assert.ok(targetCell.textContent.includes('45'), 'Rendered UI initially displays total of 45 000 Ft');
+
+    const controller = new CellModalController(app);
+    controller.currentCellBaseKey = 'catDel_2026-08';
+
+    // Delete e2
+    await act(async () => {
+        await controller.deleteEntry(e2.id);
+    });
+
+    // Assert data layer
+    assert.equal(entries.entries.length, 2, 'Cell now contains 2 entries');
+    assert.ok(!entries.entries.some(e => e.id === e2.id), 'Deleted entry e2 is removed');
+
+    const remainingE1 = entries.entries.find(e => e.id === e1.id);
+    const remainingE3 = entries.entries.find(e => e.id === e3.id);
+    assert.ok(remainingE1, 'Entry e1 remains intact');
+    assert.ok(remainingE3, 'Entry e3 remains intact');
+
+    // Verify cell total recalculation (5000 + 25000 = 30000) in data layer
+    const activeEntries = await entries.getByCellKey('catDel_2026-08');
+    const recalculatedTotal = activeEntries.reduce((acc, e) => acc + e.amount, 0);
+    assert.equal(recalculatedTotal, 30000, 'Cell total correctly recalculated to 30000 after deletion');
+
+    // Assert UI layer: rendered MainTable cell now displays 30 000 Ft and NOT 45 000 Ft
+    targetCell = rootDiv.querySelector('td[data-cellbasekey="catDel_2026-08"]');
+    assert.ok(targetCell.textContent.includes('30'), 'Rendered UI cell updated to display recalculated total 30 000 Ft');
+    assert.ok(!targetCell.textContent.includes('45'), 'Old total 45 000 Ft is no longer displayed in UI');
+
+    await act(async () => {
+        root.unmount();
+    });
+    rootDiv.remove();
+    dom.window.close();
+});
+
+test('F. Embedded YYYY-MM in itemId — parseCellKey and modal flow correctly isolate month without corruption', async () => {
+    const dom = setupEnvironment();
+    const db = new Database();
+    db._enableMockDb();
+
+    const mockSync = { push: async () => {} };
+    const entries = new EntryManager(db, mockSync);
+
+    const app = {
+        db,
+        entries,
+        hmiNotif: { showToast: () => {} },
+        updateReactStore: () => {}
+    };
+
+    const complexItemId = 'archive_2025-01_misc';
+    const targetMonth = '2026-08';
+    const cellKey = `${complexItemId}_${targetMonth}`;
+
+    // 1. Direct parseCellKey test
+    const parsedKey = parseCellKey(cellKey);
+    assert.equal(parsedKey.itemId, complexItemId, 'Correctly isolates itemId containing embedded date');
+    assert.equal(parsedKey.month, targetMonth, 'Correctly isolates target month 2026-08');
+
+    // 2. Direct parseCellKey with timestamp
+    const parsedKeyTs = parseCellKey(`${complexItemId}_${targetMonth}_1700000000`);
+    assert.equal(parsedKeyTs.itemId, complexItemId, 'Timestamped key isolates itemId with embedded date');
+    assert.equal(parsedKeyTs.month, targetMonth, 'Timestamped key isolates target month 2026-08');
+
+    // 3. Save entry using EntryManager
+    const saved = await entries.saveEntry({
+        itemId: complexItemId,
+        month: targetMonth,
+        amount: 88000,
+        currency: 'HUF'
+    });
+
+    assert.equal(saved.itemId, complexItemId);
+    assert.equal(saved.month, targetMonth);
+
+    // 4. Modal controller creation flow with explicit attributes
+    const controller = new CellModalController(app);
+    const mockCellEl = dom.window.document.createElement('td');
+    mockCellEl.setAttribute('data-cellbasekey', cellKey);
+    mockCellEl.setAttribute('data-itemid', complexItemId);
+    mockCellEl.setAttribute('data-month', targetMonth);
+
+    globalThis.CustomEvent = dom.window.CustomEvent;
+    controller.open(mockCellEl);
+    assert.equal(controller.currentExplicitItemId, complexItemId);
+    assert.equal(controller.currentExplicitMonth, targetMonth);
+
+    document.getElementById('cellAmountInput').value = '42000';
+    await controller.save();
+
+    const lookupResults = await entries.getByCellKey(cellKey);
+    assert.equal(lookupResults.length, 2, 'Both entries for archive_2025-01_misc / 2026-08 found');
+    assert.ok(lookupResults.some(e => e.amount === 88000));
+    assert.ok(lookupResults.some(e => e.amount === 42000));
+
+    dom.window.close();
+});
+
+test('G. Canonical coordinate precedence — explicit valid coordinates override conflicting legacy cellKey', async () => {
+    const dom = setupEnvironment();
+    const db = new Database();
+    db._enableMockDb();
+
+    const mockSync = { push: async () => {} };
+    const entries = new EntryManager(db, mockSync);
+
+    // Seed conflicting entry: explicit itemId 'itemReal' & month '2026-08', but legacy cellKey points to 'stale_2025-01'
+    const conflictingEntry = {
+        id: 'conflict-1',
+        itemId: 'itemReal',
+        month: '2026-08',
+        cellKey: 'stale_2025-01_999',
+        amount: 55000,
+        currency: 'HUF'
+    };
+
+    await db.save('entries', conflictingEntry);
+    await entries.load();
+
+    const loaded = entries.entries.find(e => e.id === 'conflict-1');
+    assert.equal(loaded.itemId, 'itemReal', 'Explicit itemId preserved over conflicting cellKey');
+    assert.equal(loaded.month, '2026-08', 'Explicit month preserved over conflicting cellKey');
+
+    // getByCellKey lookup with explicit target
+    const foundInTarget = await entries.getByCellKey('itemReal_2026-08');
+    assert.equal(foundInTarget.length, 1, 'Entry found in its canonical coordinates');
+    assert.equal(foundInTarget[0].id, 'conflict-1');
+
+    const foundInStale = await entries.getByCellKey('stale_2025-01');
+    assert.equal(foundInStale.length, 0, 'Entry is not erroneously placed in stale cell coordinates');
+
+    // Verify cellKey was normalized and persisted to DB
+    const persisted = await db.getAll('entries');
+    const persistedConf = persisted.find(e => e.id === 'conflict-1');
+    assert.equal(persistedConf.cellKey, 'itemReal_2026-08_999', 'Conflicting cellKey normalized in storage with timestamp preserved');
+
+    dom.window.close();
+});
+
+test('H. Invalid explicit month values fallback to valid parsed cellKey', () => {
+    // 1. Invalid month > 12
+    const res1 = parseCellKey({ itemId: 'itemA', month: '2026-13', cellKey: 'itemA_2026-08_123' });
+    assert.equal(res1.itemId, 'itemA');
+    assert.equal(res1.month, '2026-08', '2026-13 falls back to valid parsed month 2026-08');
+
+    // 2. Invalid month 00
+    const res2 = parseCellKey({ itemId: 'itemA', month: '2026-00', cellKey: 'itemA_2026-08_123' });
+    assert.equal(res2.month, '2026-08', '2026-00 falls back to valid parsed month 2026-08');
+
+    // 3. Malformed string
+    const res3 = parseCellKey({ itemId: 'itemA', month: 'not_a_month', cellKey: 'itemA_2026-08_123' });
+    assert.equal(res3.month, '2026-08', 'Malformed string falls back to valid parsed month');
+
+    // 4. Empty string
+    const res4 = parseCellKey({ itemId: 'itemA', month: '', cellKey: 'itemA_2026-08_123' });
+    assert.equal(res4.month, '2026-08', 'Empty string falls back to valid parsed month');
+
+    // 5. parseCellKeyString fallback branch never returns invalid month
+    const res5 = parseCellKey('itemA_2026-13');
+    assert.equal(res5.month, null, 'parseCellKeyString("itemA_2026-13") returns null for invalid month');
+
+    const res6 = parseCellKey('itemA_2026-00');
+    assert.equal(res6.month, null, 'parseCellKeyString("itemA_2026-00") returns null for invalid month 00');
+
+    // 6. Valid months 2026-01 and 2026-12 are preserved
+    const res7 = parseCellKey('itemA_2026-01');
+    assert.equal(res7.month, '2026-01', '2026-01 is a valid month');
+
+    const res8 = parseCellKey('itemA_2026-12');
+    assert.equal(res8.month, '2026-12', '2026-12 is a valid month');
+});
+
+test('I. Real IndexedDB — Database.prototype.getByCellKey uses index queries and avoids getAll()', async () => {
+    const dom = setupEnvironment();
+    dom.window.indexedDB = globalThis.indexedDB;
+    dom.window.IDBKeyRange = globalThis.IDBKeyRange;
+
+    const dbName = `test_index_lookup_${Date.now()}`;
+    const db = new Database(dbName, 12);
+    await db.connect();
+
+    // Persist standard and legacy entries
+    await db.save('entries', { id: 'idx-1', itemId: 'itemTarget', month: '2026-08', cellKey: 'itemTarget_2026-08_100', amount: 10000 });
+    await db.save('entries', { id: 'idx-2', itemId: 'itemTarget', month: '2026-08', cellKey: '2026-08_itemTarget_200', amount: 20000 });
+    await db.save('entries', { id: 'idx-other', itemId: 'other', month: '2026-08', cellKey: 'other_2026-08_300', amount: 30000 });
+
+    // Spy on objectStore.getAll to verify it is NOT called during getByCellKey
+    let getAllCalled = false;
+    const origTx = db.db.transaction.bind(db.db);
+    db.db.transaction = function(storeNames, mode) {
+        const tx = origTx(storeNames, mode);
+        const origStore = tx.objectStore.bind(tx);
+        tx.objectStore = function(name) {
+            const store = origStore(name);
+            if (name === 'entries') {
+                const origGetAll = store.getAll.bind(store);
+                store.getAll = function(...args) {
+                    getAllCalled = true;
+                    return origGetAll(...args);
+                };
+            }
+            return store;
+        };
+        return tx;
+    };
+
+    const results = await db.getByCellKey('itemTarget_2026-08');
+    assert.equal(results.length, 2, 'Returns both matching standard and legacy entries');
+    assert.equal(getAllCalled, false, 'store.getAll() was NOT called because cellKey index was used');
+
+    dom.window.close();
+});

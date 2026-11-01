@@ -1,6 +1,8 @@
 // js/cell-modal-controller.js
 // Cell Modal Controller - Rész-tételek kezelése egy cellában (2026-os javított verzió)
 
+import { parseCellKey, isValidMonth, isValidItemId } from './utils/cell-key-utils.js';
+
 export class CellModalController {
     /**
      * Konstruktor - Cell Modal vezérlő inicializálása
@@ -23,6 +25,8 @@ export class CellModalController {
      */
     open(cellElement) {
         this.currentCellBaseKey = cellElement.getAttribute('data-cellbasekey');
+        this.currentExplicitItemId = cellElement.getAttribute('data-itemid') || null;
+        this.currentExplicitMonth = cellElement.getAttribute('data-month') || null;
 
         const modalRoot = document.getElementById('costAppCellEditorRoot');
         if (!modalRoot) {
@@ -267,6 +271,20 @@ export class CellModalController {
         const stornoCheckbox = document.getElementById('cellIsStorno');
         const isStorno = stornoCheckbox ? stornoCheckbox.checked : false;
 
+        // Prefer explicit coordinates from DOM element if valid, otherwise parse cell base key
+        let itemId = this.currentExplicitItemId;
+        let month = this.currentExplicitMonth;
+
+        if (!isValidItemId(itemId) || !isValidMonth(month)) {
+            const parsedCell = parseCellKey(this.currentCellBaseKey);
+            if (!isValidItemId(parsedCell.itemId) || !isValidMonth(parsedCell.month)) {
+                this.app.hmiNotif?.showToast('Érvénytelen cella azonosító!', 'error');
+                return;
+            }
+            itemId = parsedCell.itemId;
+            month = parsedCell.month;
+        }
+
         let entryData;
 
         if (this.editingEntryId !== null) {
@@ -275,15 +293,15 @@ export class CellModalController {
             entryData = {
                 id: this.editingEntryId,
                 cellKey: oldEntry ? oldEntry.cellKey : `${this.currentCellBaseKey}_${Date.now()}`,
-                itemId: this.currentCellBaseKey.split('_')[0],
-                month: this.currentCellBaseKey.split('_')[1],
+                itemId,
+                month,
                 amount,
                 currency,
                 paymentMethod,
                 note,
                 color: this._normalizeColor(this.selectedColor),
                 isStorno,
-                timestamp: new Date().toISOString(),
+                timestamp: oldEntry?.timestamp || new Date().toISOString(),
                 updated_at: new Date().toISOString()
             };
 
@@ -292,8 +310,8 @@ export class CellModalController {
             // Új tétel
             entryData = {
                 cellKey: `${this.currentCellBaseKey}_${Date.now()}`,
-                itemId: this.currentCellBaseKey.split('_')[0],
-                month: this.currentCellBaseKey.split('_')[1],
+                itemId,
+                month,
                 amount,
                 currency,
                 paymentMethod,

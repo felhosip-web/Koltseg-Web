@@ -375,26 +375,101 @@ export class Database {
 
     async getByCellKey(cellKeyPrefix) {
         return new Promise((resolve) => {
+            const target = parseCellKey(cellKeyPrefix);
+            if (!target.itemId || !target.month) return resolve([]);
             if (this.isMock) {
-                const results = Object.values(this.mockStore.entries).filter(entry => 
-                    entry && entry.cellKey && entry.cellKey.startsWith(cellKeyPrefix)
-                );
+                const results = Object.values(this.mockStore.entries).filter(entry => {
+                    const parsed = parseCellKey(entry);
+                    return parsed.itemId === target.itemId && parsed.month === target.month;
+                });
                 return resolve(results);
             }
             if (!this.db) return resolve([]);
             try {
                 const tx = this.db.transaction('entries', 'readonly');
                 const store = tx.objectStore('entries');
-                const index = store.index('cellKey');
-                const range = IDBKeyRange.bound(cellKeyPrefix, cellKeyPrefix + '\uffff');
-                const req = index.getAll(range);
-                req.onsuccess = () => resolve(req.result || []);
-                req.onerror = () => resolve([]);
+
+                // If 'cellKey' index is available, use targeted bound index queries instead of a full store.getAll() scan
+                if (store.indexNames && store.indexNames.contains('cellKey') && typeof IDBKeyRange !== 'undefined') {
+                    const index = store.index('cellKey');
+
+                    // Candidate 1: standard key prefix (itemId_month)
+                    const standardPrefix = `${target.itemId}_${target.month}`;
+                    const standardRange = IDBKeyRange.bound(standardPrefix, standardPrefix + '\uffff');
+                    const reqStandard = index.getAll(standardRange);
+
+                    reqStandard.onsuccess = () => {
+                        const candidates = [...(reqStandard.result || [])];
+
+                        // Candidate 2: legacy month-first prefix (month_itemId)
+                        const legacyPrefix = `${target.month}_${target.itemId}`;
+                        const legacyRange = IDBKeyRange.bound(legacyPrefix, legacyPrefix + '\uffff');
+                        const reqLegacy = index.getAll(legacyRange);
+
+                        reqLegacy.onsuccess = () => {
+                            const legacyItems = reqLegacy.result || [];
+                            candidates.push(...legacyItems);
+
+                            // Deduplicate by entry ID and verify canonical coordinates match target
+                            const seen = new Set();
+                            const matched = [];
+                            for (const entry of candidates) {
+                                if (entry && entry.id && !seen.has(entry.id)) {
+                                    seen.add(entry.id);
+                                    const parsed = parseCellKey(entry);
+                                    if (parsed.itemId === target.itemId && parsed.month === target.month) {
+                                        matched.push(entry);
+                                    }
+                                }
+                            }
+                            resolve(matched);
+                        };
+
+                        reqLegacy.onerror = () => {
+                            // Fall back to standard candidates if legacy index lookup errors
+                            const seen = new Set();
+                            const matched = candidates.filter(entry => {
+                                if (entry && entry.id && !seen.has(entry.id)) {
+                                    seen.add(entry.id);
+                                    const parsed = parseCellKey(entry);
+                                    return parsed.itemId === target.itemId && parsed.month === target.month;
+                                }
+                                return false;
+                            });
+                            resolve(matched);
+                        };
+                    };
+
+                    reqStandard.onerror = () => {
+                        // Fallback to store.getAll() if index query fails
+                        this._fallbackGetAllScan(store, target, resolve);
+                    };
+                } else {
+                    // Fallback to store.getAll() if index is not present
+                    this._fallbackGetAllScan(store, target, resolve);
+                }
             } catch (e) {
                 console.warn('[DB] getByCellKey hiba:', e);
                 resolve([]);
             }
         });
+    }
+
+    _fallbackGetAllScan(store, target, resolve) {
+        try {
+            const req = store.getAll();
+            req.onsuccess = () => {
+                const all = req.result || [];
+                const matched = all.filter(entry => {
+                    const parsed = parseCellKey(entry);
+                    return parsed.itemId === target.itemId && parsed.month === target.month;
+                });
+                resolve(matched);
+            };
+            req.onerror = () => resolve([]);
+        } catch (e) {
+            resolve([]);
+        }
     }
 
     async getAll(storeName) {
@@ -1010,17 +1085,55 @@ export class EntryManager {
     async load() { 
         try {
             const data = await this.db.getAll('entries');
-            // Normalize cellKey to explicit itemId and month fields and vice versa
+            // Normalize cellKey and coordinates: explicit valid itemId and month are authoritative.
+            // Persist normalized records to DB when conflicting or missing so storage does not remain contradictory.
+            const recordsToPersist = [];
             data.forEach(e => {
-                if (!e.cellKey && e.itemId && e.month) {
-                    e.cellKey = `${e.itemId}_${e.month}`;
+                const parsed = parseCellKey(e);
+                let changed = false;
+
+                if (parsed.itemId && e.itemId !== parsed.itemId) {
+                    e.itemId = parsed.itemId;
+                    changed = true;
                 }
-                if (e.cellKey && (!e.itemId || !e.month)) {
-                    const parsed = parseCellKey(e);
-                    if (!e.itemId) e.itemId = parsed.itemId;
-                    if (!e.month) e.month = parsed.month;
+                if (parsed.month && e.month !== parsed.month) {
+                    e.month = parsed.month;
+                    changed = true;
+                }
+
+                // Canonical cellKey normalization: ensure cellKey represents the canonical coordinates when missing or when it parses to conflicting coordinates
+                if (e.itemId && e.month) {
+                    if (!e.cellKey) {
+                        e.cellKey = `${e.itemId}_${e.month}`;
+                        changed = true;
+                    } else {
+                        const keyParsed = parseCellKey(e.cellKey);
+                        // A cellKey is conflicting only if it parses to valid coordinates that differ from explicit e.itemId / e.month
+                        if (keyParsed.itemId && keyParsed.month && (keyParsed.itemId !== e.itemId || keyParsed.month !== e.month)) {
+                            const parts = typeof e.cellKey === 'string' ? e.cellKey.split('_') : [];
+                            const lastPart = parts[parts.length - 1];
+                            const hasTimestamp = parts.length > 2 && /^[0-9]+$/.test(lastPart);
+                            e.cellKey = hasTimestamp ? `${e.itemId}_${e.month}_${lastPart}` : `${e.itemId}_${e.month}`;
+                            changed = true;
+                        }
+                    }
+                }
+
+                if (changed) {
+                    recordsToPersist.push(e);
                 }
             });
+
+            if (recordsToPersist.length > 0 && this.db && typeof this.db.save === 'function') {
+                for (const rec of recordsToPersist) {
+                    try {
+                        await this.db.save('entries', rec);
+                    } catch (err) {
+                        console.warn('[EntryManager] Warning persisting normalized entry:', err);
+                    }
+                }
+            }
+
             this.entries = data;
         } catch (e) {
             console.error('[EntryManager] Betöltési hiba:', e);
@@ -1030,10 +1143,12 @@ export class EntryManager {
     }
     
     async getByCellKey(cellKeyPrefix) {
-        return this.entries.filter(e => 
-            e.cellKey === cellKeyPrefix || 
-            (e.cellKey && e.cellKey.startsWith(cellKeyPrefix + '_'))
-        );
+        const target = parseCellKey(cellKeyPrefix);
+        if (!target.itemId || !target.month) return [];
+        return this.entries.filter(e => {
+            const parsed = parseCellKey(e);
+            return parsed.itemId === target.itemId && parsed.month === target.month;
+        });
     }
     
     async saveEntry(entry) {
@@ -1041,19 +1156,24 @@ export class EntryManager {
             if (!entry.id) entry.id = generateUUID();
             if (!entry.updated_at) entry.updated_at = new Date().toISOString();
 
-            // Explicit field generation
-            if (entry.itemId && entry.month && !entry.cellKey) {
-                entry.cellKey = `${entry.itemId}_${entry.month}_${Date.now()}`;
-            } else if (entry.cellKey && (!entry.itemId || !entry.month)) {
-                const parts = entry.cellKey.split('_');
-                let tempItemId = parts[0];
-                let tempMonth = parts[1];
-                if (!/^[0-9]+$/.test(tempItemId) && parts.length >= 2 && /^[0-9]{4}-[0-9]{2}$/.test(parts[0])) {
-                    tempMonth = parts[0];
-                    tempItemId = parts[1];
+            // Canonical coordinate resolution: valid explicit itemId and month are authoritative
+            const parsed = parseCellKey(entry);
+            if (parsed.itemId) entry.itemId = parsed.itemId;
+            if (parsed.month) entry.month = parsed.month;
+
+            // Ensure cellKey matches canonical coordinates
+            if (entry.itemId && entry.month) {
+                if (!entry.cellKey) {
+                    entry.cellKey = `${entry.itemId}_${entry.month}_${Date.now()}`;
+                } else {
+                    const keyParsed = parseCellKey(entry.cellKey);
+                    if (keyParsed.itemId && keyParsed.month && (keyParsed.itemId !== entry.itemId || keyParsed.month !== entry.month)) {
+                        const parts = typeof entry.cellKey === 'string' ? entry.cellKey.split('_') : [];
+                        const lastPart = parts[parts.length - 1];
+                        const hasTimestamp = parts.length > 2 && /^[0-9]+$/.test(lastPart);
+                        entry.cellKey = hasTimestamp ? `${entry.itemId}_${entry.month}_${lastPart}` : `${entry.itemId}_${entry.month}_${Date.now()}`;
+                    }
                 }
-                if (!entry.itemId) entry.itemId = tempItemId;
-                if (!entry.month) entry.month = tempMonth;
             }
             await this.db.save('entries', entry);
 

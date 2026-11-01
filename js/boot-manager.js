@@ -55,11 +55,10 @@ export class BootManager {
 
             await this._loadAllData();
 
-            console.log('[BOOT-BACKGROUND] Adatok betöltve, UI frissítése...');
-            // UI frissítése az adatok betöltése után
+            console.log('[BOOT-BACKGROUND] Adatok betöltve, UI azonnali frissítése...');
+            // AZONNALI KÖZZÉTÉTEL: A helyi adatok azonnal megjelennek az UI-ban a felhő/backup késleltetés előtt
             this.app.updateReactStore?.();
             this.app.updateReminderStatus?.();
-
             this.app.setSystemStatus?.('Adatok betöltve', false);
 
             // További háttérfolyamatok: felhő, szinkronizáció, backup
@@ -77,8 +76,13 @@ export class BootManager {
 
         } catch (error) {
             console.error('[BOOT-BACKGROUND] Hiba a háttérbetöltés során:', error);
+            this.app._bootError = error.message || 'Adatbetöltési hiba';
             this.app.hmiNotif?.showToast('Az adatok betöltése nem sikerült!', 'error');
             this.app.setSystemStatus?.('Adatbetöltési hiba', true);
+        } finally {
+            // Garantáltan közzétesszük a lezárult állapotot a React Zustand store felé
+            this.app.updateReactStore?.();
+            this.app.updateReminderStatus?.();
         }
     }
 
@@ -87,22 +91,32 @@ export class BootManager {
      * @returns {Promise<void>}
      */
     async _loadAllData() {
-        try {
-            await Promise.all([
-                this.app.reminderManager.load(),
-                this.app.items.load(),
-                this.app.months.load(),
-                this.app.entries.load(),
-                this.app.templates.load(),
-                this.app.incomingManager?.load?.(),
-                this.app.pluginStorage?.init?.(),
-                this.app.pluginStorageService?.load?.(),
-                this.app.workLogManager?.load?.()
-            ]);
-            await this.app.syncService?.reconcileOutboxOnBoot?.();
-        } finally {
-            // Data loading complete
+        // 1. KRITIKUS DOMAIN ADATBETÖLTÉS: items, months, entries, incomingManager
+        // Az incomingManager a Dashboard és StatsTab egyenlegszámításának alapja, kiesése hamis pénzügyi állapotot eredményez.
+        await Promise.all([
+            this.app.items?.load?.() || Promise.resolve(),
+            this.app.months?.load?.() || Promise.resolve(),
+            this.app.entries?.load?.() || Promise.resolve(),
+            this.app.incomingManager?.load?.() || Promise.resolve()
+        ]);
+
+        // 2. OPCIONÁLIS HÁTTÉRSZOLGÁLTATÁSOK BETÖLTÉSE: hiba esetén nem szakítják meg a fő adatok megjelenítését
+        const optionalResults = await Promise.allSettled([
+            this.app.reminderManager?.load?.() || Promise.resolve(),
+            this.app.templates?.load?.() || Promise.resolve(),
+            this.app.pluginStorage?.init?.() || Promise.resolve(),
+            this.app.pluginStorageService?.load?.() || Promise.resolve(),
+            this.app.workLogManager?.load?.() || Promise.resolve()
+        ]);
+
+        const rejectedOptional = optionalResults.filter(r => r.status === 'rejected');
+        if (rejectedOptional.length > 0) {
+            console.warn(`[BOOT-BACKGROUND] ${rejectedOptional.length} opcionális háttérszolgáltatás betöltése meghiúsult:`, rejectedOptional.map(r => r.reason));
         }
+
+        await this.app.syncService?.reconcileOutboxOnBoot?.().catch(e => {
+            console.warn('[BOOT-BACKGROUND] Hiba az outbox egyeztetése közben:', e);
+        });
     }
 
     /**
