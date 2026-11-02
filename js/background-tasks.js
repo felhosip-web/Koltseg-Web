@@ -165,7 +165,9 @@ export class BackgroundTaskManager {
         const runFetch = async () => {
             if (!this.isActive) return;
             await this.app.config?.watchDogEur?.((rate, mode) => {
-                // EUR rate watchdog update handler
+                if (typeof this.app.updateReactStore === 'function') {
+                    this.app.updateReactStore();
+                }
             });
         };
 

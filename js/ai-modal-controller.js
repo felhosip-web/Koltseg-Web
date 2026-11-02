@@ -41,6 +41,8 @@ export class AiModalController {
         const months = this.app.months.months;
         const currentDate = new Date().toISOString().split('T')[0];
 
+        const primaryCurrency = this.app.config?.primaryCurrency || (typeof localStorage !== 'undefined' && localStorage.getItem('app_primary_currency') === 'EUR' ? 'EUR' : 'HUF');
+
         const response = await fetch('/api/ai/parse', {
             method: 'POST',
             headers: {
@@ -51,6 +53,7 @@ export class AiModalController {
                 categories,
                 months,
                 currentDate,
+                primaryCurrency,
                 aiConfig: this.app.config.aiConfig
             })
         });

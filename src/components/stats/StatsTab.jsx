@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useAppStore } from '../../store/useAppStore.js';
+import { convertAmount, formatCurrency } from '../../utils/currency-utils.js';
 
 /**
  * Statistics tab component displaying detailed financial analytics.
@@ -22,11 +23,12 @@ export default function StatsTab() {
             const months = snapshot.months || [];
             const incomings = (snapshot.incomings || []).filter(e => !e.isStorno);
             const eurRate = snapshot.eurRate || 400;
+            const primaryCurrency = snapshot.primaryCurrency || 'HUF';
 
             // === KIADÁS STATISZTIKA ===
             let total = 0, card = 0, cash = 0, transfer = 0;
             entries.forEach(e => {
-                const amount = e.currency === 'EUR' ? e.amount * eurRate : e.amount;
+                const amount = convertAmount(e.amount, e.currency || 'HUF', primaryCurrency, eurRate);
                 total += amount;
                 if (e.paymentMethod === 'Kártya') card += amount;
                 else if (e.paymentMethod === 'Utalás') transfer += amount;
@@ -37,7 +39,7 @@ export default function StatsTab() {
             let incomingTotal = 0;
             let incomingBySender = {};
             incomings.forEach(e => {
-                const amount = e.amount || 0;
+                const amount = convertAmount(e.amount || 0, e.currency || 'HUF', primaryCurrency, eurRate);
                 incomingTotal += amount;
                 if (!incomingBySender[e.sender]) incomingBySender[e.sender] = 0;
                 incomingBySender[e.sender] += amount;
@@ -46,7 +48,7 @@ export default function StatsTab() {
             const topSenders = Object.entries(incomingBySender)
                 .sort((a, b) => b[1] - a[1])
                 .slice(0, 3);
-            const topSender = topSenders[0] ? `${topSenders[0][0]} (${topSenders[0][1].toLocaleString('hu-HU')} Ft)` : '-';
+            const topSender = topSenders[0] ? `${topSenders[0][0]} (${formatCurrency(topSenders[0][1], primaryCurrency)})` : '-';
 
             const balance = incomingTotal - total;
 
@@ -98,7 +100,8 @@ export default function StatsTab() {
                 filledCells,
                 fillPercent: Math.min(fillPercent, 100),
                 emptyCells,
-                avgEntries
+                avgEntries,
+                primaryCurrency
             });
         };
 
@@ -112,19 +115,19 @@ export default function StatsTab() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
                 <div className="bg-white p-6 rounded-3xl shadow border border-gray-100">
                     <p className="text-gray-500 text-sm">Összes kiadás</p>
-                    <p className="text-3xl font-bold text-gray-800 mt-2">{stats.total.toLocaleString('hu-HU')} Ft</p>
+                    <p className="text-3xl font-bold text-gray-800 mt-2">{formatCurrency(stats.total, stats.primaryCurrency)}</p>
                 </div>
                 <div className="bg-white p-6 rounded-3xl shadow border border-gray-100">
                     <p className="text-gray-500 text-sm">Kártya</p>
-                    <p className="text-3xl font-bold text-blue-600 mt-2">{stats.card.toLocaleString('hu-HU')} Ft</p>
+                    <p className="text-3xl font-bold text-blue-600 mt-2">{formatCurrency(stats.card, stats.primaryCurrency)}</p>
                 </div>
                 <div className="bg-white p-6 rounded-3xl shadow border border-gray-100">
                     <p className="text-gray-500 text-sm">Készpénz</p>
-                    <p className="text-3xl font-bold text-emerald-600 mt-2">{stats.cash.toLocaleString('hu-HU')} Ft</p>
+                    <p className="text-3xl font-bold text-emerald-600 mt-2">{formatCurrency(stats.cash, stats.primaryCurrency)}</p>
                 </div>
                 <div className="bg-white p-6 rounded-3xl shadow border border-gray-100">
                     <p className="text-gray-500 text-sm">Utalás</p>
-                    <p className="text-3xl font-bold text-amber-600 mt-2">{stats.transfer.toLocaleString('hu-HU')} Ft</p>
+                    <p className="text-3xl font-bold text-amber-600 mt-2">{formatCurrency(stats.transfer, stats.primaryCurrency)}</p>
                 </div>
             </div>
 
@@ -134,7 +137,7 @@ export default function StatsTab() {
                     <p className="text-gray-500 text-sm flex items-center gap-1">
                         <i className="fas fa-arrow-down text-emerald-500"></i> Összes bejövő
                     </p>
-                    <p className="text-3xl font-bold text-emerald-600 mt-2">{stats.incomingTotal.toLocaleString('hu-HU')} Ft</p>
+                    <p className="text-3xl font-bold text-emerald-600 mt-2">{formatCurrency(stats.incomingTotal, stats.primaryCurrency)}</p>
                 </div>
                 <div className="bg-white p-6 rounded-3xl shadow border border-gray-100">
                     <p className="text-gray-500 text-sm flex items-center gap-1">
@@ -153,7 +156,7 @@ export default function StatsTab() {
                         <i className="fas fa-scale-balanced text-blue-500"></i> Egyenleg
                     </p>
                     <p className={`text-2xl font-bold mt-2 ${stats.balance >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                        {stats.balance.toLocaleString('hu-HU')} Ft
+                        {formatCurrency(stats.balance, stats.primaryCurrency)}
                     </p>
                 </div>
             </div>

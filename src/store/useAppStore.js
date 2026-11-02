@@ -14,6 +14,8 @@ export const useAppStore = create((set) => ({
     fuelLogs: [],
     dayjs: null,
     eurRate: 400,
+    exchangeRateStatus: 'live',
+    primaryCurrency: 'HUF',
     lastSyncTime: null,
     systemStatusText: 'Rendszer Online',
     isSystemStatusError: false,

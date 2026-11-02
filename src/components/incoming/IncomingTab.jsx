@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { useAppStore } from '../../store/useAppStore';
 import { appService } from '../../services/appService';
+import { formatCurrency } from '../../utils/currency-utils.js';
 
 export default function IncomingTab() {
     const incomings = useAppStore(state => state.incomings || []);
@@ -129,10 +130,10 @@ export default function IncomingTab() {
                                                         {amount ? (
                                                             isStorno ? (
                                                                 <span className="line-through text-red-500/70 opacity-60 flex items-center justify-center gap-1" title="Sztornózott bejövő utalás">
-                                                                    <i className="fas fa-ban text-[10px]"></i> {amount.toLocaleString('hu-HU')} Ft
+                                                                    <i className="fas fa-ban text-[10px]"></i> {formatCurrency(amount, entry?.currency || 'HUF')}
                                                                 </span>
                                                             ) : (
-                                                                `${amount.toLocaleString('hu-HU')} Ft`
+                                                                formatCurrency(amount, entry?.currency || 'HUF')
                                                             )
                                                         ) : (
                                                             '—'
