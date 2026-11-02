@@ -336,25 +336,104 @@ export const appService = {
     addNewIncomingEntry() {
         if (appInstance?.incomingManager?.addNewEntry) {
             appInstance.incomingManager.addNewEntry();
+        } else if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('incoming-open-new'));
         }
     },
 
     handleIncomingCellClick(element) {
         if (appInstance?.incomingManager?._handleCellClick) {
             appInstance.incomingManager._handleCellClick(element);
+        } else if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('incoming-open-cell', { detail: element?.dataset }));
         }
     },
 
-    deleteIncomingColumn(date) {
+    async saveIncomingEntry({ id, sender, date, amount, currency, isStorno }) {
+        if (!appInstance?.incomingManager) return null;
+        if (id) {
+            const updated = await appInstance.incomingManager.update(id, {
+                sender,
+                date,
+                amount,
+                currency,
+                isStorno: Boolean(isStorno)
+            });
+            await appInstance.incomingManager.load();
+            if (typeof appInstance.updateReactStore === 'function') {
+                appInstance.updateReactStore();
+            }
+            return updated;
+        } else {
+            const added = await appInstance.incomingManager.add(sender, date, amount, currency);
+            if (isStorno && added?.id) {
+                await appInstance.incomingManager.update(added.id, { isStorno: true });
+            }
+            await appInstance.incomingManager.load();
+            if (typeof appInstance.updateReactStore === 'function') {
+                appInstance.updateReactStore();
+            }
+            return added;
+        }
+    },
+
+    async deleteIncomingEntry(id) {
+        if (!appInstance?.incomingManager) return;
+        await appInstance.incomingManager.delete(id);
+        await appInstance.incomingManager.load();
+        if (typeof appInstance.updateReactStore === 'function') {
+            appInstance.updateReactStore();
+        }
+    },
+
+    async deleteIncomingColumn(date) {
         if (appInstance?.incomingManager?.deleteColumn) {
-            appInstance.incomingManager.deleteColumn(date);
+            await appInstance.incomingManager.deleteColumn(date);
+            return;
         }
+        if (!appInstance?.incomingManager) return;
+        const confirmed = await this.showConfirm({
+            title: 'Oszlop törlése',
+            message: `Biztosan törlöd a(z) ${date} dátumhoz tartozó összes bejövő tételt?`,
+            type: 'warning',
+            confirmText: 'Törlés'
+        });
+        if (!confirmed) return;
+
+        const entries = appInstance.incomingManager.incomings.filter(e => e.date === date);
+        for (const entry of entries) {
+            await appInstance.incomingManager.delete(entry.id);
+        }
+        await appInstance.incomingManager.load();
+        if (typeof appInstance.updateReactStore === 'function') {
+            appInstance.updateReactStore();
+        }
+        this.showToast('Bejegyzések törölve!', 'success');
     },
 
-    deleteIncomingRow(sender) {
+    async deleteIncomingRow(sender) {
         if (appInstance?.incomingManager?.deleteRow) {
-            appInstance.incomingManager.deleteRow(sender);
+            await appInstance.incomingManager.deleteRow(sender);
+            return;
         }
+        if (!appInstance?.incomingManager) return;
+        const confirmed = await this.showConfirm({
+            title: 'Sor törlése',
+            message: `Biztosan törlöd a(z) "${sender}" partnerhez tartozó összes bejövő tételt?`,
+            type: 'warning',
+            confirmText: 'Törlés'
+        });
+        if (!confirmed) return;
+
+        const entries = appInstance.incomingManager.incomings.filter(e => e.sender === sender);
+        for (const entry of entries) {
+            await appInstance.incomingManager.delete(entry.id);
+        }
+        await appInstance.incomingManager.load();
+        if (typeof appInstance.updateReactStore === 'function') {
+            appInstance.updateReactStore();
+        }
+        this.showToast('Bejegyzések törölve!', 'success');
     },
 
     /** Reminder actions */

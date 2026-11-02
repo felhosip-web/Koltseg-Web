@@ -2,6 +2,7 @@
 // Cell Modal Controller - Rész-tételek kezelése egy cellában (2026-os javított verzió)
 
 import { parseCellKey, isValidMonth, isValidItemId } from './utils/cell-key-utils.js';
+import { resolveDefaultCurrency } from '../src/utils/currency-utils.js';
 
 export class CellModalController {
     /**
@@ -43,7 +44,7 @@ export class CellModalController {
     resetForm() {
         this.editingEntryId = null;
         
-        const defaultCurrency = this.app.config?.primaryCurrency || (typeof localStorage !== 'undefined' && localStorage.getItem('app_primary_currency') === 'EUR' ? 'EUR' : 'HUF');
+        const defaultCurrency = resolveDefaultCurrency(null, this.app.config?.primaryCurrency);
 
         document.getElementById('cellAmountInput').value = '';
         document.getElementById('cellNoteInput').value = '';
@@ -200,6 +201,7 @@ export class CellModalController {
         this.editingEntryId = entry.id;
 
         document.getElementById('cellAmountInput').value = entry.amount;
+        // Preserves original transaction currency regardless of current primaryCurrency
         document.getElementById('cellCurrencyInput').value = entry.currency || 'HUF';
         document.getElementById('cellMethodInput').value = entry.paymentMethod || 'Kártya';
         document.getElementById('cellNoteInput').value = entry.note || '';
@@ -266,7 +268,7 @@ export class CellModalController {
             return;
         }
 
-        const currency = document.getElementById('cellCurrencyInput').value;
+        const currency = resolveDefaultCurrency(document.getElementById('cellCurrencyInput')?.value, this.app.config?.primaryCurrency);
         const paymentMethod = document.getElementById('cellMethodInput').value;
         const note = document.getElementById('cellNoteInput').value.trim();
         

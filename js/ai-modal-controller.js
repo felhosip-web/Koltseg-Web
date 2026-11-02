@@ -1,6 +1,7 @@
 // js/ai-modal-controller.js
 // AI Quick Insert Modal Controller - Természetes nyelvű költség-bejegyzés Gemini segítségével
 import { CategoryIcons } from './category-icons.js';
+import { resolveDefaultCurrency } from '../src/utils/currency-utils.js';
 
 export class AiModalController {
     /**
@@ -41,7 +42,7 @@ export class AiModalController {
         const months = this.app.months.months;
         const currentDate = new Date().toISOString().split('T')[0];
 
-        const primaryCurrency = this.app.config?.primaryCurrency || (typeof localStorage !== 'undefined' && localStorage.getItem('app_primary_currency') === 'EUR' ? 'EUR' : 'HUF');
+        const primaryCurrency = resolveDefaultCurrency(null, this.app.config?.primaryCurrency);
 
         const response = await fetch('/api/ai/parse', {
             method: 'POST',
@@ -112,7 +113,7 @@ export class AiModalController {
                 itemId: categoryId,
                 month: data.month,
                 amount: data.amount,
-                currency: data.currency,
+                currency: resolveDefaultCurrency(data.currency, this.app.config?.primaryCurrency),
                 paymentMethod: data.paymentMethod,
                 note: data.note,
                 color: '#c7d2fe', // Szép, AI-specifikus halvány kék/indigo jelölő szín
