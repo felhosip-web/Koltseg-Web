@@ -3,6 +3,7 @@ import { db } from '../../../js/db.js';
 import { NameDays } from '../../../js/utils/namedays.js';
 import { useAppStore } from '../../store/useAppStore.js';
 import { appService } from '../../services/appService.js';
+import { convertAmount, formatCurrency } from '../../utils/currency-utils.js';
 
 // A minimal port of the dashboard rendering logic using React state
 
@@ -35,6 +36,7 @@ export default function DashboardTab() {
             const months = snapshot.months || [];
             const incomings = (snapshot.incomings || []).filter(e => !e.isStorno);
             const eurRate = snapshot.eurRate || 400;
+            const primaryCurrency = snapshot.primaryCurrency || 'HUF';
 
             // KIADÁSOK
             let total = 0;
@@ -46,12 +48,14 @@ export default function DashboardTab() {
             const currentMonth = dayjs ? now.format('YYYY-MM') : `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
 
             entries.forEach(e => {
-                const amount = e.currency === 'EUR' ? e.amount * eurRate : e.amount;
+                const converted = convertAmount(e.amount, e.currency || 'HUF', primaryCurrency, eurRate);
+                if (converted === null) return;
+                const amount = converted;
                 total += amount;
 
                 let entryMonth = '';
                 if (e.cellKey) {
-                   entryMonth = e.cellKey.substring(0, 7); // Fallback parseCellKey logic if import is tricky
+                   entryMonth = e.cellKey.substring(0, 7);
                    const parts = e.cellKey.split('_');
                    if (parts.length > 1) {
                         entryMonth = parts[1];
@@ -77,7 +81,9 @@ export default function DashboardTab() {
             let incomingTotal = 0;
             let currentMonthIncoming = 0;
             incomings.forEach(e => {
-                const amount = e.amount || 0;
+                const converted = convertAmount(e.amount || 0, e.currency || 'HUF', primaryCurrency, eurRate);
+                if (converted === null) return;
+                const amount = converted;
                 incomingTotal += amount;
                 let incMonth = '';
                 if(e.date) {
@@ -100,13 +106,15 @@ export default function DashboardTab() {
                    if (parts.length > 1) month = parts[1];
                 }
                 if (!month) return;
-                const amount = e.currency === 'EUR' ? e.amount * eurRate : e.amount;
+                const converted = convertAmount(e.amount, e.currency || 'HUF', primaryCurrency, eurRate);
+                if (converted === null) return;
+                const amount = converted;
                 if (!monthlyData[month]) monthlyData[month] = 0;
                 monthlyData[month] += amount;
             });
             const recordedMonths = Object.keys(monthlyData);
             const avgTotal = Object.values(monthlyData).reduce((a, b) => a + b, 0);
-            const monthlyAvg = recordedMonths.length > 0 ? Math.round(avgTotal / recordedMonths.length) : 0;
+            const monthlyAvg = recordedMonths.length > 0 ? (primaryCurrency === 'EUR' ? parseFloat((avgTotal / recordedMonths.length).toFixed(2)) : Math.round(avgTotal / recordedMonths.length)) : 0;
 
             // TOP 5
             const top5 = Object.entries(categoryTotals)
@@ -195,7 +203,8 @@ export default function DashboardTab() {
                 top5,
                 notifications,
                 urgentItems,
-                eurRate
+                eurRate,
+                primaryCurrency
             });
         };
 
@@ -486,7 +495,7 @@ export default function DashboardTab() {
                             <div>
                                 <h2 className="text-blue-100 font-medium tracking-wide text-sm uppercase">Aktuális Havi Egyenleg</h2>
                                 <p className="text-4xl md:text-5xl font-black mt-2 tracking-tight">
-                                    {stats.monthlyBalance.toLocaleString('hu-HU')} <span className="text-2xl text-blue-200">Ft</span>
+                                    {formatCurrency(stats.monthlyBalance, stats.primaryCurrency)}
                                 </p>
                             </div>
                             <div className="bg-white/20 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/20 text-sm font-bold shadow-sm">
@@ -499,13 +508,13 @@ export default function DashboardTab() {
                                 <p className="text-blue-200 text-xs font-semibold uppercase tracking-wider mb-1">
                                     <i className="fas fa-arrow-up text-emerald-400 mr-1"></i> Bevételek
                                 </p>
-                                <p className="text-xl font-bold">{stats.currentMonthIncoming.toLocaleString('hu-HU')} Ft</p>
+                                <p className="text-xl font-bold">{formatCurrency(stats.currentMonthIncoming, stats.primaryCurrency)}</p>
                             </div>
                             <div>
                                 <p className="text-blue-200 text-xs font-semibold uppercase tracking-wider mb-1">
                                     <i className="fas fa-arrow-down text-rose-400 mr-1"></i> Kiadások
                                 </p>
-                                <p className="text-xl font-bold">{stats.monthlyTotal.toLocaleString('hu-HU')} Ft</p>
+                                <p className="text-xl font-bold">{formatCurrency(stats.monthlyTotal, stats.primaryCurrency)}</p>
                             </div>
                         </div>
                     </div>
@@ -568,7 +577,7 @@ export default function DashboardTab() {
                         <p className="text-gray-500 text-xs font-bold uppercase tracking-wider">Havi Kiadás</p>
                         <i className="fas fa-chart-line text-blue-500 bg-blue-50 p-2 rounded-xl"></i>
                     </div>
-                    <p className="text-2xl font-black text-gray-800">{stats.monthlyTotal.toLocaleString('hu-HU')} <span className="text-sm text-gray-400">Ft</span></p>
+                    <p className="text-2xl font-black text-gray-800">{formatCurrency(stats.monthlyTotal, stats.primaryCurrency)}</p>
 
                     {(() => {
                         const diff = stats.monthlyAvg > 0 ? ((stats.monthlyTotal - stats.monthlyAvg) / stats.monthlyAvg) * 100 : 0;
@@ -586,7 +595,7 @@ export default function DashboardTab() {
                         <p className="text-gray-500 text-xs font-bold uppercase tracking-wider">Összes Kiadás</p>
                         <i className="fas fa-coins text-amber-500 bg-amber-50 p-2 rounded-xl"></i>
                     </div>
-                    <p className="text-2xl font-black text-gray-800">{stats.total.toLocaleString('hu-HU')} <span className="text-sm text-gray-400">Ft</span></p>
+                    <p className="text-2xl font-black text-gray-800">{formatCurrency(stats.total, stats.primaryCurrency)}</p>
                     <p className="text-xs text-gray-400 mt-1">A teljes időszak alatt</p>
                 </div>
 
@@ -596,7 +605,7 @@ export default function DashboardTab() {
                         <i className="fas fa-crown text-purple-500 bg-purple-50 p-2 rounded-xl"></i>
                     </div>
                     <p className="text-xl font-black text-gray-800 truncate" title={stats.topCategory.name}>{stats.topCategory.name}</p>
-                    <p className="text-xs text-gray-500 font-semibold mt-1">{stats.topCategory.amount.toLocaleString('hu-HU')} Ft</p>
+                    <p className="text-xs text-gray-500 font-semibold mt-1">{formatCurrency(stats.topCategory.amount, stats.primaryCurrency)}</p>
                 </div>
 
                 <div
@@ -674,7 +683,7 @@ export default function DashboardTab() {
                                                 <span className="text-sm font-medium text-gray-700 truncate">{name}</span>
                                             </div>
                                             <div className="flex items-center gap-3 flex-shrink-0">
-                                                <span className="text-sm font-bold text-gray-800">{amount.toLocaleString('hu-HU')} Ft</span>
+                                                <span className="text-sm font-bold text-gray-800">{formatCurrency(amount, stats.primaryCurrency)}</span>
                                                 <span className="w-3 h-3 rounded-full flex-shrink-0" style={{background: colors[index]}}></span>
                                             </div>
                                         </div>

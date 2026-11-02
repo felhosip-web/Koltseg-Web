@@ -390,12 +390,27 @@ export default function SettingsPanel() {
                         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
                             <div>
                                 <label
+                                    className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">Elsődleges
+                                    Pénznem</label>
+                                <select id="primaryCurrencySelect"
+                                    defaultValue={typeof localStorage !== 'undefined' ? (localStorage.getItem('app_primary_currency') || 'HUF') : 'HUF'}
+                                    className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl bg-white focus:outline-none focus:border-indigo-500 text-xs font-bold text-gray-700">
+                                    <option value="HUF">HUF (Magyar Forint)</option>
+                                    <option value="EUR">EUR (Euró)</option>
+                                </select>
+                                <span className="text-[9px] text-slate-400 mt-1 block">
+                                    A nézetek és összesítések alapja.
+                                </span>
+                            </div>
+                            <div>
+                                <label
                                     className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">Biztonsági
                                     EUR árfolyam (Ft)</label>
                                 <input type="number" id="eurRateInput"
+                                    defaultValue={typeof localStorage !== 'undefined' ? (localStorage.getItem('default_eur_rate') || '400') : '400'}
                                     className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl bg-white focus:outline-none focus:border-indigo-500 text-xs font-bold text-gray-700" />
                                 <div className="flex items-center gap-1.5 mt-1.5">
-                                    <input type="checkbox" id="useLiveEurToggle" defaultChecked
+                                    <input type="checkbox" id="useLiveEurToggle" defaultChecked={typeof localStorage !== 'undefined' ? localStorage.getItem('use_live_eur') !== 'false' : true}
                                         className="w-3.5 h-3.5 accent-indigo-600 cursor-pointer" />
                                     <label htmlFor="useLiveEurToggle"
                                         className="text-[10px] text-slate-500 font-semibold cursor-pointer select-none">Automata

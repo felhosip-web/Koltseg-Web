@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { appService } from './services/appService.js';
+import { useAppStore } from './store/useAppStore.js';
 
 /**
  * Header component for the cost tracking application.
@@ -99,6 +100,9 @@ export default function CostAppHeader() {
     };
 
     const [queueStatus, setQueueStatus] = useState(null);
+
+    const eurRate = useAppStore(state => state.eurRate || 400);
+    const exchangeRateStatus = useAppStore(state => state.exchangeRateStatus || 'live');
 
     useEffect(() => {
         const initialStatus = appService.getQueueStatus();
@@ -287,9 +291,10 @@ export default function CostAppHeader() {
                 </button>
 
                 <div
-                    className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 rounded-2xl border border-gray-200 text-sm font-medium">
-                    <span id="eurLed" className="w-3 h-3 rounded-full bg-gray-400"></span>
-                    <span id="eurStatusText" className="text-gray-700">EUR: ...</span>
+                    className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 rounded-2xl border border-gray-200 text-sm font-medium"
+                    title={`EUR Árfolyam Státusz: ${exchangeRateStatus === 'live' ? 'Élő' : exchangeRateStatus === 'stale' ? 'Lejárt / Offline cache' : exchangeRateStatus === 'manual' ? 'Kézi beállítás' : 'Biztonsági fallback'}`}>
+                    <span id="eurLed" className={`w-3 h-3 rounded-full ${exchangeRateStatus === 'live' ? 'bg-emerald-500' : exchangeRateStatus === 'stale' ? 'bg-amber-400' : exchangeRateStatus === 'manual' ? 'bg-blue-500' : 'bg-red-400'}`}></span>
+                    <span id="eurStatusText" className="text-gray-700 font-semibold font-mono">EUR: {Number(eurRate).toFixed(2)} Ft</span>
                 </div>
 
                 <div id="reminderGlobalStatus"

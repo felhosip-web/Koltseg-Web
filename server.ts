@@ -74,7 +74,7 @@ You are given:
 
 Guidelines:
 - "amount": Extract the numerical value (absolute, non-negative). Convert to number.
-- "currency": Must be exactly "HUF" or "EUR". If Hungarian currency is mentioned (e.g. "Ft", "forint", "HUF"), use "HUF". If Euros are mentioned (e.g. "EUR", "euro"), use "EUR". Default to "HUF" if not specified.
+- "currency": Must be exactly "HUF" or "EUR". If Hungarian currency is mentioned (e.g. "Ft", "forint", "HUF"), use "HUF". If Euros are mentioned (e.g. "EUR", "euro"), use "EUR". Default to the requested primaryCurrency (or "HUF" if not specified).
 - "paymentMethod": Must be exactly "Kártya" (for cards, card payments, online), "Készpénz" (for cash, physical money, zsebbe), or "Utalás" (for bank transfers, bank, utaltam). Default to "Kártya" if unclear.
 - "category": Match the input to the best fitting category in the existing categories list.
   - If one of the existing categories fits perfectly or is semantically very close, use that exact category name.

@@ -43,10 +43,12 @@ export class CellModalController {
     resetForm() {
         this.editingEntryId = null;
         
+        const defaultCurrency = this.app.config?.primaryCurrency || (typeof localStorage !== 'undefined' && localStorage.getItem('app_primary_currency') === 'EUR' ? 'EUR' : 'HUF');
+
         document.getElementById('cellAmountInput').value = '';
         document.getElementById('cellNoteInput').value = '';
         document.getElementById('cellMethodInput').value = 'Kártya';
-        document.getElementById('cellCurrencyInput').value = 'HUF';
+        document.getElementById('cellCurrencyInput').value = defaultCurrency;
         
         this.selectedColor = 'transparent';
 

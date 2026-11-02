@@ -605,6 +605,8 @@ export class App {
             months: months,
             incomings: this.incomingManager?.incomings || [],
             eurRate: this.config?.eurRate || 400,
+            exchangeRateStatus: this.config?.exchangeRateService?.getStatus() || 'live',
+            primaryCurrency: this.config?.primaryCurrency || 'HUF',
             reminders: this.reminderManager?.reminders || [],
             notes: this.notepadNotes || safeJsonParse('plugin_notepad_notes', []),
             calendarEvents: calendarEvents,
@@ -891,6 +893,80 @@ async reload() {
         this.hmiNotif.showToast('❌ Újratöltési hiba: ' + e.message, 'error');
     }
  }
+
+    handleSettingsSave() {
+        const eurRateInput = document.getElementById('eurRateInput');
+        const useLiveEurToggle = document.getElementById('useLiveEurToggle');
+        const primaryCurrencySelect = document.getElementById('primaryCurrencySelect');
+        const reminderIntervalInput = document.getElementById('bgReminderInterval');
+        const syncIntervalInput = document.getElementById('bgSyncInterval');
+        const tasksEnabledInput = document.getElementById('bgTasksEnabled');
+        const weatherCityInput = document.getElementById('weatherCityInput');
+        const supabaseUrlInput = document.getElementById('supabaseUrlInput');
+        const supabaseKeyInput = document.getElementById('supabaseKeyInput');
+        const supabaseToggle = document.getElementById('supabaseToggle');
+
+        const nextSettings = {};
+
+        if (eurRateInput && eurRateInput.value) {
+            const parsedRate = parseFloat(eurRateInput.value);
+            if (Number.isFinite(parsedRate) && parsedRate > 0) {
+                nextSettings.eurRate = parsedRate;
+            } else {
+                this.hmiNotif?.showToast?.('Érvénytelen EUR árfolyam!', 'error');
+                return;
+            }
+        }
+
+        if (useLiveEurToggle) {
+            nextSettings.useLiveEur = useLiveEurToggle.checked;
+        }
+
+        if (primaryCurrencySelect) {
+            const curr = primaryCurrencySelect.value;
+            nextSettings.primaryCurrency = curr === 'EUR' ? 'EUR' : 'HUF';
+        }
+
+        if (weatherCityInput) {
+            nextSettings.weatherCity = weatherCityInput.value.trim() || 'Budapest';
+        }
+
+        if (supabaseUrlInput) {
+            nextSettings.url = supabaseUrlInput.value.trim();
+        }
+
+        if (supabaseKeyInput) {
+            nextSettings.key = supabaseKeyInput.value.trim();
+        }
+
+        if (supabaseToggle) {
+            nextSettings.useCloud = supabaseToggle.checked;
+        }
+
+        this.config?.saveSettings(nextSettings);
+
+        if (this.backgroundTasks) {
+            if (reminderIntervalInput) {
+                const rem = parseInt(reminderIntervalInput.value, 10);
+                if (rem > 0) this.backgroundTasks.settings.reminderInterval = rem;
+            }
+            if (syncIntervalInput) {
+                const sync = parseInt(syncIntervalInput.value, 10);
+                if (sync > 0) this.backgroundTasks.settings.syncInterval = sync;
+            }
+            if (tasksEnabledInput) {
+                this.backgroundTasks.isActive = tasksEnabledInput.checked;
+            }
+            this.backgroundTasks.saveSettings();
+        }
+
+        localStorage.setItem('settings_updated_at', new Date().toISOString());
+
+        this.updateReactStore();
+
+        this.hmiNotif?.showToast?.('Beállítások sikeresen elmentve!', 'success');
+        this.logger?.log('system', 'info', 'Alapbeállítások és pénznem mentve.');
+    }
 
     openSyncModal() {
         const modal = document.getElementById('syncModal');

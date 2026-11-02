@@ -3,6 +3,7 @@ import { CategoryIcons } from '../../../js/category-icons.js';
 import { parseCellKey, isValidMonth } from '../../../js/utils/cell-key-utils.js';
 import { useAppStore } from '../../store/useAppStore.js';
 import { appService } from '../../services/appService.js';
+import { convertAmount, formatCurrency, getSecondaryCurrency } from '../../utils/currency-utils.js';
 
 export default function MainTable() {
     const snapshot = useAppStore();
@@ -193,21 +194,35 @@ function CategoryCell({ item }) {
 
 function DataCell({ itemId, month, cellEntries, eurRate }) {
     const cellBaseKey = `${itemId}_${month}`;
+    const primaryCurrency = useAppStore(state => state.primaryCurrency || 'HUF');
+    const secondaryCurrency = getSecondaryCurrency(primaryCurrency);
 
-    let huf = 0, eur = 0;
+    let primaryTotal = 0;
+    let secondaryTotal = 0;
     let hasStorno = false;
     let allStorno = cellEntries.length > 0;
-    let stornoHuf = 0, stornoEur = 0;
+    let stornoPrimary = 0;
+    let stornoSecondary = 0;
+    let hasEntries = cellEntries.length > 0;
+
+    const rate = eurRate || 400;
 
     cellEntries.forEach(e => {
+        const entryCurrency = e.currency || 'HUF';
+        const pVal = convertAmount(e.amount, entryCurrency, primaryCurrency, rate);
+        const sVal = convertAmount(e.amount, entryCurrency, secondaryCurrency, rate);
+
+        const safePVal = pVal !== null ? pVal : 0;
+        const safeSVal = sVal !== null ? sVal : 0;
+
         if (e.isStorno) {
             hasStorno = true;
-            if (e.currency === 'EUR') stornoEur += e.amount;
-            else stornoHuf += e.amount;
+            stornoPrimary += safePVal;
+            stornoSecondary += safeSVal;
         } else {
             allStorno = false;
-            if (e.currency === 'EUR') eur += e.amount;
-            else huf += e.amount;
+            primaryTotal += safePVal;
+            secondaryTotal += safeSVal;
         }
     });
 
@@ -219,40 +234,28 @@ function DataCell({ itemId, month, cellEntries, eurRate }) {
         style.backgroundColor = 'rgba(254, 242, 242, 0.6)';
     }
 
-    const rate = eurRate || 400;
-    const convertedHuf = Math.round(eur * rate);
-    const convertedStornoHuf = Math.round(stornoEur * rate);
-
     let content = null;
-    if (huf + eur === 0) {
-        if (allStorno) {
-            content = (
-                <div className="text-xs font-mono leading-tight text-center text-red-500/70 opacity-65 flex flex-col items-center justify-center line-through decoration-red-500 decoration-1">
-                    <div className="flex items-center gap-1 mb-0.5 text-[9px] font-bold bg-red-100 text-red-600 px-1 rounded">
-                        <i className="fas fa-ban"></i> SZTORNÓ
-                    </div>
-                    {stornoHuf > 0 && <div>{stornoHuf.toLocaleString('hu-HU')} Ft</div>}
-                    {stornoEur > 0 && (
-                        <div>
-                            {stornoEur} EUR
-                            <div className="text-[9px] font-normal">({convertedStornoHuf.toLocaleString('hu-HU')} Ft)</div>
-                        </div>
-                    )}
+    if (!hasEntries || (!hasStorno && primaryTotal === 0)) {
+        content = <span className="text-gray-300 text-xl font-light">-</span>;
+    } else if (allStorno) {
+        content = (
+            <div className="text-xs font-mono leading-tight text-center text-red-500/70 opacity-65 flex flex-col items-center justify-center line-through decoration-red-500 decoration-1">
+                <div className="flex items-center gap-1 mb-0.5 text-[9px] font-bold bg-red-100 text-red-600 px-1 rounded">
+                    <i className="fas fa-ban"></i> SZTORNÓ
                 </div>
-            );
-        } else {
-            content = <span className="text-gray-300 text-xl font-light">-</span>;
-        }
+                <div>{formatCurrency(stornoPrimary, primaryCurrency)}</div>
+                <div className="text-[9px] font-normal">({formatCurrency(stornoSecondary, secondaryCurrency)})</div>
+            </div>
+        );
     } else {
         content = (
             <div className="text-xs font-mono leading-tight text-center relative">
-                {huf > 0 && <div>{huf.toLocaleString('hu-HU')} Ft</div>}
-                {eur > 0 && (
-                    <div className="text-emerald-700">
-                        {eur} EUR
-                        <div className="text-[10px] text-gray-500 font-normal">({convertedHuf.toLocaleString('hu-HU')} Ft)</div>
-                    </div>
-                )}
+                <div className="font-bold text-gray-800">
+                    {formatCurrency(primaryTotal, primaryCurrency)}
+                </div>
+                <div className="text-[10px] text-gray-500 font-normal">
+                    (≈ {formatCurrency(secondaryTotal, secondaryCurrency)})
+                </div>
                 {hasStorno && (
                     <div className="absolute -top-1 -right-1 text-red-500 text-[10px] bg-red-50 rounded-full w-4 h-4 flex items-center justify-center border border-red-100 shadow-sm" title="Részben sztornózott tételt tartalmaz!">
                         <i className="fas fa-ban"></i>

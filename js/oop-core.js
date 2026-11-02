@@ -26,7 +26,8 @@ export class SecurityManager {
                 return typeof data.sender === 'string' &&
                     data.sender.trim() !== '' &&
                     /^\d{4}-\d{2}-\d{2}$/.test(data.date) &&
-                    !isNaN(data.amount);
+                    !isNaN(data.amount) &&
+                    (data.currency === undefined || typeof data.currency === 'string');
             case 'incoming_senders':
                 return typeof data.id !== 'undefined' &&
                     typeof data.name === 'string' &&
@@ -1206,15 +1207,20 @@ export class EntryManager {
 }
 
 // ==================== 3. CONFIGURATION MANAGER ====================
+import { exchangeRateService } from '../src/services/currency/ExchangeRateService.js';
+
 export class ConfigManager {
     constructor() {
-        this.defaultEurRate = parseFloat(localStorage.getItem('default_eur_rate')) || 400;
-        this.eurRate = parseFloat(localStorage.getItem('live_eur_rate')) || this.defaultEurRate;
-        this.useLiveEur = localStorage.getItem('use_live_eur') !== 'false';
-        this.useSupabase = localStorage.getItem('supabase_use') === 'true';
-        this.weatherCity = localStorage.getItem('weather_city') || 'Budapest';
+        this.exchangeRateService = exchangeRateService;
+        this.primaryCurrency = (typeof localStorage !== 'undefined' && localStorage.getItem('app_primary_currency') === 'EUR') ? 'EUR' : 'HUF';
+
+        this.defaultEurRate = this.exchangeRateService.getState().manualFallbackRate;
+        this.eurRate = this.exchangeRateService.getRate();
+        this.useLiveEur = this.exchangeRateService.isLiveActive();
+        this.useSupabase = (typeof localStorage !== 'undefined' && localStorage.getItem('supabase_use') === 'true');
+        this.weatherCity = (typeof localStorage !== 'undefined' ? localStorage.getItem('weather_city') : null) || 'Budapest';
         
-        let savedUrl = localStorage.getItem('supabase_url') || '';
+        let savedUrl = (typeof localStorage !== 'undefined' ? localStorage.getItem('supabase_url') : '') || '';
         if (savedUrl) {
             savedUrl = savedUrl.trim().replace(/\/rest\/v1\/?$/, '').replace(/\/+$/, '');
             if (!savedUrl.startsWith('http://') && !savedUrl.startsWith('https://')) {
@@ -1223,76 +1229,64 @@ export class ConfigManager {
         }
         this.supabaseConfig = {
             url: savedUrl,
-            key: localStorage.getItem('supabase_key') || ''
+            key: (typeof localStorage !== 'undefined' ? localStorage.getItem('supabase_key') : '') || ''
         };
         this.aiConfig = {
-            apiKey: localStorage.getItem('ai_api_key') || '',
-            model: localStorage.getItem('ai_model') || 'gemini-3.5-flash'
+            apiKey: (typeof localStorage !== 'undefined' ? localStorage.getItem('ai_api_key') : '') || '',
+            model: (typeof localStorage !== 'undefined' ? localStorage.getItem('ai_model') : '') || 'gemini-3.5-flash'
         };
+
+        this.exchangeRateService.subscribe(state => {
+            this.eurRate = state.rate;
+            this.defaultEurRate = state.manualFallbackRate;
+            this.useLiveEur = state.useLiveEur;
+        });
     }
 
     async watchDogEur(uiCallback) {
-        if (!this.useLiveEur) {
-            this.eurRate = this.defaultEurRate;
-            uiCallback(this.eurRate, 'fallback');
-            return;
+        const state = await this.exchangeRateService.fetchLiveRate();
+        this.eurRate = state.rate;
+        this.defaultEurRate = state.manualFallbackRate;
+        this.useLiveEur = state.useLiveEur;
+        if (typeof uiCallback === 'function') {
+            uiCallback(state.rate.toFixed ? state.rate.toFixed(2) : String(state.rate), state.status);
         }
-        try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 3000);
-            const response = await fetch('https://open.er-api.com/v6/latest/EUR', { signal: controller.signal });
-            clearTimeout(timeoutId);
-
-            if (!response.ok) throw new Error();
-            const data = await response.json();
-            
-            if (data?.rates?.HUF) {
-                this.eurRate = parseFloat(data.rates.HUF);
-                localStorage.setItem('live_eur_rate', this.eurRate.toFixed(2));
-                uiCallback(this.eurRate.toFixed(2), 'live');
-                return;
-            }
-            throw new Error();
-        } catch {
-            const fallback = localStorage.getItem('default_eur_rate') || 400;
-            this.eurRate = parseFloat(fallback);
-            uiCallback(this.eurRate, 'fallback');
-        }
+        return state;
     }
 
     saveSettings(settings) {
         if (!settings || typeof settings !== 'object') return false;
-        const { url, key, useCloud, eurRate, useLiveEur, weatherCity } = settings;
+        const { url, key, useCloud, eurRate, useLiveEur, weatherCity, primaryCurrency } = settings;
 
         if (url !== undefined) {
             this.supabaseConfig.url = url;
-            localStorage.setItem('supabase_url', url);
+            if (typeof localStorage !== 'undefined') localStorage.setItem('supabase_url', url);
         }
         if (key !== undefined) {
             this.supabaseConfig.key = key;
-            localStorage.setItem('supabase_key', key);
+            if (typeof localStorage !== 'undefined') localStorage.setItem('supabase_key', key);
         }
         if (useCloud !== undefined) {
             this.useSupabase = Boolean(useCloud);
-            localStorage.setItem('supabase_use', this.useSupabase ? 'true' : 'false');
+            if (typeof localStorage !== 'undefined') localStorage.setItem('supabase_use', this.useSupabase ? 'true' : 'false');
         }
         if (weatherCity !== undefined) {
             this.weatherCity = weatherCity;
-            localStorage.setItem('weather_city', weatherCity);
+            if (typeof localStorage !== 'undefined') localStorage.setItem('weather_city', weatherCity);
+        }
+        if (primaryCurrency !== undefined) {
+            this.primaryCurrency = primaryCurrency === 'EUR' ? 'EUR' : 'HUF';
+            if (typeof localStorage !== 'undefined') localStorage.setItem('app_primary_currency', this.primaryCurrency);
         }
         if (eurRate !== undefined) {
-            this.defaultEurRate = Number(eurRate);
-            localStorage.setItem('default_eur_rate', String(this.defaultEurRate));
-            if (!this.useLiveEur) {
-                this.eurRate = this.defaultEurRate;
-            }
+            this.exchangeRateService.setManualFallbackRate(eurRate);
+            this.defaultEurRate = this.exchangeRateService.getState().manualFallbackRate;
+            this.eurRate = this.exchangeRateService.getRate();
         }
         if (useLiveEur !== undefined) {
-            this.useLiveEur = Boolean(useLiveEur);
-            localStorage.setItem('use_live_eur', this.useLiveEur ? 'true' : 'false');
-            if (!this.useLiveEur) {
-                this.eurRate = this.defaultEurRate;
-            }
+            this.exchangeRateService.setUseLiveEur(useLiveEur);
+            this.useLiveEur = this.exchangeRateService.isLiveActive();
+            this.eurRate = this.exchangeRateService.getRate();
         }
 
         return true;
@@ -1791,7 +1785,7 @@ export class IncomingManager {
      * @param {number} amount - Összeg
      * @returns {Promise<object>} - A létrehozott tétel
      */
-    async add(sender, date, amount) {
+    async add(sender, date, amount, currency = null) {
         try {
             sender = String(sender || '').trim();
             if (!sender) {
@@ -1804,6 +1798,9 @@ export class IncomingManager {
             if (isNaN(amount) || amount <= 0) {
                 throw new Error('Az összegnek nagyobbnak kell lennie nullánál.');
             }
+
+            const chosenCurrency = currency || (typeof localStorage !== 'undefined' && localStorage.getItem('app_primary_currency') === 'EUR' ? 'EUR' : 'HUF');
+
             // Ellenőrizzük, hogy van-e már ilyen tétel
             const existing = this.incomings.find(
                 entry => entry.sender === sender && entry.date === normalizedDate
@@ -1811,6 +1808,7 @@ export class IncomingManager {
             if (existing) {
                 // Frissítjük a meglévőt
                 existing.amount = amount;
+                if (currency) existing.currency = currency;
                 existing.updated_at = new Date().toISOString();
                 await this.db.save('incomings', existing);
                 return existing;
@@ -1821,6 +1819,7 @@ export class IncomingManager {
                 sender,
                 date: normalizedDate,
                 amount,
+                currency: chosenCurrency,
                 updated_at: new Date().toISOString(),
                 created_at: new Date().toISOString()
             };

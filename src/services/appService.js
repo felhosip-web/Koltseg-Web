@@ -43,6 +43,19 @@ export const appService = {
         return null;
     },
 
+    getPrimaryCurrency() {
+        return appInstance?.config?.primaryCurrency || 'HUF';
+    },
+
+    getExchangeRateState() {
+        return appInstance?.config?.exchangeRateService?.getState() || {
+            rate: 400,
+            status: 'fallback',
+            source: 'fallback',
+            isStale: false
+        };
+    },
+
     /**
      * Updates system status in the React Zustand store and app instance.
      * @param {string} text Status text

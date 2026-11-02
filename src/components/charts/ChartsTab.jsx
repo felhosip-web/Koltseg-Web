@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useAppStore } from '../../store/useAppStore.js';
 import { appService } from '../../services/appService.js';
+import { convertAmount, formatCurrency } from '../../utils/currency-utils.js';
 
 export default function ChartsTab() {
     const [stats, setStats] = useState(null);
@@ -35,6 +36,7 @@ export default function ChartsTab() {
             const items = snapshot.items || [];
             const incomings = (snapshot.incomings || []).filter(e => !e.isStorno);
             const eurRate = snapshot.eurRate || 400;
+            const primaryCurrency = snapshot.primaryCurrency || 'HUF';
             const months = snapshot.months || [];
 
             // Fuel mod
@@ -56,6 +58,7 @@ export default function ChartsTab() {
                 items,
                 incomings,
                 eurRate,
+                primaryCurrency,
                 months,
                 fuelLogs
             });
@@ -80,7 +83,7 @@ export default function ChartsTab() {
 
         destroyOld();
 
-        const { entries, items, incomings, eurRate, fuelLogs } = stats;
+        const { entries, items, incomings, eurRate, primaryCurrency, fuelLogs } = stats;
 
         const filteredEntries = filterMonth === 'all'
             ? entries
@@ -109,6 +112,8 @@ export default function ChartsTab() {
             });
         }
 
+        const currSymbol = primaryCurrency === 'EUR' ? 'EUR' : 'Ft';
+
         // 1. Bar chart
         if (barRef.current && items.length > 0) {
             const ctx = barRef.current.getContext('2d');
@@ -118,20 +123,22 @@ export default function ChartsTab() {
             filteredEntries.forEach(e => {
                 const itemId = e.cellKey?.split('_')[0];
                 if (itemMap[itemId]) {
-                    const amount = e.currency === 'EUR' ? e.amount * eurRate : e.amount;
-                    itemMap[itemId].total += amount;
+                    const converted = convertAmount(e.amount, e.currency || 'HUF', primaryCurrency, eurRate);
+                    if (converted !== null) {
+                        itemMap[itemId].total += converted;
+                    }
                 }
             });
 
             const labels = Object.values(itemMap).map(i => i.name);
-            const data = Object.values(itemMap).map(i => i.total);
+            const data = Object.values(itemMap).map(i => primaryCurrency === 'EUR' ? parseFloat(i.total.toFixed(2)) : Math.round(i.total));
 
             instancesRef.current.bar = new window.Chart(ctx, {
                 type: 'bar',
                 data: {
                     labels: labels,
                     datasets: [{
-                        label: 'Kiadások (Ft)',
+                        label: `Kiadások (${currSymbol})`,
                         data: data,
                         backgroundColor: 'rgba(59, 130, 246, 0.85)',
                         borderColor: '#3b82f6',
@@ -142,7 +149,14 @@ export default function ChartsTab() {
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    plugins: { legend: { display: false } },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: (c) => formatCurrency(c.parsed.y, primaryCurrency)
+                            }
+                        }
+                    },
                     scales: { y: { beginAtZero: true } }
                 }
             });
@@ -153,7 +167,9 @@ export default function ChartsTab() {
             const ctx = doughnutRef.current.getContext('2d');
             let cash = 0, card = 0, transfer = 0;
             filteredEntries.forEach(e => {
-                const amount = e.currency === 'EUR' ? e.amount * eurRate : e.amount;
+                const converted = convertAmount(e.amount, e.currency || 'HUF', primaryCurrency, eurRate);
+                if (converted === null) return;
+                const amount = converted;
                 if (e.paymentMethod === 'Kártya') card += amount;
                 else if (e.paymentMethod === 'Utalás') transfer += amount;
                 else cash += amount;
@@ -164,7 +180,11 @@ export default function ChartsTab() {
                 data: {
                     labels: ['Készpénz', 'Kártya', 'Utalás'],
                     datasets: [{
-                        data: [cash, card, transfer],
+                        data: [
+                            primaryCurrency === 'EUR' ? parseFloat(cash.toFixed(2)) : Math.round(cash),
+                            primaryCurrency === 'EUR' ? parseFloat(card.toFixed(2)) : Math.round(card),
+                            primaryCurrency === 'EUR' ? parseFloat(transfer.toFixed(2)) : Math.round(transfer)
+                        ],
                         backgroundColor: ['#10b981', '#3b82f6', '#f59e0b'],
                         borderWidth: 2,
                         borderColor: '#ffffff'
@@ -173,7 +193,14 @@ export default function ChartsTab() {
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    plugins: { legend: { position: 'right' } }
+                    plugins: {
+                        legend: { position: 'right' },
+                        tooltip: {
+                            callbacks: {
+                                label: (c) => ` ${c.label}: ${formatCurrency(c.raw, primaryCurrency)}`
+                            }
+                        }
+                    }
                 }
             });
         }
@@ -183,7 +210,9 @@ export default function ChartsTab() {
             const ctx = currencyRef.current.getContext('2d');
             let huf = 0, eur = 0;
             filteredEntries.forEach(e => {
-                const amount = e.currency === 'EUR' ? e.amount * eurRate : e.amount;
+                const converted = convertAmount(e.amount, e.currency || 'HUF', primaryCurrency, eurRate);
+                if (converted === null) return;
+                const amount = converted;
                 if (e.currency === 'EUR') eur += amount;
                 else huf += amount;
             });
@@ -191,9 +220,12 @@ export default function ChartsTab() {
             instancesRef.current.currency = new window.Chart(ctx, {
                 type: 'doughnut',
                 data: {
-                    labels: ['HUF', 'EUR (HUF érték)'],
+                    labels: [`HUF bejegyzések (${currSymbol})`, `EUR bejegyzések (${currSymbol})`],
                     datasets: [{
-                        data: [huf, eur],
+                        data: [
+                            primaryCurrency === 'EUR' ? parseFloat(huf.toFixed(2)) : Math.round(huf),
+                            primaryCurrency === 'EUR' ? parseFloat(eur.toFixed(2)) : Math.round(eur)
+                        ],
                         backgroundColor: ['#6366f1', '#ec4899'],
                         borderWidth: 2,
                         borderColor: '#ffffff'
@@ -202,7 +234,14 @@ export default function ChartsTab() {
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    plugins: { legend: { position: 'right' } }
+                    plugins: {
+                        legend: { position: 'right' },
+                        tooltip: {
+                            callbacks: {
+                                label: (c) => ` ${c.label}: ${formatCurrency(c.raw, primaryCurrency)}`
+                            }
+                        }
+                    }
                 }
             });
         }
@@ -213,8 +252,10 @@ export default function ChartsTab() {
             const dateTotals = {};
             filteredIncomings.forEach(e => {
                 const date = e.date || 'ismeretlen';
+                const converted = convertAmount(e.amount || 0, e.currency || 'HUF', primaryCurrency, eurRate);
+                if (converted === null) return;
                 if (!dateTotals[date]) dateTotals[date] = 0;
-                dateTotals[date] += e.amount || 0;
+                dateTotals[date] += converted;
             });
 
             const sortedDates = Object.keys(dateTotals).sort();

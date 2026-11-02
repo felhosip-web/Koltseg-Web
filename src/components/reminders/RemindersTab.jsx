@@ -4,12 +4,13 @@ import { appService } from '../../services/appService';
 
 export default function RemindersTab() {
     const reminders = useAppStore(state => state.reminders || []);
+    const primaryCurrency = useAppStore(state => state.primaryCurrency || 'HUF');
     const [currentFilter, setCurrentFilter] = useState('all');
 
     // Form state
     const [remTitle, setRemTitle] = useState('');
     const [remAmount, setRemAmount] = useState('');
-    const [remCurrency, setRemCurrency] = useState('HUF');
+    const [remCurrency, setRemCurrency] = useState(primaryCurrency);
     const [remDate, setRemDate] = useState('');
     const [remFreq, setRemFreq] = useState('once');
 
@@ -45,7 +46,7 @@ export default function RemindersTab() {
         // Reset form
         setRemTitle('');
         setRemAmount('');
-        setRemCurrency('HUF');
+        setRemCurrency(primaryCurrency);
         setRemDate('');
         setRemFreq('once');
     };
