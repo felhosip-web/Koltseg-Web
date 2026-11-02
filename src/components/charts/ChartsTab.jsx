@@ -123,8 +123,10 @@ export default function ChartsTab() {
             filteredEntries.forEach(e => {
                 const itemId = e.cellKey?.split('_')[0];
                 if (itemMap[itemId]) {
-                    const amount = convertAmount(e.amount, e.currency || 'HUF', primaryCurrency, eurRate);
-                    itemMap[itemId].total += amount;
+                    const converted = convertAmount(e.amount, e.currency || 'HUF', primaryCurrency, eurRate);
+                    if (converted !== null) {
+                        itemMap[itemId].total += converted;
+                    }
                 }
             });
 
@@ -165,7 +167,9 @@ export default function ChartsTab() {
             const ctx = doughnutRef.current.getContext('2d');
             let cash = 0, card = 0, transfer = 0;
             filteredEntries.forEach(e => {
-                const amount = convertAmount(e.amount, e.currency || 'HUF', primaryCurrency, eurRate);
+                const converted = convertAmount(e.amount, e.currency || 'HUF', primaryCurrency, eurRate);
+                if (converted === null) return;
+                const amount = converted;
                 if (e.paymentMethod === 'Kártya') card += amount;
                 else if (e.paymentMethod === 'Utalás') transfer += amount;
                 else cash += amount;
@@ -206,7 +210,9 @@ export default function ChartsTab() {
             const ctx = currencyRef.current.getContext('2d');
             let huf = 0, eur = 0;
             filteredEntries.forEach(e => {
-                const amount = convertAmount(e.amount, e.currency || 'HUF', primaryCurrency, eurRate);
+                const converted = convertAmount(e.amount, e.currency || 'HUF', primaryCurrency, eurRate);
+                if (converted === null) return;
+                const amount = converted;
                 if (e.currency === 'EUR') eur += amount;
                 else huf += amount;
             });
@@ -246,8 +252,10 @@ export default function ChartsTab() {
             const dateTotals = {};
             filteredIncomings.forEach(e => {
                 const date = e.date || 'ismeretlen';
+                const converted = convertAmount(e.amount || 0, e.currency || 'HUF', primaryCurrency, eurRate);
+                if (converted === null) return;
                 if (!dateTotals[date]) dateTotals[date] = 0;
-                dateTotals[date] += convertAmount(e.amount || 0, e.currency || 'HUF', primaryCurrency, eurRate);
+                dateTotals[date] += converted;
             });
 
             const sortedDates = Object.keys(dateTotals).sort();

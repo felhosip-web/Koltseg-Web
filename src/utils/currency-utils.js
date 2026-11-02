@@ -32,7 +32,7 @@ export function convertAmount(amount, fromCurrency, toCurrency, eurRate) {
 
     const rate = Number(eurRate);
     if (!Number.isFinite(rate) || rate <= 0) {
-        return num; // Safe fallback when no rate is available
+        return null;
     }
 
     if (from === 'EUR' && to === 'HUF') {
@@ -43,7 +43,7 @@ export function convertAmount(amount, fromCurrency, toCurrency, eurRate) {
         return num / rate;
     }
 
-    return num;
+    return null;
 }
 
 /**
@@ -112,12 +112,15 @@ export function formatDualCurrency(amount, transactionCurrency, primaryCurrency,
     const sCurr = getSecondaryCurrency(pCurr);
 
     const primaryValue = convertAmount(num, transactionCurrency, pCurr, rate);
-    const secondaryValue = convertAmount(num, transactionCurrency, sCurr, rate);
+    if (primaryValue === null) {
+        // Cannot convert transaction amount to primary currency
+        return formatCurrency(num, transactionCurrency);
+    }
 
     const primaryStr = formatCurrency(primaryValue, pCurr);
 
-    const validRate = Number.isFinite(Number(rate)) && Number(rate) > 0;
-    if (!validRate) {
+    const secondaryValue = convertAmount(num, transactionCurrency, sCurr, rate);
+    if (secondaryValue === null) {
         return primaryStr;
     }
 

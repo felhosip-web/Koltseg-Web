@@ -212,14 +212,17 @@ function DataCell({ itemId, month, cellEntries, eurRate }) {
         const pVal = convertAmount(e.amount, entryCurrency, primaryCurrency, rate);
         const sVal = convertAmount(e.amount, entryCurrency, secondaryCurrency, rate);
 
+        const safePVal = pVal !== null ? pVal : 0;
+        const safeSVal = sVal !== null ? sVal : 0;
+
         if (e.isStorno) {
             hasStorno = true;
-            stornoPrimary += pVal;
-            stornoSecondary += sVal;
+            stornoPrimary += safePVal;
+            stornoSecondary += safeSVal;
         } else {
             allStorno = false;
-            primaryTotal += pVal;
-            secondaryTotal += sVal;
+            primaryTotal += safePVal;
+            secondaryTotal += safeSVal;
         }
     });
 

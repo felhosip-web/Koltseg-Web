@@ -27,9 +27,21 @@ test('convertAmount calculates EUR to HUF and HUF to EUR with full precision', (
 });
 
 test('convertAmount handles invalid or missing rates and zero/negative amounts safely', () => {
-    assert.equal(convertAmount(100, 'EUR', 'HUF', 0), 100);
-    assert.equal(convertAmount(100, 'EUR', 'HUF', -400), 100);
-    assert.equal(convertAmount(100, 'EUR', 'HUF', null), 100);
+    // Cross-currency conversion with invalid rates must return null
+    assert.equal(convertAmount(100, 'EUR', 'HUF', 0), null);
+    assert.equal(convertAmount(100, 'EUR', 'HUF', -400), null);
+    assert.equal(convertAmount(100, 'EUR', 'HUF', null), null);
+    assert.equal(convertAmount(100, 'EUR', 'HUF', undefined), null);
+    assert.equal(convertAmount(100, 'EUR', 'HUF', NaN), null);
+    assert.equal(convertAmount(100, 'EUR', 'HUF', Infinity), null);
+    assert.equal(convertAmount(100, 'EUR', 'HUF', -Infinity), null);
+
+    // Same-currency conversion succeeds without a rate
+    assert.equal(convertAmount(100, 'HUF', 'HUF', 0), 100);
+    assert.equal(convertAmount(100, 'EUR', 'EUR', null), 100);
+    assert.equal(convertAmount(100, 'HUF', 'HUF', NaN), 100);
+
+    // Valid rates with zero / negative amounts
     assert.equal(convertAmount(0, 'EUR', 'HUF', 400), 0);
     assert.equal(convertAmount(-50, 'EUR', 'HUF', 400), -20000);
 });

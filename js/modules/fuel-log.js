@@ -404,13 +404,12 @@ return {
                                 ? cellBaseKey
                                 : cellBaseKey + '_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
 
-                            const primaryCurrency = app.config?.primaryCurrency || (typeof localStorage !== 'undefined' && localStorage.getItem('app_primary_currency') === 'EUR' ? 'EUR' : 'HUF');
                             const expenseEntry = {
                                 cellKey: entryCellKey,
                                 itemId: cellBaseKey.split('_')[0],
                                 month: cellBaseKey.split('_')[1],
                                 amount: totalCost,
-                                currency: primaryCurrency,
+                                currency: 'HUF',
                                 paymentMethod: paymentMethod,
                                 note: noteText,
                                 color: 'transparent',

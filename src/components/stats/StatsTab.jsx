@@ -28,7 +28,9 @@ export default function StatsTab() {
             // === KIADÁS STATISZTIKA ===
             let total = 0, card = 0, cash = 0, transfer = 0;
             entries.forEach(e => {
-                const amount = convertAmount(e.amount, e.currency || 'HUF', primaryCurrency, eurRate);
+                const converted = convertAmount(e.amount, e.currency || 'HUF', primaryCurrency, eurRate);
+                if (converted === null) return;
+                const amount = converted;
                 total += amount;
                 if (e.paymentMethod === 'Kártya') card += amount;
                 else if (e.paymentMethod === 'Utalás') transfer += amount;
@@ -39,7 +41,9 @@ export default function StatsTab() {
             let incomingTotal = 0;
             let incomingBySender = {};
             incomings.forEach(e => {
-                const amount = convertAmount(e.amount || 0, e.currency || 'HUF', primaryCurrency, eurRate);
+                const converted = convertAmount(e.amount || 0, e.currency || 'HUF', primaryCurrency, eurRate);
+                if (converted === null) return;
+                const amount = converted;
                 incomingTotal += amount;
                 if (!incomingBySender[e.sender]) incomingBySender[e.sender] = 0;
                 incomingBySender[e.sender] += amount;

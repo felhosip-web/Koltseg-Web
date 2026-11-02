@@ -1,10 +1,12 @@
 import React, { useMemo } from 'react';
 import { useAppStore } from '../../store/useAppStore';
 import { appService } from '../../services/appService';
-import { formatCurrency } from '../../utils/currency-utils.js';
+import { formatCurrency, convertAmount } from '../../utils/currency-utils.js';
 
 export default function IncomingTab() {
     const incomings = useAppStore(state => state.incomings || []);
+    const primaryCurrency = useAppStore(state => state.primaryCurrency || 'HUF');
+    const eurRate = useAppStore(state => state.eurRate || 400);
 
     const senders = useMemo(() => {
         return [...new Set(incomings.map(e => e?.sender).filter(Boolean))].sort();
@@ -93,7 +95,12 @@ export default function IncomingTab() {
                             <tbody>
                                 {senders.map(sender => {
                                     const senderEntries = incomings.filter(e => e.sender === sender);
-                                    const total = senderEntries.filter(e => !e.isStorno).reduce((sum, e) => sum + e.amount, 0);
+                                    const total = senderEntries
+                                        .filter(e => !e.isStorno)
+                                        .reduce((sum, e) => {
+                                            const converted = convertAmount(e.amount || 0, e.currency || 'HUF', primaryCurrency, eurRate);
+                                            return sum + (converted !== null ? converted : 0);
+                                        }, 0);
 
                                     return (
                                         <tr key={sender} className="border-b border-gray-100 hover:bg-gray-50 transition group">
@@ -114,6 +121,7 @@ export default function IncomingTab() {
                                                 const amount = entry ? entry.amount : '';
                                                 const entryId = entry ? entry.id : null;
                                                 const isStorno = entry && entry.isStorno;
+                                                const entryCurrency = entry?.currency || 'HUF';
 
                                                 let cellClass = 'p-2 text-center incoming-cell cursor-pointer hover:bg-blue-50 transition rounded-lg';
                                                 if (amount && isStorno) {
@@ -130,10 +138,10 @@ export default function IncomingTab() {
                                                         {amount ? (
                                                             isStorno ? (
                                                                 <span className="line-through text-red-500/70 opacity-60 flex items-center justify-center gap-1" title="Sztornózott bejövő utalás">
-                                                                    <i className="fas fa-ban text-[10px]"></i> {formatCurrency(amount, entry?.currency || 'HUF')}
+                                                                    <i className="fas fa-ban text-[10px]"></i> {formatCurrency(amount, entryCurrency)}
                                                                 </span>
                                                             ) : (
-                                                                formatCurrency(amount, entry?.currency || 'HUF')
+                                                                formatCurrency(amount, entryCurrency)
                                                             )
                                                         ) : (
                                                             '—'
@@ -142,7 +150,7 @@ export default function IncomingTab() {
                                                 );
                                             })}
                                             <td className="p-3 text-center font-bold text-blue-600 bg-gray-50">
-                                                {total.toLocaleString('hu-HU')} Ft
+                                                {formatCurrency(total, primaryCurrency)}
                                             </td>
                                         </tr>
                                     );
@@ -152,15 +160,28 @@ export default function IncomingTab() {
                                         ÖSSZESEN
                                     </td>
                                     {dates.map(date => {
-                                        const total = incomings.filter(e => e.date === date && !e.isStorno).reduce((sum, e) => sum + e.amount, 0);
+                                        const total = incomings
+                                            .filter(e => e.date === date && !e.isStorno)
+                                            .reduce((sum, e) => {
+                                                const converted = convertAmount(e.amount || 0, e.currency || 'HUF', primaryCurrency, eurRate);
+                                                return sum + (converted !== null ? converted : 0);
+                                            }, 0);
                                         return (
                                             <td key={date} className="p-3 text-center font-bold text-gray-700">
-                                                {total ? total.toLocaleString('hu-HU') + ' Ft' : '—'}
+                                                {total ? formatCurrency(total, primaryCurrency) : '—'}
                                             </td>
                                         );
                                     })}
                                     <td className="p-3 text-center font-bold text-blue-700 bg-gray-100">
-                                        {incomings.filter(e => !e.isStorno).reduce((sum, e) => sum + e.amount, 0).toLocaleString('hu-HU')} Ft
+                                        {formatCurrency(
+                                            incomings
+                                                .filter(e => !e.isStorno)
+                                                .reduce((sum, e) => {
+                                                    const converted = convertAmount(e.amount || 0, e.currency || 'HUF', primaryCurrency, eurRate);
+                                                    return sum + (converted !== null ? converted : 0);
+                                                }, 0),
+                                            primaryCurrency
+                                        )}
                                     </td>
                                 </tr>
                             </tbody>

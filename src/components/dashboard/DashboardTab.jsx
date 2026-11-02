@@ -48,7 +48,9 @@ export default function DashboardTab() {
             const currentMonth = dayjs ? now.format('YYYY-MM') : `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
 
             entries.forEach(e => {
-                const amount = convertAmount(e.amount, e.currency || 'HUF', primaryCurrency, eurRate);
+                const converted = convertAmount(e.amount, e.currency || 'HUF', primaryCurrency, eurRate);
+                if (converted === null) return;
+                const amount = converted;
                 total += amount;
 
                 let entryMonth = '';
@@ -79,7 +81,9 @@ export default function DashboardTab() {
             let incomingTotal = 0;
             let currentMonthIncoming = 0;
             incomings.forEach(e => {
-                const amount = convertAmount(e.amount || 0, e.currency || 'HUF', primaryCurrency, eurRate);
+                const converted = convertAmount(e.amount || 0, e.currency || 'HUF', primaryCurrency, eurRate);
+                if (converted === null) return;
+                const amount = converted;
                 incomingTotal += amount;
                 let incMonth = '';
                 if(e.date) {
@@ -102,7 +106,9 @@ export default function DashboardTab() {
                    if (parts.length > 1) month = parts[1];
                 }
                 if (!month) return;
-                const amount = convertAmount(e.amount, e.currency || 'HUF', primaryCurrency, eurRate);
+                const converted = convertAmount(e.amount, e.currency || 'HUF', primaryCurrency, eurRate);
+                if (converted === null) return;
+                const amount = converted;
                 if (!monthlyData[month]) monthlyData[month] = 0;
                 monthlyData[month] += amount;
             });
