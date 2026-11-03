@@ -1208,6 +1208,7 @@ export class EntryManager {
 
 // ==================== 3. CONFIGURATION MANAGER ====================
 import { exchangeRateService } from '../src/services/currency/ExchangeRateService.js';
+import { resolveDefaultCurrency } from '../src/utils/currency-utils.js';
 
 export class ConfigManager {
     constructor() {
@@ -1799,16 +1800,18 @@ export class IncomingManager {
                 throw new Error('Az összegnek nagyobbnak kell lennie nullánál.');
             }
 
-            const chosenCurrency = currency || (typeof localStorage !== 'undefined' && localStorage.getItem('app_primary_currency') === 'EUR' ? 'EUR' : 'HUF');
+            const chosenCurrency = resolveDefaultCurrency(currency);
 
             // Ellenőrizzük, hogy van-e már ilyen tétel
             const existing = this.incomings.find(
                 entry => entry.sender === sender && entry.date === normalizedDate
             );
             if (existing) {
-                // Frissítjük a meglévőt
+                // Frissítjük a meglévőt - meglévő deviza megőrzése, ha nincs felülírva
                 existing.amount = amount;
-                if (currency) existing.currency = currency;
+                if (currency) {
+                    existing.currency = resolveDefaultCurrency(currency);
+                }
                 existing.updated_at = new Date().toISOString();
                 await this.db.save('incomings', existing);
                 return existing;
@@ -1862,7 +1865,19 @@ export class IncomingManager {
                 data.date = normalizedDate;
             }
 
-            const entry = { ...this.incomings[idx], ...data, updated_at: new Date().toISOString() };
+            // Ütközésvizsgálat: nem létezhet másik tétel ugyanezzel a sender + date kulccsal
+            const targetSender = data.hasOwnProperty('sender') ? data.sender : this.incomings[idx].sender;
+            const targetDate = data.hasOwnProperty('date') ? data.date : this.incomings[idx].date;
+
+            const collision = this.incomings.find(
+                e => String(e.id) !== String(id) && e.sender === targetSender && e.date === targetDate
+            );
+            if (collision) {
+                throw new Error('Már létezik bejegyzés ezzel a partnerrel és dátummal.');
+            }
+
+            const updatedCurrency = data.hasOwnProperty('currency') ? resolveDefaultCurrency(data.currency) : (this.incomings[idx].currency || 'HUF');
+            const entry = { ...this.incomings[idx], ...data, currency: updatedCurrency, updated_at: new Date().toISOString() };
             await this.db.save('incomings', entry);
             this.incomings[idx] = entry;
             await this.syncService.push('incomings', entry);

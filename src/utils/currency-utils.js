@@ -127,3 +127,45 @@ export function formatDualCurrency(amount, transactionCurrency, primaryCurrency,
     const secondaryStr = formatCurrency(secondaryValue, sCurr);
     return `${primaryStr} (≈ ${secondaryStr})`;
 }
+
+/**
+ * Checks if a string is a valid supported currency code ('HUF' or 'EUR').
+ * @param {any} currency
+ * @returns {boolean}
+ */
+export function isValidCurrency(currency) {
+    if (typeof currency !== 'string') return false;
+    const upper = currency.trim().toUpperCase();
+    return upper === 'HUF' || upper === 'EUR';
+}
+
+/**
+ * Resolves the default currency for a new or edited transaction.
+ *
+ * Rules:
+ * - If explicitCurrency is provided and is a valid supported currency ('HUF' | 'EUR'), it takes precedence.
+ * - Otherwise, resolves from the current persisted primary currency (via config / store / localStorage).
+ * - Falls back to 'HUF' if missing or invalid.
+ *
+ * @param {any} [explicitCurrency] Explicitly selected or existing transaction currency
+ * @param {any} [fallbackPrimary] Optional primary currency override
+ * @returns {'HUF' | 'EUR'} Resolved currency code
+ */
+export function resolveDefaultCurrency(explicitCurrency = null, fallbackPrimary = null) {
+    if (isValidCurrency(explicitCurrency)) {
+        return String(explicitCurrency).trim().toUpperCase();
+    }
+
+    if (isValidCurrency(fallbackPrimary)) {
+        return String(fallbackPrimary).trim().toUpperCase();
+    }
+
+    if (typeof localStorage !== 'undefined') {
+        const stored = localStorage.getItem('app_primary_currency');
+        if (isValidCurrency(stored)) {
+            return String(stored).trim().toUpperCase();
+        }
+    }
+
+    return 'HUF';
+}

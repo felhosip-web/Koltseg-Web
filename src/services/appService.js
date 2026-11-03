@@ -336,25 +336,144 @@ export const appService = {
     addNewIncomingEntry() {
         if (appInstance?.incomingManager?.addNewEntry) {
             appInstance.incomingManager.addNewEntry();
+        } else if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('incoming-open-new'));
         }
     },
 
     handleIncomingCellClick(element) {
         if (appInstance?.incomingManager?._handleCellClick) {
             appInstance.incomingManager._handleCellClick(element);
+        } else if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('incoming-open-cell', { detail: element?.dataset }));
         }
     },
 
-    deleteIncomingColumn(date) {
+    async saveIncomingEntry({ id, sender, date, amount, currency, isStorno }) {
+        if (!appInstance?.incomingManager) return null;
+        if (id) {
+            const updatePayload = {
+                sender,
+                date,
+                amount,
+                isStorno: Boolean(isStorno)
+            };
+            if (currency !== undefined) {
+                updatePayload.currency = currency;
+            }
+            const updated = await appInstance.incomingManager.update(id, updatePayload);
+            await appInstance.incomingManager.load();
+            if (typeof appInstance.updateReactStore === 'function') {
+                appInstance.updateReactStore();
+            }
+            return updated;
+        } else {
+            const added = await appInstance.incomingManager.add(sender, date, amount, currency);
+            if (isStorno && added?.id) {
+                await appInstance.incomingManager.update(added.id, { isStorno: true });
+            }
+            await appInstance.incomingManager.load();
+            if (typeof appInstance.updateReactStore === 'function') {
+                appInstance.updateReactStore();
+            }
+            return added;
+        }
+    },
+
+    async deleteIncomingEntry(id) {
+        if (appInstance?.securityGuard?.currentUser === 'guest') {
+            this.showToast('❌ Törlés elutasítva: Vendég módban ez a funkció le van tiltva!', 'error');
+            return false;
+        }
+        if (!appInstance?.incomingManager) return false;
+        await appInstance.incomingManager.delete(id);
+        await appInstance.incomingManager.load();
+        if (typeof appInstance.updateReactStore === 'function') {
+            appInstance.updateReactStore();
+        }
+        return true;
+    },
+
+    async deleteIncomingColumn(date) {
+        if (appInstance?.securityGuard?.currentUser === 'guest') {
+            this.showToast('❌ Törlés elutasítva: Vendég módban ez a funkció le van tiltva!', 'error');
+            return false;
+        }
         if (appInstance?.incomingManager?.deleteColumn) {
-            appInstance.incomingManager.deleteColumn(date);
+            await appInstance.incomingManager.deleteColumn(date);
+            return true;
         }
+        if (!appInstance?.incomingManager) return false;
+        const confirmed = await this.showConfirm({
+            title: 'Oszlop törlése',
+            message: `Biztosan törlöd a(z) ${date} dátumhoz tartozó összes bejövő tételt?`,
+            type: 'warning',
+            confirmText: 'Törlés'
+        });
+        if (!confirmed) return false;
+
+        const entries = appInstance.incomingManager.incomings.filter(e => e.date === date);
+        let deletionError = null;
+        try {
+            for (const entry of entries) {
+                await appInstance.incomingManager.delete(entry.id);
+            }
+        } catch (err) {
+            deletionError = err;
+        } finally {
+            // Always reconcile in-memory and React store state even on partial failure
+            await appInstance.incomingManager.load();
+            if (typeof appInstance.updateReactStore === 'function') {
+                appInstance.updateReactStore();
+            }
+        }
+        if (deletionError) {
+            this.showToast('Hiba történt az oszlop törlése közben!', 'error');
+            throw deletionError;
+        }
+        this.showToast('Bejegyzések törölve!', 'success');
+        return true;
     },
 
-    deleteIncomingRow(sender) {
-        if (appInstance?.incomingManager?.deleteRow) {
-            appInstance.incomingManager.deleteRow(sender);
+    async deleteIncomingRow(sender) {
+        if (appInstance?.securityGuard?.currentUser === 'guest') {
+            this.showToast('❌ Törlés elutasítva: Vendég módban ez a funkció le van tiltva!', 'error');
+            return false;
         }
+        if (appInstance?.incomingManager?.deleteRow) {
+            await appInstance.incomingManager.deleteRow(sender);
+            return true;
+        }
+        if (!appInstance?.incomingManager) return false;
+        const confirmed = await this.showConfirm({
+            title: 'Sor törlése',
+            message: `Biztosan törlöd a(z) "${sender}" partnerhez tartozó összes bejövő tételt?`,
+            type: 'warning',
+            confirmText: 'Törlés'
+        });
+        if (!confirmed) return false;
+
+        const entries = appInstance.incomingManager.incomings.filter(e => e.sender === sender);
+        let deletionError = null;
+        try {
+            for (const entry of entries) {
+                await appInstance.incomingManager.delete(entry.id);
+            }
+        } catch (err) {
+            deletionError = err;
+        } finally {
+            // Always reconcile in-memory and React store state even on partial failure
+            await appInstance.incomingManager.load();
+            if (typeof appInstance.updateReactStore === 'function') {
+                appInstance.updateReactStore();
+            }
+        }
+        if (deletionError) {
+            this.showToast('Hiba történt a sor törlése közben!', 'error');
+            throw deletionError;
+        }
+        this.showToast('Bejegyzések törölve!', 'success');
+        return true;
     },
 
     /** Reminder actions */

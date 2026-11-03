@@ -1,0 +1,828 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { JSDOM } from 'jsdom';
+import { resolveDefaultCurrency, isValidCurrency } from '../src/utils/currency-utils.js';
+import { CellModalController } from '../js/cell-modal-controller.js';
+import { IncomingManager } from '../js/oop-core.js';
+import { appService } from '../src/services/appService.js';
+import { fuelLogModuleScript } from '../js/modules/fuel-log.js';
+
+test('P1-1: resolveDefaultCurrency resolves correctly across all permutations', () => {
+    // 1. Explicit currency overrides defaults
+    assert.equal(resolveDefaultCurrency('HUF', 'EUR'), 'HUF');
+    assert.equal(resolveDefaultCurrency('EUR', 'HUF'), 'EUR');
+    assert.equal(resolveDefaultCurrency('eur', 'HUF'), 'EUR');
+    assert.equal(resolveDefaultCurrency('huf', 'EUR'), 'HUF');
+
+    // 2. Primary fallback
+    assert.equal(resolveDefaultCurrency(null, 'EUR'), 'EUR');
+    assert.equal(resolveDefaultCurrency(null, 'HUF'), 'HUF');
+
+    // 3. Fallback to localStorage
+    const originalLocalStorage = globalThis.localStorage;
+    const store = new Map();
+    globalThis.localStorage = {
+        getItem: (k) => store.get(k) || null,
+        setItem: (k, v) => store.set(k, String(v)),
+        removeItem: (k) => store.delete(k)
+    };
+
+    localStorage.setItem('app_primary_currency', 'EUR');
+    assert.equal(resolveDefaultCurrency(null, null), 'EUR');
+
+    localStorage.setItem('app_primary_currency', 'HUF');
+    assert.equal(resolveDefaultCurrency(null, null), 'HUF');
+
+    // 4. Missing or invalid primary currency falls back to HUF
+    localStorage.removeItem('app_primary_currency');
+    assert.equal(resolveDefaultCurrency(null, null), 'HUF');
+    assert.equal(resolveDefaultCurrency(null, 'INVALID'), 'HUF');
+
+    if (originalLocalStorage) {
+        globalThis.localStorage = originalLocalStorage;
+    } else {
+        delete globalThis.localStorage;
+    }
+});
+
+test('P1-2: Manual expense entry: resetForm defaults to primaryCurrency, explicit selection overrides, and editing preserves original currency', async () => {
+    const dom = new JSDOM(`
+        <!DOCTYPE html>
+        <html>
+            <body>
+                <input id="cellAmountInput" />
+                <input id="cellNoteInput" />
+                <select id="cellMethodInput">
+                    <option value="Kártya">Kártya</option>
+                    <option value="Készpénz">Készpénz</option>
+                </select>
+                <select id="cellCurrencyInput">
+                    <option value="HUF">HUF</option>
+                    <option value="EUR">EUR</option>
+                </select>
+                <input type="checkbox" id="cellIsStorno" />
+                <button id="btnSaveCellModal"></button>
+                <div id="subEntriesContainer"></div>
+                <div id="costAppCellEditorRoot"></div>
+            </body>
+        </html>
+    `);
+
+    globalThis.window = dom.window;
+    globalThis.document = dom.window.document;
+    globalThis.Event = dom.window.Event;
+    globalThis.CustomEvent = dom.window.CustomEvent;
+
+    let savedEntries = [];
+    const fakeApp = {
+        config: { primaryCurrency: 'EUR' },
+        entries: {
+            entries: [],
+            saveEntry: async (e) => { savedEntries.push(e); },
+            load: async () => {},
+            getByCellKey: async () => []
+        },
+        hmiNotif: {
+            showToast: () => {},
+            showConfirm: async () => true
+        },
+        updateReactStore: () => {},
+        setSystemStatus: () => {}
+    };
+
+    const controller = new CellModalController(fakeApp);
+
+    // 1. New entry with EUR primary defaults to EUR
+    controller.resetForm();
+    assert.equal(document.getElementById('cellCurrencyInput').value, 'EUR');
+
+    // 2. Explicit selection of HUF overrides primary default
+    document.getElementById('cellAmountInput').value = '15000';
+    document.getElementById('cellCurrencyInput').value = 'HUF';
+    controller.currentExplicitItemId = 'item-1';
+    controller.currentExplicitMonth = '2026-07';
+    controller.currentCellBaseKey = 'item-1_2026-07';
+
+    await controller.save();
+    assert.equal(savedEntries.length, 1);
+    assert.equal(savedEntries[0].amount, 15000);
+    assert.equal(savedEntries[0].currency, 'HUF');
+
+    // 3. Editing an existing EUR transaction preserves EUR even when primary is HUF
+    fakeApp.config.primaryCurrency = 'HUF';
+    fakeApp.entries.entries = [
+        { id: 'entry-eur', itemId: 'item-1', month: '2026-07', amount: 50, currency: 'EUR', paymentMethod: 'Kártya' }
+    ];
+
+    controller.editEntry('entry-eur');
+    assert.equal(document.getElementById('cellCurrencyInput').value, 'EUR');
+    assert.equal(document.getElementById('cellAmountInput').value, '50');
+
+    // Save edited entry and assert persisted currency remains EUR
+    await controller.save();
+    const lastSaved = savedEntries[savedEntries.length - 1];
+    assert.equal(lastSaved.id, 'entry-eur');
+    assert.equal(lastSaved.currency, 'EUR', 'Saved transaction must retain EUR currency');
+
+    // 4. Legacy transaction without currency field is preserved / interpreted as HUF
+    fakeApp.entries.entries = [
+        { id: 'entry-legacy', itemId: 'item-1', month: '2026-07', amount: 3000, paymentMethod: 'Kártya' } // missing currency
+    ];
+    controller.editEntry('entry-legacy');
+    assert.equal(document.getElementById('cellCurrencyInput').value, 'HUF');
+
+    dom.window.close();
+});
+
+test('P1-3: IncomingManager and appService: creation, editing, and currency preservation', async () => {
+    const mockStore = [];
+    const mockDb = {
+        getAll: async (store) => {
+            if (store === 'incomings') return [...mockStore];
+            return [];
+        },
+        save: async (store, record) => {
+            if (store === 'incomings') {
+                const idx = mockStore.findIndex(r => r.id === record.id);
+                if (idx >= 0) mockStore[idx] = record;
+                else mockStore.push(record);
+            }
+            return record.id;
+        },
+        delete: async (store, id) => {
+            const idx = mockStore.findIndex(r => r.id === id);
+            if (idx >= 0) mockStore.splice(idx, 1);
+        }
+    };
+    const mockSync = { push: async () => {} };
+
+    const incomingManager = new IncomingManager(mockDb, mockSync);
+    await incomingManager.load();
+
+    const fakeApp = {
+        incomingManager,
+        updateReactStore: () => {}
+    };
+    appService.bind(fakeApp);
+
+    // 1. Add incoming without explicit currency under EUR primary
+    globalThis.localStorage = {
+        getItem: (k) => k === 'app_primary_currency' ? 'EUR' : null,
+        setItem: () => {},
+        removeItem: () => {}
+    };
+
+    const inc1 = await incomingManager.add('Client A', '2026-07-01', 500);
+    assert.equal(inc1.currency, 'EUR');
+    assert.equal(inc1.amount, 500);
+
+    // 2. Add incoming with explicit HUF under EUR primary
+    const inc2 = await incomingManager.add('Client B', '2026-07-02', 20000, 'HUF');
+    assert.equal(inc2.currency, 'HUF');
+
+    // 3. Edit incoming preserves currency if not changed, or updates when explicitly changed
+    const updatedInc1 = await incomingManager.update(inc1.id, { amount: 600 });
+    assert.equal(updatedInc1.currency, 'EUR');
+    assert.equal(updatedInc1.amount, 600);
+
+    const updatedInc1Curr = await incomingManager.update(inc1.id, { currency: 'HUF' });
+    assert.equal(updatedInc1Curr.currency, 'HUF');
+
+    // 4. Save and delete via appService bridge
+    await appService.saveIncomingEntry({
+        id: null,
+        sender: 'Client C',
+        date: '2026-07-03',
+        amount: 80,
+        currency: 'EUR'
+    });
+    assert.equal(incomingManager.incomings.length, 3);
+    const clientCEntry = incomingManager.incomings.find(i => i.sender === 'Client C');
+    assert.ok(clientCEntry);
+    assert.equal(clientCEntry.currency, 'EUR');
+
+    await appService.deleteIncomingEntry(clientCEntry.id);
+    assert.equal(incomingManager.incomings.length, 2);
+
+    // 5. BLOCKER test: Partial update without currency preserves original currency through appService
+    // inc2 is HUF. Primary currency is currently EUR.
+    localStorage.setItem('app_primary_currency', 'EUR');
+    await appService.saveIncomingEntry({
+        id: inc2.id,
+        sender: inc2.sender,
+        date: inc2.date,
+        amount: 25000
+        // currency is intentionally undefined
+    });
+    const partiallyUpdated = incomingManager.incomings.find(i => i.id === inc2.id);
+    assert.equal(partiallyUpdated.amount, 25000);
+    assert.equal(partiallyUpdated.currency, 'HUF', 'Partial update without currency must retain HUF even under EUR primary');
+
+    // Now explicitly update currency to EUR
+    await appService.saveIncomingEntry({
+        id: inc2.id,
+        sender: inc2.sender,
+        date: inc2.date,
+        amount: 25000,
+        currency: 'EUR'
+    });
+    const fullyUpdated = incomingManager.incomings.find(i => i.id === inc2.id);
+    assert.equal(fullyUpdated.currency, 'EUR', 'Explicit currency update must update to EUR');
+
+    // 6. BLOCKER test: Guest deletion restrictions across entry, column, and row deletions
+    fakeApp.securityGuard = { currentUser: 'guest' };
+    let toastError = '';
+    fakeApp.hmiNotif = {
+        showToast: (msg, type) => { if (type === 'error') toastError = msg; },
+        showConfirm: async () => true
+    };
+
+    const countBefore = incomingManager.incomings.length;
+    const resEntryDel = await appService.deleteIncomingEntry(inc2.id);
+    assert.equal(resEntryDel, false, 'Guest deleteIncomingEntry must return false');
+    assert.equal(incomingManager.incomings.length, countBefore, 'Entry must not be deleted in guest mode');
+    assert.ok(toastError.includes('Vendég módban ez a funkció le van tiltva'));
+
+    toastError = '';
+    const resColDel = await appService.deleteIncomingColumn(inc2.date);
+    assert.equal(resColDel, false, 'Guest deleteIncomingColumn must return false');
+    assert.equal(incomingManager.incomings.length, countBefore, 'Column must not be deleted in guest mode');
+    assert.ok(toastError.includes('Vendég módban ez a funkció le van tiltva'));
+
+    toastError = '';
+    const resRowDel = await appService.deleteIncomingRow(inc2.sender);
+    assert.equal(resRowDel, false, 'Guest deleteIncomingRow must return false');
+    assert.equal(incomingManager.incomings.length, countBefore, 'Row must not be deleted in guest mode');
+    assert.ok(toastError.includes('Vendég módban ez a funkció le van tiltva'));
+
+    // Upgrade to owner, verify authorized deletions succeed
+    fakeApp.securityGuard.currentUser = 'owner';
+    const resOwnerDel = await appService.deleteIncomingEntry(inc2.id);
+    assert.equal(resOwnerDel, true, 'Owner deleteIncomingEntry must succeed');
+    assert.equal(incomingManager.incomings.length, countBefore - 1);
+
+    // 7. BLOCKER test: Partial bulk deletion failure reconciles store and propagates error
+    const bulk1 = await incomingManager.add('Bulk Partner 1', '2026-07-20', 100);
+    const bulk2 = await incomingManager.add('Bulk Partner 2', '2026-07-20', 200);
+    assert.equal(incomingManager.incomings.length, 3);
+
+    let loadCalled = false;
+    incomingManager.load = async () => {
+        loadCalled = true;
+    };
+
+    // Simulate failure on second item deletion
+    let deleteCallCount = 0;
+    const origDelete = incomingManager.delete.bind(incomingManager);
+    incomingManager.delete = async (id) => {
+        deleteCallCount++;
+        if (deleteCallCount === 2) {
+            throw new Error('Simulated network failure on second delete');
+        }
+        return origDelete(id);
+    };
+
+    await assert.rejects(
+        async () => {
+            await appService.deleteIncomingColumn('2026-07-20');
+        },
+        /Simulated network failure/
+    );
+
+    assert.equal(loadCalled, true, 'incomingManager.load must be called to reconcile state even on failure');
+    incomingManager.delete = origDelete;
+
+    // 8. DATA-INTEGRITY test: IncomingManager.update collision check and immutability
+    // Setup two entries with different sender/date
+    const entryA = await incomingManager.add('Sender Alpha', '2026-07-25', 1000, 'HUF');
+    const entryB = await incomingManager.add('Sender Beta', '2026-07-26', 2000, 'EUR');
+
+    const entryACopy = JSON.stringify(entryA);
+    const entryBCopy = JSON.stringify(entryB);
+    const mockStoreBefore = JSON.stringify(mockStore);
+
+    // Case 1: Changing sender to a combination already used by entryB (Sender Beta + 2026-07-26) -> rejected
+    // First set date of entryA to entryB's date, or update both
+    await assert.rejects(
+        async () => {
+            await incomingManager.update(entryA.id, { sender: 'Sender Beta', date: '2026-07-26' });
+        },
+        /Már létezik bejegyzés ezzel a partnerrel és dátummal/
+    );
+
+    // Case 2: Changing only date to match existing combination
+    // Create entryC with Sender Alpha on a different date
+    const entryC = await incomingManager.add('Sender Alpha', '2026-07-27', 3000, 'HUF');
+    await assert.rejects(
+        async () => {
+            // Update entryC date to entryA's date (2026-07-25), collision on (Sender Alpha, 2026-07-25)
+            await incomingManager.update(entryC.id, { date: '2026-07-25' });
+        },
+        /Már létezik bejegyzés ezzel a partnerrel és dátummal/
+    );
+
+    // Case 3: Changing only sender to match existing combination
+    // Create entryD with Sender Delta on 2026-07-26
+    const entryD = await incomingManager.add('Sender Delta', '2026-07-26', 4000, 'HUF');
+    await assert.rejects(
+        async () => {
+            // Update entryD sender to 'Sender Beta', collision with entryB (Sender Beta, 2026-07-26)
+            await incomingManager.update(entryD.id, { sender: 'Sender Beta' });
+        },
+        /Már létezik bejegyzés ezzel a partnerrel és dátummal/
+    );
+
+    // Case 4: Amount-only update on entryA -> succeeds
+    const updatedAmount = await incomingManager.update(entryA.id, { amount: 1500 });
+    assert.equal(updatedAmount.amount, 1500);
+    assert.equal(updatedAmount.currency, 'HUF', 'Original currency must be preserved');
+    assert.equal(updatedAmount.sender, 'Sender Alpha');
+    assert.equal(updatedAmount.date, '2026-07-25');
+
+    // Case 5: Storno-only update on entryA -> succeeds
+    const updatedStorno = await incomingManager.update(entryA.id, { isStorno: true });
+    assert.equal(updatedStorno.isStorno, true);
+    assert.equal(updatedStorno.amount, 1500);
+
+    // Case 6: Updating sender and date to an unused combination -> succeeds
+    const updatedCombo = await incomingManager.update(entryD.id, { sender: 'Sender Unique', date: '2026-07-30' });
+    assert.equal(updatedCombo.sender, 'Sender Unique');
+    assert.equal(updatedCombo.date, '2026-07-30');
+
+    // Case 7: Numeric ID vs string ID comparison safety
+    const numericIdEntry = {
+        id: 999999,
+        sender: 'Numeric Partner',
+        date: '2026-07-31',
+        amount: 500,
+        currency: 'HUF'
+    };
+    mockStore.push(numericIdEntry);
+    incomingManager.incomings.push(numericIdEntry);
+
+    // Updating entry with numeric ID passed as string '999999' does not collide with itself
+    const updatedSelf = await incomingManager.update('999999', { amount: 600 });
+    assert.equal(updatedSelf.amount, 600);
+
+    // Case 8: After rejected updates, both in-memory and persisted records remain unchanged
+    const entryAFinal = incomingManager.incomings.find(e => e.id === entryA.id);
+    const inMemB = incomingManager.incomings.find(e => e.id === entryB.id);
+    const persistedB = mockStore.find(e => e.id === entryB.id);
+    assert.equal(inMemB.sender, 'Sender Beta');
+    assert.equal(inMemB.date, '2026-07-26');
+    assert.equal(persistedB.sender, 'Sender Beta');
+    assert.equal(persistedB.date, '2026-07-26');
+
+    appService.unbind();
+    delete globalThis.localStorage;
+});
+
+test('P1-4: Fuel-log generated expense entries are invariant and strictly recorded in HUF', () => {
+    // Invariant: Fuel calculations (Ft/liter) must always produce HUF currency entries, never EUR
+    assert.ok(fuelLogModuleScript.includes("currency: 'HUF'"));
+    assert.ok(!fuelLogModuleScript.includes("currency: primaryCurrency"));
+});
+
+test('P1-5: Reminders to expense conversion preserves reminder original currency', async () => {
+    let savedEntry = null;
+    const fakeApp = {
+        reminderManager: {
+            reminders: [
+                {
+                    id: 'rem-eur',
+                    title: 'Cloud Server hosting',
+                    amount: 45,
+                    currency: 'EUR',
+                    due_date: '2026-07-15',
+                    completed: false
+                }
+            ],
+            markAsCompleted: async (id) => {
+                fakeApp.reminderManager.reminders[0].completed = true;
+            }
+        },
+        items: {
+            items: [{ id: 'cat-hosting', name: 'Hosting' }]
+        },
+        entries: {
+            saveEntry: async (e) => { savedEntry = e; },
+            load: async () => {}
+        },
+        hmiNotif: {
+            showConfirm: async () => true, // User approves expense conversion
+            showSelectModal: async () => 'Hosting',
+            showToast: () => {}
+        },
+        updateReactStore: () => {}
+    };
+
+    appService.bind(fakeApp);
+    await appService.completeReminder('rem-eur');
+
+    assert.ok(savedEntry, 'Expense entry should be generated');
+    assert.equal(savedEntry.amount, 45);
+    assert.equal(savedEntry.currency, 'EUR');
+    assert.equal(savedEntry.itemId, 'cat-hosting');
+
+    appService.unbind();
+});
+
+test('P1-6: AI currency precedence: explicit HUF/EUR overrides primary, missing resolves to primary, invalid falls back safely', async () => {
+    const { AiModalController } = await import('../js/ai-modal-controller.js');
+    let savedEntry = null;
+    const fakeApp = {
+        config: { primaryCurrency: 'EUR' },
+        items: {
+            items: [{ id: 'item-1', name: 'Élelmiszer' }],
+            add: async (name) => ({ id: `cat-${name}`, name }),
+            load: async () => {}
+        },
+        months: {
+            months: ['2026-07'],
+            add: async (m) => {},
+            load: async () => {}
+        },
+        entries: {
+            saveEntry: async (e) => { savedEntry = e; },
+            load: async () => {}
+        },
+        hmiNotif: { showToast: () => {} },
+        updateReactStore: () => {}
+    };
+
+    const aiController = new AiModalController(fakeApp);
+
+    // 1. Explicit EUR in AI item persists as EUR
+    await aiController.confirmAndInsert({
+        category: 'Élelmiszer',
+        amount: 45,
+        currency: 'EUR',
+        month: '2026-07',
+        paymentMethod: 'Kártya'
+    });
+    assert.equal(savedEntry.currency, 'EUR');
+
+    // 2. Explicit HUF in AI item persists as HUF even when primary is EUR
+    await aiController.confirmAndInsert({
+        category: 'Élelmiszer',
+        amount: 15000,
+        currency: 'HUF',
+        month: '2026-07',
+        paymentMethod: 'Készpénz'
+    });
+    assert.equal(savedEntry.currency, 'HUF');
+
+    // 3. Missing currency in AI item defaults to primaryCurrency EUR
+    await aiController.confirmAndInsert({
+        category: 'Élelmiszer',
+        amount: 30,
+        month: '2026-07',
+        paymentMethod: 'Kártya'
+    });
+    assert.equal(savedEntry.currency, 'EUR');
+
+    // 4. BLOCKER test: Reject unsupported AI currency codes (e.g., BTC, USD, GBP)
+    let toastMsg = '';
+    fakeApp.hmiNotif.showToast = (msg, type) => { toastMsg = msg; };
+    savedEntry = null;
+
+    for (const badCode of ['BTC', 'USD', 'GBP']) {
+        await assert.rejects(
+            async () => {
+                await aiController.confirmAndInsert({
+                    category: 'Élelmiszer',
+                    amount: 30,
+                    currency: badCode,
+                    month: '2026-07',
+                    paymentMethod: 'Kártya'
+                });
+            },
+            /Nem támogatott devizanem/
+        );
+        assert.equal(savedEntry, null, `Entry with unsupported currency ${badCode} must NOT be saved!`);
+        assert.ok(toastMsg.includes(badCode));
+    }
+
+    fakeApp.config.primaryCurrency = 'HUF';
+    await aiController.confirmAndInsert({
+        category: 'Élelmiszer',
+        amount: 1200,
+        month: '2026-07',
+        paymentMethod: 'Kártya'
+    });
+    assert.equal(savedEntry.currency, 'HUF');
+
+    delete globalThis.localStorage;
+});
+
+test('P1-7: Template currency defaulting and immutability', async () => {
+    const dom = new JSDOM('<div id="root"></div>', { url: 'http://localhost/' });
+
+    globalThis.window = dom.window;
+    globalThis.document = dom.window.document;
+    globalThis.Event = dom.window.Event;
+    globalThis.CustomEvent = dom.window.CustomEvent;
+    globalThis.HTMLElement = dom.window.HTMLElement;
+    globalThis.HTMLInputElement = dom.window.HTMLInputElement;
+    globalThis.HTMLSelectElement = dom.window.HTMLSelectElement;
+    globalThis.Node = dom.window.Node;
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+
+    const originalLocalStorage = globalThis.localStorage;
+    const store = new Map();
+    globalThis.localStorage = {
+        getItem: (k) => store.get(k) || null,
+        setItem: (k, v) => store.set(k, String(v)),
+        removeItem: (k) => store.delete(k)
+    };
+
+    localStorage.setItem('app_primary_currency', 'EUR');
+
+    const [React, { createRoot }, { default: SettingsPanel }, { TemplateManager }] = await Promise.all([
+        import('react'),
+        import('react-dom/client'),
+        import('../src/components/SettingsPanel.jsx'),
+        import('../js/oop-core.js')
+    ]);
+
+    // Mount SettingsPanel under primaryCurrency: 'EUR'
+    const container = document.getElementById('root');
+    const root = createRoot(container);
+
+    await React.act(async () => {
+        root.render(React.createElement(SettingsPanel));
+    });
+
+    const tplCurrencySelect = container.querySelector('#tplCurrencySelect');
+    assert.ok(tplCurrencySelect, '#tplCurrencySelect must exist in SettingsPanel');
+    assert.equal(tplCurrencySelect.value, 'EUR', 'SettingsPanel template currency select must default to primaryCurrency EUR');
+
+    // Persistence with TemplateManager:
+    const persistedTemplates = [];
+    const mockDb = {
+        getAll: async () => [...persistedTemplates],
+        save: async (storeName, rec) => {
+            const idx = persistedTemplates.findIndex(t => t.id === rec.id);
+            if (idx >= 0) persistedTemplates[idx] = rec;
+            else persistedTemplates.push(rec);
+            return rec.id;
+        },
+        delete: async (storeName, id) => {
+            const idx = persistedTemplates.findIndex(t => t.id === id);
+            if (idx >= 0) persistedTemplates.splice(idx, 1);
+        }
+    };
+    const mockSync = { push: async () => {} };
+    const templateManager = new TemplateManager(mockDb, mockSync);
+    await templateManager.load();
+
+    // 1. Newly created template without explicit currency change uses the SettingsPanel default (EUR)
+    const tpl1 = await templateManager.add({
+        name: 'Havi bérlet',
+        amount: 30,
+        currency: resolveDefaultCurrency(tplCurrencySelect.value),
+        paymentMethod: 'Bankkártya'
+    });
+    assert.equal(tpl1.currency, 'EUR');
+    assert.equal(persistedTemplates[0].currency, 'EUR');
+
+    // 2. User explicitly selects HUF in SettingsPanel and creates a template
+    tplCurrencySelect.value = 'HUF';
+    tplCurrencySelect.dispatchEvent(new Event('change', { bubbles: true }));
+    const tpl2 = await templateManager.add({
+        name: 'Lakásbiztosítás',
+        amount: 18000,
+        currency: resolveDefaultCurrency(tplCurrencySelect.value),
+        paymentMethod: 'Utalás'
+    });
+    assert.equal(tpl2.currency, 'HUF');
+    assert.equal(persistedTemplates[1].currency, 'HUF');
+
+    // 3. Changing primaryCurrency in SettingsPanel/localStorage later does NOT mutate previously saved templates
+    localStorage.setItem('app_primary_currency', 'HUF');
+    await templateManager.load();
+    assert.equal(templateManager.templates[0].currency, 'EUR', 'Previously saved EUR template remains EUR');
+    assert.equal(templateManager.templates[1].currency, 'HUF', 'Previously saved HUF template remains HUF');
+
+    if (originalLocalStorage) {
+        globalThis.localStorage = originalLocalStorage;
+    } else {
+        delete globalThis.localStorage;
+    }
+    dom.window.close();
+});
+
+test('P1-8: IncomingTab React integration: create first sender, create with existing, edit, preserve and change currency', async () => {
+    const dom = new JSDOM('<div id="root"></div>', { url: 'http://localhost/' });
+
+    globalThis.window = dom.window;
+    globalThis.document = dom.window.document;
+    globalThis.Event = dom.window.Event;
+    globalThis.CustomEvent = dom.window.CustomEvent;
+    globalThis.HTMLElement = dom.window.HTMLElement;
+    globalThis.HTMLInputElement = dom.window.HTMLInputElement;
+    globalThis.HTMLSelectElement = dom.window.HTMLSelectElement;
+    globalThis.Node = dom.window.Node;
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+
+    delete globalThis.window.app;
+
+    const [React, { createRoot }, { useAppStore }, { default: IncomingTab }] = await Promise.all([
+        import('react'),
+        import('react-dom/client'),
+        import('../src/store/useAppStore.js'),
+        import('../src/components/incoming/IncomingTab.jsx')
+    ]);
+
+    // Setup initial state: 0 senders, 0 incomings, primaryCurrency EUR
+    let localIncomings = [];
+    const initialSenders = [];
+
+    await React.act(async () => {
+        useAppStore.setState({
+            incomings: localIncomings,
+            incomingSenders: initialSenders,
+            primaryCurrency: 'EUR'
+        });
+    });
+
+    const fakeIncomingManager = {
+        incomings: localIncomings,
+        load: async () => {
+            useAppStore.setState({ incomings: [...localIncomings] });
+        },
+        add: async (sender, date, amount, currency) => {
+            const entry = {
+                id: `inc-${Date.now()}-${Math.random()}`,
+                sender,
+                date,
+                amount,
+                currency: currency || 'EUR'
+            };
+            localIncomings.push(entry);
+            return entry;
+        },
+        update: async (id, data) => {
+            const idx = localIncomings.findIndex(i => String(i.id) === String(id));
+            if (idx >= 0) {
+                localIncomings[idx] = { ...localIncomings[idx], ...data };
+                return localIncomings[idx];
+            }
+            return null;
+        },
+        delete: async (id) => {
+            localIncomings = localIncomings.filter(i => String(i.id) !== String(id));
+            fakeIncomingManager.incomings = localIncomings;
+        }
+    };
+
+    const fakeApp = {
+        incomingManager: fakeIncomingManager,
+        updateReactStore: () => {
+            useAppStore.setState({ incomings: [...localIncomings] });
+        },
+        hmiNotif: {
+            showToast: () => {},
+            showConfirm: async () => true
+        }
+    };
+    appService.bind(fakeApp);
+
+    const container = document.getElementById('root');
+    const root = createRoot(container);
+
+    await React.act(async () => {
+        root.render(React.createElement(IncomingTab));
+    });
+
+    // 1. Verify initially empty state
+    assert.ok(container.textContent.includes('Még nincs rögzített bejövő utalás'));
+
+    // 2. Open create modal when 0 senders exist and create very first partner
+    const addBtn = container.querySelector('#btnAddIncoming');
+    assert.ok(addBtn);
+
+    await React.act(async () => {
+        addBtn.dispatchEvent(new Event('click', { bubbles: true, cancelable: true }));
+    });
+
+    // Modal is open, verify inputs exist
+    const modalInputs = container.querySelectorAll('.fixed input');
+    const partnerInput = Array.from(modalInputs).find(input => input.placeholder && input.placeholder.includes('partner'));
+    assert.ok(partnerInput, 'New partner input must be rendered when senders is empty');
+
+    const amountInput = Array.from(modalInputs).find(input => input.type === 'number');
+    assert.ok(amountInput);
+
+    const dateInput = Array.from(modalInputs).find(input => input.type === 'date');
+    assert.ok(dateInput);
+
+    // Verify local date derivation matches local calendar date
+    const now = new Date();
+    const expectedLocal = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    assert.equal(dateInput.value, expectedLocal, 'Default modalDate must use local calendar date');
+
+    const currencySelect = container.querySelector('.fixed select:not([class*="mb-2"])');
+    assert.ok(currencySelect);
+    assert.equal(currencySelect.value, 'EUR', 'Should default to primaryCurrency EUR');
+
+    const triggerValueChange = (element, val) => {
+        const reactPropsKey = Object.keys(element).find(k => k.startsWith('__reactProps'));
+        if (reactPropsKey && typeof element[reactPropsKey]?.onChange === 'function') {
+            element[reactPropsKey].onChange({ target: { value: val } });
+        } else {
+            const proto = element instanceof globalThis.window.HTMLSelectElement
+                ? globalThis.window.HTMLSelectElement.prototype
+                : globalThis.window.HTMLInputElement.prototype;
+            const setter = Object.getOwnPropertyDescriptor(proto, 'value').set;
+            setter.call(element, val);
+            element.dispatchEvent(new Event('input', { bubbles: true }));
+            element.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+    };
+
+    // Enter first partner details without touching the select
+    await React.act(async () => {
+        triggerValueChange(partnerInput, 'Első Partner Kft');
+        triggerValueChange(amountInput, '500');
+        triggerValueChange(dateInput, '2026-07-01');
+    });
+
+    const saveBtn = Array.from(container.querySelectorAll('.fixed button')).find(b => b.textContent.trim() === 'Mentés');
+    assert.ok(saveBtn);
+
+    // Verify duplicate submission prevention: dispatch two clicks synchronously
+    await React.act(async () => {
+        saveBtn.dispatchEvent(new Event('click', { bubbles: true, cancelable: true }));
+        saveBtn.dispatchEvent(new Event('click', { bubbles: true, cancelable: true }));
+    });
+
+    // Wait for async save operation
+    await new Promise(r => setTimeout(r, 50));
+
+    // Verify first entry was created and store updated
+    assert.equal(localIncomings.length, 1);
+    assert.equal(localIncomings[0].sender, 'Első Partner Kft');
+    assert.equal(localIncomings[0].amount, 500);
+    assert.equal(localIncomings[0].currency, 'EUR');
+
+    // 3. Create another incoming entry using an existing sender, explicitly selecting HUF
+    await React.act(async () => {
+        addBtn.dispatchEvent(new Event('click', { bubbles: true, cancelable: true }));
+    });
+
+    const modalInputs2 = container.querySelectorAll('.fixed input');
+    const amountInput2 = Array.from(modalInputs2).find(input => input.type === 'number');
+    const dateInput2 = Array.from(modalInputs2).find(input => input.type === 'date');
+    const currencySelect2 = Array.from(container.querySelectorAll('.fixed select')).find(s => Array.from(s.options).some(o => o.value === 'HUF'));
+
+    await React.act(async () => {
+        triggerValueChange(amountInput2, '30000');
+        triggerValueChange(dateInput2, '2026-07-05');
+        triggerValueChange(currencySelect2, 'HUF');
+    });
+
+    const saveBtn2 = Array.from(container.querySelectorAll('.fixed button')).find(b => b.textContent.trim() === 'Mentés');
+    await React.act(async () => {
+        saveBtn2.dispatchEvent(new Event('click', { bubbles: true, cancelable: true }));
+    });
+
+    await new Promise(r => setTimeout(r, 50));
+
+    assert.equal(localIncomings.length, 2);
+    const secondEntry = localIncomings.find(i => i.amount === 30000);
+    assert.ok(secondEntry);
+    assert.equal(secondEntry.sender, 'Első Partner Kft');
+    assert.equal(secondEntry.currency, 'HUF');
+
+    // 4. Open the first entry (EUR) for editing from the table cell
+    const cellEl = container.querySelector('.incoming-cell');
+    assert.ok(cellEl);
+
+    await React.act(async () => {
+        cellEl.dispatchEvent(new Event('click', { bubbles: true, cancelable: true }));
+    });
+
+    // In edit modal, verify stored currency EUR is preserved
+    const editCurrencySelect = Array.from(container.querySelectorAll('.fixed select')).find(s => Array.from(s.options).some(o => o.value === 'HUF'));
+    assert.equal(editCurrencySelect.value, 'EUR');
+
+    // 5. Explicitly change its currency to HUF and save
+    await React.act(async () => {
+        triggerValueChange(editCurrencySelect, 'HUF');
+    });
+
+    const editSaveBtn = Array.from(container.querySelectorAll('.fixed button')).find(b => b.textContent.trim() === 'Mentés');
+    await React.act(async () => {
+        editSaveBtn.dispatchEvent(new Event('click', { bubbles: true, cancelable: true }));
+    });
+
+    await new Promise(r => setTimeout(r, 50));
+
+    // Verify first entry currency is now updated to HUF
+    const updatedFirst = localIncomings.find(i => i.id === localIncomings[0].id);
+    assert.equal(updatedFirst.currency, 'HUF');
+
+    appService.unbind();
+    dom.window.close();
+});

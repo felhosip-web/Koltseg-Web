@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { appService } from '../services/appService.js';
 import PluginManagerPanel from './plugin/PluginManagerPanel.jsx';
+import { resolveDefaultCurrency } from '../utils/currency-utils.js';
 
 /**
  * Settings panel component providing configuration options for authentication, cloud sync,
@@ -502,6 +503,7 @@ export default function SettingsPanel() {
                                 <div>
                                     <label className="block text-xs font-semibold text-gray-600 mb-1">Pénznem</label>
                                     <select id="tplCurrencySelect"
+                                        defaultValue={resolveDefaultCurrency()}
                                         className="w-full px-3 py-2 border border-gray-200 rounded-xl bg-white text-sm focus:outline-none focus:border-emerald-500 font-medium">
                                         <option value="HUF">HUF</option>
                                         <option value="EUR">EUR</option>
