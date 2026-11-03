@@ -329,6 +329,18 @@ test('P1-6: AI currency precedence: explicit HUF/EUR overrides primary, missing 
 });
 
 test('P1-7: Template currency defaulting and immutability', async () => {
+    const dom = new JSDOM('<div id="root"></div>', { url: 'http://localhost/' });
+
+    globalThis.window = dom.window;
+    globalThis.document = dom.window.document;
+    globalThis.Event = dom.window.Event;
+    globalThis.CustomEvent = dom.window.CustomEvent;
+    globalThis.HTMLElement = dom.window.HTMLElement;
+    globalThis.HTMLInputElement = dom.window.HTMLInputElement;
+    globalThis.HTMLSelectElement = dom.window.HTMLSelectElement;
+    globalThis.Node = dom.window.Node;
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+
     const originalLocalStorage = globalThis.localStorage;
     const store = new Map();
     globalThis.localStorage = {
@@ -339,46 +351,78 @@ test('P1-7: Template currency defaulting and immutability', async () => {
 
     localStorage.setItem('app_primary_currency', 'EUR');
 
-    // Simulated template creation
-    const templateWithoutCurrency = {
-        id: 'tpl-1',
-        name: 'Havi előfizetés',
-        entries: [
-            { itemId: 'item-1', amount: 20 }
-        ]
+    const [React, { createRoot }, { default: SettingsPanel }, { TemplateManager }] = await Promise.all([
+        import('react'),
+        import('react-dom/client'),
+        import('../src/components/SettingsPanel.jsx'),
+        import('../js/oop-core.js')
+    ]);
+
+    // Mount SettingsPanel under primaryCurrency: 'EUR'
+    const container = document.getElementById('root');
+    const root = createRoot(container);
+
+    await React.act(async () => {
+        root.render(React.createElement(SettingsPanel));
+    });
+
+    const tplCurrencySelect = container.querySelector('#tplCurrencySelect');
+    assert.ok(tplCurrencySelect, '#tplCurrencySelect must exist in SettingsPanel');
+    assert.equal(tplCurrencySelect.value, 'EUR', 'SettingsPanel template currency select must default to primaryCurrency EUR');
+
+    // Persistence with TemplateManager:
+    const persistedTemplates = [];
+    const mockDb = {
+        getAll: async () => [...persistedTemplates],
+        save: async (storeName, rec) => {
+            const idx = persistedTemplates.findIndex(t => t.id === rec.id);
+            if (idx >= 0) persistedTemplates[idx] = rec;
+            else persistedTemplates.push(rec);
+            return rec.id;
+        },
+        delete: async (storeName, id) => {
+            const idx = persistedTemplates.findIndex(t => t.id === id);
+            if (idx >= 0) persistedTemplates.splice(idx, 1);
+        }
     };
+    const mockSync = { push: async () => {} };
+    const templateManager = new TemplateManager(mockDb, mockSync);
+    await templateManager.load();
 
-    const templateWithExplicitHuf = {
-        id: 'tpl-2',
-        name: 'Közös költség',
-        entries: [
-            { itemId: 'item-2', amount: 18000, currency: 'HUF' }
-        ]
-    };
+    // 1. Newly created template without explicit currency change uses the SettingsPanel default (EUR)
+    const tpl1 = await templateManager.add({
+        name: 'Havi bérlet',
+        amount: 30,
+        currency: resolveDefaultCurrency(tplCurrencySelect.value),
+        paymentMethod: 'Bankkártya'
+    });
+    assert.equal(tpl1.currency, 'EUR');
+    assert.equal(persistedTemplates[0].currency, 'EUR');
 
-    // When instantiated into entries:
-    const instantiated1 = templateWithoutCurrency.entries.map(e => ({
-        ...e,
-        currency: resolveDefaultCurrency(e.currency)
-    }));
-    assert.equal(instantiated1[0].currency, 'EUR', 'Unspecified template entry currency should resolve to primaryCurrency');
+    // 2. User explicitly selects HUF in SettingsPanel and creates a template
+    tplCurrencySelect.value = 'HUF';
+    tplCurrencySelect.dispatchEvent(new Event('change', { bubbles: true }));
+    const tpl2 = await templateManager.add({
+        name: 'Lakásbiztosítás',
+        amount: 18000,
+        currency: resolveDefaultCurrency(tplCurrencySelect.value),
+        paymentMethod: 'Utalás'
+    });
+    assert.equal(tpl2.currency, 'HUF');
+    assert.equal(persistedTemplates[1].currency, 'HUF');
 
-    const instantiated2 = templateWithExplicitHuf.entries.map(e => ({
-        ...e,
-        currency: resolveDefaultCurrency(e.currency)
-    }));
-    assert.equal(instantiated2[0].currency, 'HUF', 'Explicit template currency HUF must be preserved');
-
-    // Changing primaryCurrency later does not alter previously saved templates or instantiated entries
+    // 3. Changing primaryCurrency in SettingsPanel/localStorage later does NOT mutate previously saved templates
     localStorage.setItem('app_primary_currency', 'HUF');
-    assert.equal(instantiated1[0].currency, 'EUR', 'Previously generated entries remain EUR');
-    assert.equal(templateWithExplicitHuf.entries[0].currency, 'HUF', 'Template definition remains HUF');
+    await templateManager.load();
+    assert.equal(templateManager.templates[0].currency, 'EUR', 'Previously saved EUR template remains EUR');
+    assert.equal(templateManager.templates[1].currency, 'HUF', 'Previously saved HUF template remains HUF');
 
     if (originalLocalStorage) {
         globalThis.localStorage = originalLocalStorage;
     } else {
         delete globalThis.localStorage;
     }
+    dom.window.close();
 });
 
 test('P1-8: IncomingTab React integration: create first sender, create with existing, edit, preserve and change currency', async () => {
