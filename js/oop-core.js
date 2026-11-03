@@ -1865,6 +1865,17 @@ export class IncomingManager {
                 data.date = normalizedDate;
             }
 
+            // Ütközésvizsgálat: nem létezhet másik tétel ugyanezzel a sender + date kulccsal
+            const targetSender = data.hasOwnProperty('sender') ? data.sender : this.incomings[idx].sender;
+            const targetDate = data.hasOwnProperty('date') ? data.date : this.incomings[idx].date;
+
+            const collision = this.incomings.find(
+                e => String(e.id) !== String(id) && e.sender === targetSender && e.date === targetDate
+            );
+            if (collision) {
+                throw new Error('Már létezik bejegyzés ezzel a partnerrel és dátummal.');
+            }
+
             const updatedCurrency = data.hasOwnProperty('currency') ? resolveDefaultCurrency(data.currency) : (this.incomings[idx].currency || 'HUF');
             const entry = { ...this.incomings[idx], ...data, currency: updatedCurrency, updated_at: new Date().toISOString() };
             await this.db.save('incomings', entry);

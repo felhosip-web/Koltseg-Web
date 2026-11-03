@@ -292,6 +292,87 @@ test('P1-3: IncomingManager and appService: creation, editing, and currency pres
     assert.equal(loadCalled, true, 'incomingManager.load must be called to reconcile state even on failure');
     incomingManager.delete = origDelete;
 
+    // 8. DATA-INTEGRITY test: IncomingManager.update collision check and immutability
+    // Setup two entries with different sender/date
+    const entryA = await incomingManager.add('Sender Alpha', '2026-07-25', 1000, 'HUF');
+    const entryB = await incomingManager.add('Sender Beta', '2026-07-26', 2000, 'EUR');
+
+    const entryACopy = JSON.stringify(entryA);
+    const entryBCopy = JSON.stringify(entryB);
+    const mockStoreBefore = JSON.stringify(mockStore);
+
+    // Case 1: Changing sender to a combination already used by entryB (Sender Beta + 2026-07-26) -> rejected
+    // First set date of entryA to entryB's date, or update both
+    await assert.rejects(
+        async () => {
+            await incomingManager.update(entryA.id, { sender: 'Sender Beta', date: '2026-07-26' });
+        },
+        /Már létezik bejegyzés ezzel a partnerrel és dátummal/
+    );
+
+    // Case 2: Changing only date to match existing combination
+    // Create entryC with Sender Alpha on a different date
+    const entryC = await incomingManager.add('Sender Alpha', '2026-07-27', 3000, 'HUF');
+    await assert.rejects(
+        async () => {
+            // Update entryC date to entryA's date (2026-07-25), collision on (Sender Alpha, 2026-07-25)
+            await incomingManager.update(entryC.id, { date: '2026-07-25' });
+        },
+        /Már létezik bejegyzés ezzel a partnerrel és dátummal/
+    );
+
+    // Case 3: Changing only sender to match existing combination
+    // Create entryD with Sender Delta on 2026-07-26
+    const entryD = await incomingManager.add('Sender Delta', '2026-07-26', 4000, 'HUF');
+    await assert.rejects(
+        async () => {
+            // Update entryD sender to 'Sender Beta', collision with entryB (Sender Beta, 2026-07-26)
+            await incomingManager.update(entryD.id, { sender: 'Sender Beta' });
+        },
+        /Már létezik bejegyzés ezzel a partnerrel és dátummal/
+    );
+
+    // Case 4: Amount-only update on entryA -> succeeds
+    const updatedAmount = await incomingManager.update(entryA.id, { amount: 1500 });
+    assert.equal(updatedAmount.amount, 1500);
+    assert.equal(updatedAmount.currency, 'HUF', 'Original currency must be preserved');
+    assert.equal(updatedAmount.sender, 'Sender Alpha');
+    assert.equal(updatedAmount.date, '2026-07-25');
+
+    // Case 5: Storno-only update on entryA -> succeeds
+    const updatedStorno = await incomingManager.update(entryA.id, { isStorno: true });
+    assert.equal(updatedStorno.isStorno, true);
+    assert.equal(updatedStorno.amount, 1500);
+
+    // Case 6: Updating sender and date to an unused combination -> succeeds
+    const updatedCombo = await incomingManager.update(entryD.id, { sender: 'Sender Unique', date: '2026-07-30' });
+    assert.equal(updatedCombo.sender, 'Sender Unique');
+    assert.equal(updatedCombo.date, '2026-07-30');
+
+    // Case 7: Numeric ID vs string ID comparison safety
+    const numericIdEntry = {
+        id: 999999,
+        sender: 'Numeric Partner',
+        date: '2026-07-31',
+        amount: 500,
+        currency: 'HUF'
+    };
+    mockStore.push(numericIdEntry);
+    incomingManager.incomings.push(numericIdEntry);
+
+    // Updating entry with numeric ID passed as string '999999' does not collide with itself
+    const updatedSelf = await incomingManager.update('999999', { amount: 600 });
+    assert.equal(updatedSelf.amount, 600);
+
+    // Case 8: After rejected updates, both in-memory and persisted records remain unchanged
+    const entryAFinal = incomingManager.incomings.find(e => e.id === entryA.id);
+    const inMemB = incomingManager.incomings.find(e => e.id === entryB.id);
+    const persistedB = mockStore.find(e => e.id === entryB.id);
+    assert.equal(inMemB.sender, 'Sender Beta');
+    assert.equal(inMemB.date, '2026-07-26');
+    assert.equal(persistedB.sender, 'Sender Beta');
+    assert.equal(persistedB.date, '2026-07-26');
+
     appService.unbind();
     delete globalThis.localStorage;
 });
