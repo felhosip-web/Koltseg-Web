@@ -1,7 +1,7 @@
 // js/ai-modal-controller.js
 // AI Quick Insert Modal Controller - Természetes nyelvű költség-bejegyzés Gemini segítségével
 import { CategoryIcons } from './category-icons.js';
-import { resolveDefaultCurrency } from '../src/utils/currency-utils.js';
+import { resolveDefaultCurrency, isValidCurrency } from '../src/utils/currency-utils.js';
 
 export class AiModalController {
     /**
@@ -79,6 +79,15 @@ export class AiModalController {
      */
     async confirmAndInsert(data = this.parsedData) {
         if (!data) return;
+
+        // Ha az AI válasz explicit devizát adott meg, ellenőrizzük, hogy támogatott-e (HUF vagy EUR)
+        if (data.currency !== null && data.currency !== undefined && String(data.currency).trim() !== '') {
+            if (!isValidCurrency(data.currency)) {
+                const errorMsg = `Nem támogatott devizanem az AI válaszban: "${data.currency}". Csak HUF és EUR fogadható el!`;
+                this.app.hmiNotif?.showToast(errorMsg, 'error');
+                throw new Error(errorMsg);
+            }
+        }
 
         try {
             let categoryId = null;

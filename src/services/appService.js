@@ -352,13 +352,16 @@ export const appService = {
     async saveIncomingEntry({ id, sender, date, amount, currency, isStorno }) {
         if (!appInstance?.incomingManager) return null;
         if (id) {
-            const updated = await appInstance.incomingManager.update(id, {
+            const updatePayload = {
                 sender,
                 date,
                 amount,
-                currency,
                 isStorno: Boolean(isStorno)
-            });
+            };
+            if (currency !== undefined) {
+                updatePayload.currency = currency;
+            }
+            const updated = await appInstance.incomingManager.update(id, updatePayload);
             await appInstance.incomingManager.load();
             if (typeof appInstance.updateReactStore === 'function') {
                 appInstance.updateReactStore();
@@ -378,62 +381,99 @@ export const appService = {
     },
 
     async deleteIncomingEntry(id) {
-        if (!appInstance?.incomingManager) return;
+        if (appInstance?.securityGuard?.currentUser === 'guest') {
+            this.showToast('❌ Törlés elutasítva: Vendég módban ez a funkció le van tiltva!', 'error');
+            return false;
+        }
+        if (!appInstance?.incomingManager) return false;
         await appInstance.incomingManager.delete(id);
         await appInstance.incomingManager.load();
         if (typeof appInstance.updateReactStore === 'function') {
             appInstance.updateReactStore();
         }
+        return true;
     },
 
     async deleteIncomingColumn(date) {
+        if (appInstance?.securityGuard?.currentUser === 'guest') {
+            this.showToast('❌ Törlés elutasítva: Vendég módban ez a funkció le van tiltva!', 'error');
+            return false;
+        }
         if (appInstance?.incomingManager?.deleteColumn) {
             await appInstance.incomingManager.deleteColumn(date);
-            return;
+            return true;
         }
-        if (!appInstance?.incomingManager) return;
+        if (!appInstance?.incomingManager) return false;
         const confirmed = await this.showConfirm({
             title: 'Oszlop törlése',
             message: `Biztosan törlöd a(z) ${date} dátumhoz tartozó összes bejövő tételt?`,
             type: 'warning',
             confirmText: 'Törlés'
         });
-        if (!confirmed) return;
+        if (!confirmed) return false;
 
         const entries = appInstance.incomingManager.incomings.filter(e => e.date === date);
-        for (const entry of entries) {
-            await appInstance.incomingManager.delete(entry.id);
+        let deletionError = null;
+        try {
+            for (const entry of entries) {
+                await appInstance.incomingManager.delete(entry.id);
+            }
+        } catch (err) {
+            deletionError = err;
+        } finally {
+            // Always reconcile in-memory and React store state even on partial failure
+            await appInstance.incomingManager.load();
+            if (typeof appInstance.updateReactStore === 'function') {
+                appInstance.updateReactStore();
+            }
         }
-        await appInstance.incomingManager.load();
-        if (typeof appInstance.updateReactStore === 'function') {
-            appInstance.updateReactStore();
+        if (deletionError) {
+            this.showToast('Hiba történt az oszlop törlése közben!', 'error');
+            throw deletionError;
         }
         this.showToast('Bejegyzések törölve!', 'success');
+        return true;
     },
 
     async deleteIncomingRow(sender) {
+        if (appInstance?.securityGuard?.currentUser === 'guest') {
+            this.showToast('❌ Törlés elutasítva: Vendég módban ez a funkció le van tiltva!', 'error');
+            return false;
+        }
         if (appInstance?.incomingManager?.deleteRow) {
             await appInstance.incomingManager.deleteRow(sender);
-            return;
+            return true;
         }
-        if (!appInstance?.incomingManager) return;
+        if (!appInstance?.incomingManager) return false;
         const confirmed = await this.showConfirm({
             title: 'Sor törlése',
             message: `Biztosan törlöd a(z) "${sender}" partnerhez tartozó összes bejövő tételt?`,
             type: 'warning',
             confirmText: 'Törlés'
         });
-        if (!confirmed) return;
+        if (!confirmed) return false;
 
         const entries = appInstance.incomingManager.incomings.filter(e => e.sender === sender);
-        for (const entry of entries) {
-            await appInstance.incomingManager.delete(entry.id);
+        let deletionError = null;
+        try {
+            for (const entry of entries) {
+                await appInstance.incomingManager.delete(entry.id);
+            }
+        } catch (err) {
+            deletionError = err;
+        } finally {
+            // Always reconcile in-memory and React store state even on partial failure
+            await appInstance.incomingManager.load();
+            if (typeof appInstance.updateReactStore === 'function') {
+                appInstance.updateReactStore();
+            }
         }
-        await appInstance.incomingManager.load();
-        if (typeof appInstance.updateReactStore === 'function') {
-            appInstance.updateReactStore();
+        if (deletionError) {
+            this.showToast('Hiba történt a sor törlése közben!', 'error');
+            throw deletionError;
         }
         this.showToast('Bejegyzések törölve!', 'success');
+        return true;
     },
 
     /** Reminder actions */

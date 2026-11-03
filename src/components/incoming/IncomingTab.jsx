@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { useAppStore } from '../../store/useAppStore';
 import { appService } from '../../services/appService';
 import { formatCurrency, convertAmount, resolveDefaultCurrency } from '../../utils/currency-utils.js';
@@ -7,6 +7,13 @@ export default function IncomingTab() {
     const incomings = useAppStore(state => state.incomings || []);
     const primaryCurrency = useAppStore(state => state.primaryCurrency || 'HUF');
     const eurRate = useAppStore(state => state.eurRate || 400);
+
+    // Synchronous submission lock to prevent duplicate submissions
+    const isSubmittingRef = useRef(false);
+
+    // Ref to hold trigger element for focus restoration when closing modal
+    const lastActiveElementRef = useRef(null);
+    const modalContainerRef = useRef(null);
 
     // Modal state for creating/editing incoming items
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -30,7 +37,11 @@ export default function IncomingTab() {
     };
 
     const openCreateModal = (prefillSender = '', prefillDate = '') => {
-        const todayStr = new Date().toISOString().split('T')[0];
+        const d = new Date();
+        const localYear = d.getFullYear();
+        const localMonth = String(d.getMonth() + 1).padStart(2, '0');
+        const localDay = String(d.getDate()).padStart(2, '0');
+        const todayStr = `${localYear}-${localMonth}-${localDay}`;
         setEditingId(null);
         setModalSender(prefillSender || (senders[0] || '__new__'));
         setModalNewSender('');
@@ -38,10 +49,16 @@ export default function IncomingTab() {
         setModalAmount('');
         setModalCurrency(resolveDefaultCurrency(null, primaryCurrency));
         setModalIsStorno(false);
+        if (typeof document !== 'undefined') {
+            lastActiveElementRef.current = document.activeElement;
+        }
         setIsModalOpen(true);
     };
 
     const openEditModal = (entry) => {
+        if (typeof document !== 'undefined') {
+            lastActiveElementRef.current = document.activeElement;
+        }
         setEditingId(entry.id);
         setModalSender(entry.sender || '');
         setModalNewSender('');
@@ -77,6 +94,26 @@ export default function IncomingTab() {
             window.removeEventListener('incoming-open-cell', handleOpenCell);
         };
     }, [incomings, primaryCurrency, senders]);
+
+    // Focus management when modal opens and closes
+    useEffect(() => {
+        if (isModalOpen) {
+            // Focus first available focusable input or select inside modal
+            const timer = setTimeout(() => {
+                if (modalContainerRef.current) {
+                    const focusable = modalContainerRef.current.querySelector('input:not([type="checkbox"]), select, button');
+                    focusable?.focus();
+                }
+            }, 50);
+            return () => clearTimeout(timer);
+        } else if (lastActiveElementRef.current) {
+            // Restore focus when closing
+            try {
+                lastActiveElementRef.current.focus?.();
+            } catch (e) {}
+            lastActiveElementRef.current = null;
+        }
+    }, [isModalOpen]);
 
     const handleAddIncoming = (e) => {
         e.preventDefault();
@@ -116,60 +153,85 @@ export default function IncomingTab() {
     };
 
     const handleModalSave = async () => {
-        const isNew = modalSender === '__new__' || !modalSender || senders.length === 0;
-        const finalSender = (isNew ? modalNewSender : modalSender).trim();
-        if (!finalSender) {
-            appService.showToast('Az utaló neve nem lehet üres!', 'error');
-            return;
-        }
-        const parsedAmount = parseFloat(modalAmount);
-        if (isNaN(parsedAmount) || parsedAmount <= 0) {
-            appService.showToast('Érvénytelen összeg!', 'error');
-            return;
-        }
-        if (!modalDate || !/^\d{4}-\d{2}-\d{2}$/.test(modalDate)) {
-            appService.showToast('Érvénytelen dátum!', 'error');
-            return;
-        }
+        if (isSubmittingRef.current) return;
+        isSubmittingRef.current = true;
 
-        await appService.saveIncomingEntry({
-            id: editingId,
-            sender: finalSender,
-            date: modalDate,
-            amount: parsedAmount,
-            currency: modalCurrency,
-            isStorno: modalIsStorno
-        });
+        try {
+            const isNew = modalSender === '__new__' || !modalSender || senders.length === 0;
+            const finalSender = (isNew ? modalNewSender : modalSender).trim();
+            if (!finalSender) {
+                appService.showToast('Az utaló neve nem lehet üres!', 'error');
+                return;
+            }
+            const parsedAmount = parseFloat(modalAmount);
+            if (isNaN(parsedAmount) || parsedAmount <= 0) {
+                appService.showToast('Érvénytelen összeg!', 'error');
+                return;
+            }
+            if (!modalDate || !/^\d{4}-\d{2}-\d{2}$/.test(modalDate)) {
+                appService.showToast('Érvénytelen dátum!', 'error');
+                return;
+            }
 
-        setIsModalOpen(false);
-        appService.showToast(editingId ? 'Bejövő utalás frissítve!' : 'Új bejövő utalás rögzítve!', 'success');
+            await appService.saveIncomingEntry({
+                id: editingId,
+                sender: finalSender,
+                date: modalDate,
+                amount: parsedAmount,
+                currency: modalCurrency,
+                isStorno: modalIsStorno
+            });
+
+            setIsModalOpen(false);
+            appService.showToast(editingId ? 'Bejövő utalás frissítve!' : 'Új bejövő utalás rögzítve!', 'success');
+        } catch (err) {
+            console.error('[IncomingTab] Save error:', err);
+            appService.showToast(err.message || 'Hiba történt a mentés során!', 'error');
+        } finally {
+            isSubmittingRef.current = false;
+        }
     };
 
     const handleModalDelete = async () => {
         if (!editingId) return;
-        const confirmed = await appService.showConfirm({
-            title: 'Tétel törlése',
-            message: 'Biztosan törölni szeretnéd ezt a bejövő utalást?',
-            type: 'danger',
-            confirmText: 'Törlés'
-        });
-        if (confirmed) {
-            await appService.deleteIncomingEntry(editingId);
-            setIsModalOpen(false);
-            appService.showToast('Bejövő utalás törölve!', 'success');
+        try {
+            const confirmed = await appService.showConfirm({
+                title: 'Tétel törlése',
+                message: 'Biztosan törölni szeretnéd ezt a bejövő utalást?',
+                type: 'danger',
+                confirmText: 'Törlés'
+            });
+            if (confirmed) {
+                const success = await appService.deleteIncomingEntry(editingId);
+                if (success !== false) {
+                    setIsModalOpen(false);
+                    appService.showToast('Bejövő utalás törölve!', 'success');
+                }
+            }
+        } catch (err) {
+            console.error('[IncomingTab] Delete error:', err);
+            appService.showToast(err.message || 'Hiba történt a törlés során!', 'error');
         }
     };
 
-    const handleDeleteColumn = (e, date) => {
+    const handleDeleteColumn = async (e, date) => {
         e.preventDefault();
         e.stopPropagation();
-        appService.deleteIncomingColumn(date);
+        try {
+            await appService.deleteIncomingColumn(date);
+        } catch (err) {
+            console.error('[IncomingTab] Column delete error:', err);
+        }
     };
 
-    const handleDeleteRow = (e, sender) => {
+    const handleDeleteRow = async (e, sender) => {
         e.preventDefault();
         e.stopPropagation();
-        appService.deleteIncomingRow(sender);
+        try {
+            await appService.deleteIncomingRow(sender);
+        } catch (err) {
+            console.error('[IncomingTab] Row delete error:', err);
+        }
     };
 
     return (
@@ -313,13 +375,16 @@ export default function IncomingTab() {
 
             {/* Modal for creating/editing incoming items */}
             {isModalOpen && (
-                <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[9999]">
-                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden" onClick={e => e.stopPropagation()}>
+                <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[9999]"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="incomingModalTitle">
+                    <div ref={modalContainerRef} className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden" onClick={e => e.stopPropagation()}>
                         <div className="bg-gradient-to-r from-emerald-600 to-teal-700 p-5 text-white flex justify-between items-center">
-                            <h3 className="text-lg font-bold">
+                            <h3 id="incomingModalTitle" className="text-lg font-bold">
                                 {editingId ? 'Bejövő Utalás Módosítása' : 'Új Bejövő Utalás'}
                             </h3>
-                            <button onClick={() => setIsModalOpen(false)} className="text-white hover:text-gray-200">
+                            <button onClick={() => setIsModalOpen(false)} className="text-white hover:text-gray-200" aria-label="Bezárás">
                                 <i className="fas fa-times"></i>
                             </button>
                         </div>

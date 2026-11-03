@@ -118,6 +118,12 @@ test('P1-2: Manual expense entry: resetForm defaults to primaryCurrency, explici
     assert.equal(document.getElementById('cellCurrencyInput').value, 'EUR');
     assert.equal(document.getElementById('cellAmountInput').value, '50');
 
+    // Save edited entry and assert persisted currency remains EUR
+    await controller.save();
+    const lastSaved = savedEntries[savedEntries.length - 1];
+    assert.equal(lastSaved.id, 'entry-eur');
+    assert.equal(lastSaved.currency, 'EUR', 'Saved transaction must retain EUR currency');
+
     // 4. Legacy transaction without currency field is preserved / interpreted as HUF
     fakeApp.entries.entries = [
         { id: 'entry-legacy', itemId: 'item-1', month: '2026-07', amount: 3000, paymentMethod: 'Kártya' } // missing currency
@@ -197,6 +203,94 @@ test('P1-3: IncomingManager and appService: creation, editing, and currency pres
 
     await appService.deleteIncomingEntry(clientCEntry.id);
     assert.equal(incomingManager.incomings.length, 2);
+
+    // 5. BLOCKER test: Partial update without currency preserves original currency through appService
+    // inc2 is HUF. Primary currency is currently EUR.
+    localStorage.setItem('app_primary_currency', 'EUR');
+    await appService.saveIncomingEntry({
+        id: inc2.id,
+        sender: inc2.sender,
+        date: inc2.date,
+        amount: 25000
+        // currency is intentionally undefined
+    });
+    const partiallyUpdated = incomingManager.incomings.find(i => i.id === inc2.id);
+    assert.equal(partiallyUpdated.amount, 25000);
+    assert.equal(partiallyUpdated.currency, 'HUF', 'Partial update without currency must retain HUF even under EUR primary');
+
+    // Now explicitly update currency to EUR
+    await appService.saveIncomingEntry({
+        id: inc2.id,
+        sender: inc2.sender,
+        date: inc2.date,
+        amount: 25000,
+        currency: 'EUR'
+    });
+    const fullyUpdated = incomingManager.incomings.find(i => i.id === inc2.id);
+    assert.equal(fullyUpdated.currency, 'EUR', 'Explicit currency update must update to EUR');
+
+    // 6. BLOCKER test: Guest deletion restrictions across entry, column, and row deletions
+    fakeApp.securityGuard = { currentUser: 'guest' };
+    let toastError = '';
+    fakeApp.hmiNotif = {
+        showToast: (msg, type) => { if (type === 'error') toastError = msg; },
+        showConfirm: async () => true
+    };
+
+    const countBefore = incomingManager.incomings.length;
+    const resEntryDel = await appService.deleteIncomingEntry(inc2.id);
+    assert.equal(resEntryDel, false, 'Guest deleteIncomingEntry must return false');
+    assert.equal(incomingManager.incomings.length, countBefore, 'Entry must not be deleted in guest mode');
+    assert.ok(toastError.includes('Vendég módban ez a funkció le van tiltva'));
+
+    toastError = '';
+    const resColDel = await appService.deleteIncomingColumn(inc2.date);
+    assert.equal(resColDel, false, 'Guest deleteIncomingColumn must return false');
+    assert.equal(incomingManager.incomings.length, countBefore, 'Column must not be deleted in guest mode');
+    assert.ok(toastError.includes('Vendég módban ez a funkció le van tiltva'));
+
+    toastError = '';
+    const resRowDel = await appService.deleteIncomingRow(inc2.sender);
+    assert.equal(resRowDel, false, 'Guest deleteIncomingRow must return false');
+    assert.equal(incomingManager.incomings.length, countBefore, 'Row must not be deleted in guest mode');
+    assert.ok(toastError.includes('Vendég módban ez a funkció le van tiltva'));
+
+    // Upgrade to owner, verify authorized deletions succeed
+    fakeApp.securityGuard.currentUser = 'owner';
+    const resOwnerDel = await appService.deleteIncomingEntry(inc2.id);
+    assert.equal(resOwnerDel, true, 'Owner deleteIncomingEntry must succeed');
+    assert.equal(incomingManager.incomings.length, countBefore - 1);
+
+    // 7. BLOCKER test: Partial bulk deletion failure reconciles store and propagates error
+    const bulk1 = await incomingManager.add('Bulk Partner 1', '2026-07-20', 100);
+    const bulk2 = await incomingManager.add('Bulk Partner 2', '2026-07-20', 200);
+    assert.equal(incomingManager.incomings.length, 3);
+
+    let loadCalled = false;
+    incomingManager.load = async () => {
+        loadCalled = true;
+    };
+
+    // Simulate failure on second item deletion
+    let deleteCallCount = 0;
+    const origDelete = incomingManager.delete.bind(incomingManager);
+    incomingManager.delete = async (id) => {
+        deleteCallCount++;
+        if (deleteCallCount === 2) {
+            throw new Error('Simulated network failure on second delete');
+        }
+        return origDelete(id);
+    };
+
+    await assert.rejects(
+        async () => {
+            await appService.deleteIncomingColumn('2026-07-20');
+        },
+        /Simulated network failure/
+    );
+
+    assert.equal(loadCalled, true, 'incomingManager.load must be called to reconcile state even on failure');
+    incomingManager.delete = origDelete;
 
     appService.unbind();
     delete globalThis.localStorage;
@@ -306,15 +400,27 @@ test('P1-6: AI currency precedence: explicit HUF/EUR overrides primary, missing 
     });
     assert.equal(savedEntry.currency, 'EUR');
 
-    // 4. Invalid currency in AI item falls back to primaryCurrency EUR, or HUF if primary invalid
-    await aiController.confirmAndInsert({
-        category: 'Élelmiszer',
-        amount: 30,
-        currency: 'BTC',
-        month: '2026-07',
-        paymentMethod: 'Kártya'
-    });
-    assert.equal(savedEntry.currency, 'EUR');
+    // 4. BLOCKER test: Reject unsupported AI currency codes (e.g., BTC, USD, GBP)
+    let toastMsg = '';
+    fakeApp.hmiNotif.showToast = (msg, type) => { toastMsg = msg; };
+    savedEntry = null;
+
+    for (const badCode of ['BTC', 'USD', 'GBP']) {
+        await assert.rejects(
+            async () => {
+                await aiController.confirmAndInsert({
+                    category: 'Élelmiszer',
+                    amount: 30,
+                    currency: badCode,
+                    month: '2026-07',
+                    paymentMethod: 'Kártya'
+                });
+            },
+            /Nem támogatott devizanem/
+        );
+        assert.equal(savedEntry, null, `Entry with unsupported currency ${badCode} must NOT be saved!`);
+        assert.ok(toastMsg.includes(badCode));
+    }
 
     fakeApp.config.primaryCurrency = 'HUF';
     await aiController.confirmAndInsert({
@@ -530,6 +636,11 @@ test('P1-8: IncomingTab React integration: create first sender, create with exis
     const dateInput = Array.from(modalInputs).find(input => input.type === 'date');
     assert.ok(dateInput);
 
+    // Verify local date derivation matches local calendar date
+    const now = new Date();
+    const expectedLocal = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    assert.equal(dateInput.value, expectedLocal, 'Default modalDate must use local calendar date');
+
     const currencySelect = container.querySelector('.fixed select:not([class*="mb-2"])');
     assert.ok(currencySelect);
     assert.equal(currencySelect.value, 'EUR', 'Should default to primaryCurrency EUR');
@@ -559,7 +670,9 @@ test('P1-8: IncomingTab React integration: create first sender, create with exis
     const saveBtn = Array.from(container.querySelectorAll('.fixed button')).find(b => b.textContent.trim() === 'Mentés');
     assert.ok(saveBtn);
 
+    // Verify duplicate submission prevention: dispatch two clicks synchronously
     await React.act(async () => {
+        saveBtn.dispatchEvent(new Event('click', { bubbles: true, cancelable: true }));
         saveBtn.dispatchEvent(new Event('click', { bubbles: true, cancelable: true }));
     });
 
