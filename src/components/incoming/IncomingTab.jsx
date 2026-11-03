@@ -32,7 +32,7 @@ export default function IncomingTab() {
     const openCreateModal = (prefillSender = '', prefillDate = '') => {
         const todayStr = new Date().toISOString().split('T')[0];
         setEditingId(null);
-        setModalSender(prefillSender || (senders[0] || ''));
+        setModalSender(prefillSender || (senders[0] || '__new__'));
         setModalNewSender('');
         setModalDate(prefillDate || todayStr);
         setModalAmount('');
@@ -116,7 +116,8 @@ export default function IncomingTab() {
     };
 
     const handleModalSave = async () => {
-        const finalSender = (modalSender === '__new__' ? modalNewSender : modalSender).trim();
+        const isNew = modalSender === '__new__' || !modalSender || senders.length === 0;
+        const finalSender = (isNew ? modalNewSender : modalSender).trim();
         if (!finalSender) {
             appService.showToast('Az utaló neve nem lehet üres!', 'error');
             return;

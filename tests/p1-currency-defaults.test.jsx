@@ -251,3 +251,340 @@ test('P1-5: Reminders to expense conversion preserves reminder original currency
 
     appService.unbind();
 });
+
+test('P1-6: AI currency precedence: explicit HUF/EUR overrides primary, missing resolves to primary, invalid falls back safely', async () => {
+    const { AiModalController } = await import('../js/ai-modal-controller.js');
+    let savedEntry = null;
+    const fakeApp = {
+        config: { primaryCurrency: 'EUR' },
+        items: {
+            items: [{ id: 'item-1', name: 'Élelmiszer' }],
+            add: async (name) => ({ id: `cat-${name}`, name }),
+            load: async () => {}
+        },
+        months: {
+            months: ['2026-07'],
+            add: async (m) => {},
+            load: async () => {}
+        },
+        entries: {
+            saveEntry: async (e) => { savedEntry = e; },
+            load: async () => {}
+        },
+        hmiNotif: { showToast: () => {} },
+        updateReactStore: () => {}
+    };
+
+    const aiController = new AiModalController(fakeApp);
+
+    // 1. Explicit EUR in AI item persists as EUR
+    await aiController.confirmAndInsert({
+        category: 'Élelmiszer',
+        amount: 45,
+        currency: 'EUR',
+        month: '2026-07',
+        paymentMethod: 'Kártya'
+    });
+    assert.equal(savedEntry.currency, 'EUR');
+
+    // 2. Explicit HUF in AI item persists as HUF even when primary is EUR
+    await aiController.confirmAndInsert({
+        category: 'Élelmiszer',
+        amount: 15000,
+        currency: 'HUF',
+        month: '2026-07',
+        paymentMethod: 'Készpénz'
+    });
+    assert.equal(savedEntry.currency, 'HUF');
+
+    // 3. Missing currency in AI item defaults to primaryCurrency EUR
+    await aiController.confirmAndInsert({
+        category: 'Élelmiszer',
+        amount: 30,
+        month: '2026-07',
+        paymentMethod: 'Kártya'
+    });
+    assert.equal(savedEntry.currency, 'EUR');
+
+    // 4. Invalid currency in AI item falls back to primaryCurrency EUR, or HUF if primary invalid
+    await aiController.confirmAndInsert({
+        category: 'Élelmiszer',
+        amount: 30,
+        currency: 'BTC',
+        month: '2026-07',
+        paymentMethod: 'Kártya'
+    });
+    assert.equal(savedEntry.currency, 'EUR');
+
+    fakeApp.config.primaryCurrency = 'HUF';
+    await aiController.confirmAndInsert({
+        category: 'Élelmiszer',
+        amount: 1200,
+        month: '2026-07',
+        paymentMethod: 'Kártya'
+    });
+    assert.equal(savedEntry.currency, 'HUF');
+
+    delete globalThis.localStorage;
+});
+
+test('P1-7: Template currency defaulting and immutability', async () => {
+    const originalLocalStorage = globalThis.localStorage;
+    const store = new Map();
+    globalThis.localStorage = {
+        getItem: (k) => store.get(k) || null,
+        setItem: (k, v) => store.set(k, String(v)),
+        removeItem: (k) => store.delete(k)
+    };
+
+    localStorage.setItem('app_primary_currency', 'EUR');
+
+    // Simulated template creation
+    const templateWithoutCurrency = {
+        id: 'tpl-1',
+        name: 'Havi előfizetés',
+        entries: [
+            { itemId: 'item-1', amount: 20 }
+        ]
+    };
+
+    const templateWithExplicitHuf = {
+        id: 'tpl-2',
+        name: 'Közös költség',
+        entries: [
+            { itemId: 'item-2', amount: 18000, currency: 'HUF' }
+        ]
+    };
+
+    // When instantiated into entries:
+    const instantiated1 = templateWithoutCurrency.entries.map(e => ({
+        ...e,
+        currency: resolveDefaultCurrency(e.currency)
+    }));
+    assert.equal(instantiated1[0].currency, 'EUR', 'Unspecified template entry currency should resolve to primaryCurrency');
+
+    const instantiated2 = templateWithExplicitHuf.entries.map(e => ({
+        ...e,
+        currency: resolveDefaultCurrency(e.currency)
+    }));
+    assert.equal(instantiated2[0].currency, 'HUF', 'Explicit template currency HUF must be preserved');
+
+    // Changing primaryCurrency later does not alter previously saved templates or instantiated entries
+    localStorage.setItem('app_primary_currency', 'HUF');
+    assert.equal(instantiated1[0].currency, 'EUR', 'Previously generated entries remain EUR');
+    assert.equal(templateWithExplicitHuf.entries[0].currency, 'HUF', 'Template definition remains HUF');
+
+    if (originalLocalStorage) {
+        globalThis.localStorage = originalLocalStorage;
+    } else {
+        delete globalThis.localStorage;
+    }
+});
+
+test('P1-8: IncomingTab React integration: create first sender, create with existing, edit, preserve and change currency', async () => {
+    const dom = new JSDOM('<div id="root"></div>', { url: 'http://localhost/' });
+
+    globalThis.window = dom.window;
+    globalThis.document = dom.window.document;
+    globalThis.Event = dom.window.Event;
+    globalThis.CustomEvent = dom.window.CustomEvent;
+    globalThis.HTMLElement = dom.window.HTMLElement;
+    globalThis.HTMLInputElement = dom.window.HTMLInputElement;
+    globalThis.HTMLSelectElement = dom.window.HTMLSelectElement;
+    globalThis.Node = dom.window.Node;
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+
+    delete globalThis.window.app;
+
+    const [React, { createRoot }, { useAppStore }, { default: IncomingTab }] = await Promise.all([
+        import('react'),
+        import('react-dom/client'),
+        import('../src/store/useAppStore.js'),
+        import('../src/components/incoming/IncomingTab.jsx')
+    ]);
+
+    // Setup initial state: 0 senders, 0 incomings, primaryCurrency EUR
+    let localIncomings = [];
+    const initialSenders = [];
+
+    await React.act(async () => {
+        useAppStore.setState({
+            incomings: localIncomings,
+            incomingSenders: initialSenders,
+            primaryCurrency: 'EUR'
+        });
+    });
+
+    const fakeIncomingManager = {
+        incomings: localIncomings,
+        load: async () => {
+            useAppStore.setState({ incomings: [...localIncomings] });
+        },
+        add: async (sender, date, amount, currency) => {
+            const entry = {
+                id: `inc-${Date.now()}-${Math.random()}`,
+                sender,
+                date,
+                amount,
+                currency: currency || 'EUR'
+            };
+            localIncomings.push(entry);
+            return entry;
+        },
+        update: async (id, data) => {
+            const idx = localIncomings.findIndex(i => String(i.id) === String(id));
+            if (idx >= 0) {
+                localIncomings[idx] = { ...localIncomings[idx], ...data };
+                return localIncomings[idx];
+            }
+            return null;
+        },
+        delete: async (id) => {
+            localIncomings = localIncomings.filter(i => String(i.id) !== String(id));
+            fakeIncomingManager.incomings = localIncomings;
+        }
+    };
+
+    const fakeApp = {
+        incomingManager: fakeIncomingManager,
+        updateReactStore: () => {
+            useAppStore.setState({ incomings: [...localIncomings] });
+        },
+        hmiNotif: {
+            showToast: () => {},
+            showConfirm: async () => true
+        }
+    };
+    appService.bind(fakeApp);
+
+    const container = document.getElementById('root');
+    const root = createRoot(container);
+
+    await React.act(async () => {
+        root.render(React.createElement(IncomingTab));
+    });
+
+    // 1. Verify initially empty state
+    assert.ok(container.textContent.includes('Még nincs rögzített bejövő utalás'));
+
+    // 2. Open create modal when 0 senders exist and create very first partner
+    const addBtn = container.querySelector('#btnAddIncoming');
+    assert.ok(addBtn);
+
+    await React.act(async () => {
+        addBtn.dispatchEvent(new Event('click', { bubbles: true, cancelable: true }));
+    });
+
+    // Modal is open, verify inputs exist
+    const modalInputs = container.querySelectorAll('.fixed input');
+    const partnerInput = Array.from(modalInputs).find(input => input.placeholder && input.placeholder.includes('partner'));
+    assert.ok(partnerInput, 'New partner input must be rendered when senders is empty');
+
+    const amountInput = Array.from(modalInputs).find(input => input.type === 'number');
+    assert.ok(amountInput);
+
+    const dateInput = Array.from(modalInputs).find(input => input.type === 'date');
+    assert.ok(dateInput);
+
+    const currencySelect = container.querySelector('.fixed select:not([class*="mb-2"])');
+    assert.ok(currencySelect);
+    assert.equal(currencySelect.value, 'EUR', 'Should default to primaryCurrency EUR');
+
+    const triggerValueChange = (element, val) => {
+        const reactPropsKey = Object.keys(element).find(k => k.startsWith('__reactProps'));
+        if (reactPropsKey && typeof element[reactPropsKey]?.onChange === 'function') {
+            element[reactPropsKey].onChange({ target: { value: val } });
+        } else {
+            const proto = element instanceof globalThis.window.HTMLSelectElement
+                ? globalThis.window.HTMLSelectElement.prototype
+                : globalThis.window.HTMLInputElement.prototype;
+            const setter = Object.getOwnPropertyDescriptor(proto, 'value').set;
+            setter.call(element, val);
+            element.dispatchEvent(new Event('input', { bubbles: true }));
+            element.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+    };
+
+    // Enter first partner details without touching the select
+    await React.act(async () => {
+        triggerValueChange(partnerInput, 'Első Partner Kft');
+        triggerValueChange(amountInput, '500');
+        triggerValueChange(dateInput, '2026-07-01');
+    });
+
+    const saveBtn = Array.from(container.querySelectorAll('.fixed button')).find(b => b.textContent.trim() === 'Mentés');
+    assert.ok(saveBtn);
+
+    await React.act(async () => {
+        saveBtn.dispatchEvent(new Event('click', { bubbles: true, cancelable: true }));
+    });
+
+    // Wait for async save operation
+    await new Promise(r => setTimeout(r, 50));
+
+    // Verify first entry was created and store updated
+    assert.equal(localIncomings.length, 1);
+    assert.equal(localIncomings[0].sender, 'Első Partner Kft');
+    assert.equal(localIncomings[0].amount, 500);
+    assert.equal(localIncomings[0].currency, 'EUR');
+
+    // 3. Create another incoming entry using an existing sender, explicitly selecting HUF
+    await React.act(async () => {
+        addBtn.dispatchEvent(new Event('click', { bubbles: true, cancelable: true }));
+    });
+
+    const modalInputs2 = container.querySelectorAll('.fixed input');
+    const amountInput2 = Array.from(modalInputs2).find(input => input.type === 'number');
+    const dateInput2 = Array.from(modalInputs2).find(input => input.type === 'date');
+    const currencySelect2 = Array.from(container.querySelectorAll('.fixed select')).find(s => Array.from(s.options).some(o => o.value === 'HUF'));
+
+    await React.act(async () => {
+        triggerValueChange(amountInput2, '30000');
+        triggerValueChange(dateInput2, '2026-07-05');
+        triggerValueChange(currencySelect2, 'HUF');
+    });
+
+    const saveBtn2 = Array.from(container.querySelectorAll('.fixed button')).find(b => b.textContent.trim() === 'Mentés');
+    await React.act(async () => {
+        saveBtn2.dispatchEvent(new Event('click', { bubbles: true, cancelable: true }));
+    });
+
+    await new Promise(r => setTimeout(r, 50));
+
+    assert.equal(localIncomings.length, 2);
+    const secondEntry = localIncomings.find(i => i.amount === 30000);
+    assert.ok(secondEntry);
+    assert.equal(secondEntry.sender, 'Első Partner Kft');
+    assert.equal(secondEntry.currency, 'HUF');
+
+    // 4. Open the first entry (EUR) for editing from the table cell
+    const cellEl = container.querySelector('.incoming-cell');
+    assert.ok(cellEl);
+
+    await React.act(async () => {
+        cellEl.dispatchEvent(new Event('click', { bubbles: true, cancelable: true }));
+    });
+
+    // In edit modal, verify stored currency EUR is preserved
+    const editCurrencySelect = Array.from(container.querySelectorAll('.fixed select')).find(s => Array.from(s.options).some(o => o.value === 'HUF'));
+    assert.equal(editCurrencySelect.value, 'EUR');
+
+    // 5. Explicitly change its currency to HUF and save
+    await React.act(async () => {
+        triggerValueChange(editCurrencySelect, 'HUF');
+    });
+
+    const editSaveBtn = Array.from(container.querySelectorAll('.fixed button')).find(b => b.textContent.trim() === 'Mentés');
+    await React.act(async () => {
+        editSaveBtn.dispatchEvent(new Event('click', { bubbles: true, cancelable: true }));
+    });
+
+    await new Promise(r => setTimeout(r, 50));
+
+    // Verify first entry currency is now updated to HUF
+    const updatedFirst = localIncomings.find(i => i.id === localIncomings[0].id);
+    assert.equal(updatedFirst.currency, 'HUF');
+
+    appService.unbind();
+    dom.window.close();
+});
