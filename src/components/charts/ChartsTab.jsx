@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useAppStore } from '../../store/useAppStore.js';
 import { appService } from '../../services/appService.js';
-import { convertAmount, formatCurrency } from '../../utils/currency-utils.js';
+import { convertAmount, formatCurrency, formatDualCurrency } from '../../utils/currency-utils.js';
 
 export default function ChartsTab() {
     const [stats, setStats] = useState(null);
@@ -153,7 +153,7 @@ export default function ChartsTab() {
                         legend: { display: false },
                         tooltip: {
                             callbacks: {
-                                label: (c) => formatCurrency(c.parsed.y, primaryCurrency)
+                                label: (c) => formatDualCurrency(c.parsed.y, primaryCurrency, primaryCurrency, eurRate)
                             }
                         }
                     },
@@ -197,7 +197,7 @@ export default function ChartsTab() {
                         legend: { position: 'right' },
                         tooltip: {
                             callbacks: {
-                                label: (c) => ` ${c.label}: ${formatCurrency(c.raw, primaryCurrency)}`
+                                label: (c) => ` ${c.label}: ${formatDualCurrency(c.raw, primaryCurrency, primaryCurrency, eurRate)}`
                             }
                         }
                     }
@@ -238,7 +238,7 @@ export default function ChartsTab() {
                         legend: { position: 'right' },
                         tooltip: {
                             callbacks: {
-                                label: (c) => ` ${c.label}: ${formatCurrency(c.raw, primaryCurrency)}`
+                                label: (c) => ` ${c.label}: ${formatDualCurrency(c.raw, primaryCurrency, primaryCurrency, eurRate)}`
                             }
                         }
                     }

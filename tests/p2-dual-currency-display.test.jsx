@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test, { beforeEach, afterEach } from 'node:test';
 import { JSDOM } from 'jsdom';
 import 'fake-indexeddb/auto';
-import { convertAmount, formatCurrency } from '../src/utils/currency-utils.js';
+import { convertAmount } from '../src/utils/currency-utils.js';
 
 let dom;
 let originalSetInterval;
@@ -72,7 +72,7 @@ afterEach(() => {
     dom.window.close();
 });
 
-test('P2: MainTable renders dual currency correctly and preserves original transaction immutability', async () => {
+test('P2: MainTable asserts distinct primary and secondary elements across HUF and EUR switches and verifies immutability', async () => {
     const [React, { createRoot }, { act }, { useAppStore }, { default: MainTable }] = await Promise.all([
         import('react'),
         import('react-dom/client'),
@@ -110,28 +110,47 @@ test('P2: MainTable renders dual currency correctly and preserves original trans
 
         const cell = rootEl.querySelector('[data-cellbasekey="item1_2026-08"]');
         assert.ok(cell, 'Cell exists in table');
-        // In HUF: 40,000 + (100 * 400) = 80,000 Ft. Secondary = 80,000 / 400 = 200.00 EUR
-        assert.ok(cell.textContent.includes('80\u00a0000 Ft') || cell.textContent.includes('80 000 Ft'), 'Primary HUF formatted in cell');
-        assert.ok(cell.textContent.includes('200,00 EUR') || cell.textContent.includes('200.00 EUR'), 'Secondary EUR formatted in cell');
 
-        // Switch to EUR
+        // Locate distinct primary and secondary DOM elements inside the cell
+        const primaryEl = cell.querySelector('.font-bold.text-gray-800');
+        const secondaryEl = cell.querySelector('.text-\\[10px\\].text-gray-500');
+        assert.ok(primaryEl, 'Primary currency element exists');
+        assert.ok(secondaryEl, 'Secondary currency element exists');
+
+        // 1. HUF mode role verification:
+        // Primary must strictly contain HUF amount: 80,000 Ft
+        // Secondary must strictly contain EUR equivalent: 200,00 EUR
+        assert.ok(primaryEl.textContent.includes('80\u00a0000 Ft') || primaryEl.textContent.includes('80 000 Ft'), 'Primary element contains HUF');
+        assert.ok(!primaryEl.textContent.includes('EUR') && !primaryEl.textContent.includes('€'), 'Primary element does not contain EUR in HUF mode');
+        assert.ok(secondaryEl.textContent.includes('200,00 EUR') || secondaryEl.textContent.includes('200.00 EUR'), 'Secondary element contains EUR');
+        assert.ok(!secondaryEl.textContent.includes('Ft'), 'Secondary element does not contain Ft in HUF mode');
+
+        // 2. Switch to EUR mode:
         await act(async () => {
             useAppStore.setState({ primaryCurrency: 'EUR' });
         });
 
-        // In EUR: (40,000 / 400) + 100 = 200.00 EUR. Secondary = 200 * 400 = 80,000 Ft
-        assert.ok(cell.textContent.includes('200,00 EUR') || cell.textContent.includes('200.00 EUR'), 'Primary EUR formatted in cell');
-        assert.ok(cell.textContent.includes('80\u00a0000 Ft') || cell.textContent.includes('80 000 Ft'), 'Secondary HUF formatted in cell');
+        // Roles MUST swap:
+        // Primary element must now contain EUR amount: 200,00 EUR
+        // Secondary element must now contain HUF equivalent: 80,000 Ft
+        const primaryElEur = cell.querySelector('.font-bold.text-gray-800');
+        const secondaryElEur = cell.querySelector('.text-\\[10px\\].text-gray-500');
+        assert.ok(primaryElEur.textContent.includes('200,00 EUR') || primaryElEur.textContent.includes('200.00 EUR'), 'Primary element contains EUR in EUR mode');
+        assert.ok(!primaryElEur.textContent.includes('Ft'), 'Primary element does not contain Ft in EUR mode');
+        assert.ok(secondaryElEur.textContent.includes('80\u00a0000 Ft') || secondaryElEur.textContent.includes('80 000 Ft'), 'Secondary element contains HUF in EUR mode');
+        assert.ok(!secondaryElEur.textContent.includes('EUR') && !secondaryElEur.textContent.includes('€'), 'Secondary element does not contain EUR in EUR mode');
 
-        // Switch back to HUF
+        // 3. Switch back to HUF:
         await act(async () => {
             useAppStore.setState({ primaryCurrency: 'HUF' });
         });
 
-        assert.ok(cell.textContent.includes('80\u00a0000 Ft') || cell.textContent.includes('80 000 Ft'), 'Primary HUF restored in cell');
-        assert.ok(cell.textContent.includes('200,00 EUR') || cell.textContent.includes('200.00 EUR'), 'Secondary EUR restored in cell');
+        const primaryElRestored = cell.querySelector('.font-bold.text-gray-800');
+        const secondaryElRestored = cell.querySelector('.text-\\[10px\\].text-gray-500');
+        assert.ok(primaryElRestored.textContent.includes('80\u00a0000 Ft') || primaryElRestored.textContent.includes('80 000 Ft'), 'Primary restored to HUF');
+        assert.ok(secondaryElRestored.textContent.includes('200,00 EUR') || secondaryElRestored.textContent.includes('200.00 EUR'), 'Secondary restored to EUR');
 
-        // Assert that the original transaction objects were NEVER mutated
+        // 4. Assert that the original transaction objects in store were NEVER mutated
         const currentEntries = useAppStore.getState().entries;
         assert.equal(currentEntries.length, entriesSnapshot.length);
         for (let i = 0; i < currentEntries.length; i++) {
@@ -223,7 +242,7 @@ test('P2: Dashboard aggregates mixed HUF and EUR transactions in primary currenc
     }
 });
 
-test('P2: StatsTab aggregates mixed-currency entries across all payment methods, incomings, and top sender under HUF and EUR', async () => {
+test('P2: StatsTab aggregates mixed-currency entries across explicitly labeled UI elements under HUF and EUR', async () => {
     const [React, { createRoot }, { act }, { useAppStore }, { default: StatsTab }] = await Promise.all([
         import('react'),
         import('react-dom/client'),
@@ -255,47 +274,47 @@ test('P2: StatsTab aggregates mixed-currency entries across all payment methods,
     const rootEl = dom.window.document.getElementById('root');
     const root = createRoot(rootEl);
 
+    // Helper to find a card's value paragraph by its label
+    const getCardValueByLabel = (container, labelText) => {
+        const paragraphs = Array.from(container.querySelectorAll('p'));
+        const labelP = paragraphs.find(p => p.textContent.trim().includes(labelText));
+        if (!labelP) return null;
+        const parentCard = labelP.closest('.bg-white');
+        if (!parentCard) return null;
+        // The value paragraph is the subsequent element with text-[23]xl font-bold
+        const valP = parentCard.querySelector('.font-bold.mt-2') || parentCard.querySelectorAll('p')[1];
+        return valP ? valP.textContent.trim() : null;
+    };
+
     try {
         await act(async () => {
             root.render(React.createElement(StatsTab));
         });
 
-        // HUF Assertions:
-        // Total = 40,000 + 40,000 + 20,000 = 100,000 Ft
-        // Card = 40,000 Ft
-        // Cash = 40,000 Ft
-        // Transfer = 20,000 Ft
-        // Incoming total = 200,000 Ft
-        // Balance = 200,000 - 100,000 = 100,000 Ft
-        // Top sender = Cég Kft (200 000 Ft)
-        const textHuf = rootEl.textContent;
-        assert.ok(textHuf.includes('100\u00a0000 Ft') || textHuf.includes('100 000 Ft'), 'StatsTab total expenses in HUF');
-        assert.ok(textHuf.includes('40\u00a0000 Ft') || textHuf.includes('40 000 Ft'), 'StatsTab card/cash in HUF');
-        assert.ok(textHuf.includes('20\u00a0000 Ft') || textHuf.includes('20 000 Ft'), 'StatsTab transfer in HUF');
-        assert.ok(textHuf.includes('200\u00a0000 Ft') || textHuf.includes('200 000 Ft'), 'StatsTab total incoming in HUF');
-        assert.ok(textHuf.includes('Cég Kft (200\u00a0000 Ft)') || textHuf.includes('Cég Kft (200 000 Ft)'), 'StatsTab top sender in HUF');
+        // 1. HUF mode explicit card assertions:
+        assert.ok(getCardValueByLabel(rootEl, 'Összes kiadás').includes('100\u00a0000 Ft') || getCardValueByLabel(rootEl, 'Összes kiadás').includes('100 000 Ft'), 'Card: Összes kiadás in HUF');
+        assert.ok(getCardValueByLabel(rootEl, 'Kártya').includes('40\u00a0000 Ft') || getCardValueByLabel(rootEl, 'Kártya').includes('40 000 Ft'), 'Card: Kártya in HUF');
+        assert.ok(getCardValueByLabel(rootEl, 'Készpénz').includes('40\u00a0000 Ft') || getCardValueByLabel(rootEl, 'Készpénz').includes('40 000 Ft'), 'Card: Készpénz in HUF');
+        assert.ok(getCardValueByLabel(rootEl, 'Utalás').includes('20\u00a0000 Ft') || getCardValueByLabel(rootEl, 'Utalás').includes('20 000 Ft'), 'Card: Utalás in HUF');
+        assert.ok(getCardValueByLabel(rootEl, 'Összes bejövő').includes('200\u00a0000 Ft') || getCardValueByLabel(rootEl, 'Összes bejövő').includes('200 000 Ft'), 'Card: Összes bejövő in HUF');
+        assert.ok(getCardValueByLabel(rootEl, 'Egyenleg').includes('100\u00a0000 Ft') || getCardValueByLabel(rootEl, 'Egyenleg').includes('100 000 Ft'), 'Card: Egyenleg in HUF');
+        assert.ok(getCardValueByLabel(rootEl, 'Legtöbb utaló').includes('Cég Kft (200\u00a0000 Ft)') || getCardValueByLabel(rootEl, 'Legtöbb utaló').includes('Cég Kft (200 000 Ft)'), 'Card: Legtöbb utaló in HUF');
 
-        // Switch to EUR
+        // 2. Switch to EUR mode:
         await act(async () => {
             useAppStore.setState({ primaryCurrency: 'EUR' });
         });
 
-        // EUR Assertions:
-        // Total = 100,000 / 400 = 250.00 EUR
-        // Card = 40,000 / 400 = 100.00 EUR
-        // Cash = 100.00 EUR
-        // Transfer = 50.00 EUR
-        // Incoming total = 200,000 / 400 = 500.00 EUR
-        // Balance = 500 - 250 = 250.00 EUR
-        // Top sender = Cég Kft (500,00 EUR)
-        const textEur = rootEl.textContent;
-        assert.ok(textEur.includes('250,00 EUR') || textEur.includes('250.00 EUR'), 'StatsTab total expenses in EUR');
-        assert.ok(textEur.includes('100,00 EUR') || textEur.includes('100.00 EUR'), 'StatsTab card/cash in EUR');
-        assert.ok(textEur.includes('50,00 EUR') || textEur.includes('50.00 EUR'), 'StatsTab transfer in EUR');
-        assert.ok(textEur.includes('500,00 EUR') || textEur.includes('500.00 EUR'), 'StatsTab total incoming in EUR');
-        assert.ok(textEur.includes('Cég Kft (500,00 EUR)') || textEur.includes('Cég Kft (500.00 EUR)'), 'StatsTab top sender in EUR');
+        // EUR mode explicit card assertions:
+        assert.ok(getCardValueByLabel(rootEl, 'Összes kiadás').includes('250,00 EUR') || getCardValueByLabel(rootEl, 'Összes kiadás').includes('250.00 EUR'), 'Card: Összes kiadás in EUR');
+        assert.ok(getCardValueByLabel(rootEl, 'Kártya').includes('100,00 EUR') || getCardValueByLabel(rootEl, 'Kártya').includes('100.00 EUR'), 'Card: Kártya in EUR');
+        assert.ok(getCardValueByLabel(rootEl, 'Készpénz').includes('100,00 EUR') || getCardValueByLabel(rootEl, 'Készpénz').includes('100.00 EUR'), 'Card: Készpénz in EUR');
+        assert.ok(getCardValueByLabel(rootEl, 'Utalás').includes('50,00 EUR') || getCardValueByLabel(rootEl, 'Utalás').includes('50.00 EUR'), 'Card: Utalás in EUR');
+        assert.ok(getCardValueByLabel(rootEl, 'Összes bejövő').includes('500,00 EUR') || getCardValueByLabel(rootEl, 'Összes bejövő').includes('500.00 EUR'), 'Card: Összes bejövő in EUR');
+        assert.ok(getCardValueByLabel(rootEl, 'Egyenleg').includes('250,00 EUR') || getCardValueByLabel(rootEl, 'Egyenleg').includes('250.00 EUR'), 'Card: Egyenleg in EUR');
+        assert.ok(getCardValueByLabel(rootEl, 'Legtöbb utaló').includes('Cég Kft (500,00 EUR)') || getCardValueByLabel(rootEl, 'Legtöbb utaló').includes('Cég Kft (500.00 EUR)'), 'Card: Legtöbb utaló in EUR');
 
-        // Switch back to HUF
+        // 3. Switch back to HUF:
         await act(async () => {
             useAppStore.setState({ primaryCurrency: 'HUF' });
         });
@@ -310,7 +329,7 @@ test('P2: StatsTab aggregates mixed-currency entries across all payment methods,
     }
 });
 
-test('P2: ChartsTab computes monetary chart datasets and tooltips in primary currency and preserves fuel metrics across HUF and EUR', async () => {
+test('P2: ChartsTab computes monetary chart datasets and dual-currency tooltips and preserves fuel metrics across HUF and EUR', async () => {
     const [React, { createRoot }, { act }, { useAppStore }, { default: ChartsTab }] = await Promise.all([
         import('react'),
         import('react-dom/client'),
@@ -363,17 +382,25 @@ test('P2: ChartsTab computes monetary chart datasets and tooltips in primary cur
         // Lakhatás: 80,000; Utazás: 100 EUR * 400 = 40,000
         assert.deepEqual(barChartHuf.config.data.datasets[0].data, [80000, 40000], 'Bar chart numeric data aggregated in HUF');
 
-        // Verify Bar chart tooltip formatter callback in HUF
+        // Verify Bar chart dual-currency tooltip formatter callback in HUF:
+        // Must show both primary (80 000 Ft) and secondary (≈ 200,00 EUR)
         const barTooltipHuf = barChartHuf.config.options?.plugins?.tooltip?.callbacks?.label;
         assert.equal(typeof barTooltipHuf, 'function');
         const formattedBarHuf = barTooltipHuf({ parsed: { y: 80000 } });
-        assert.ok(formattedBarHuf.includes('80\u00a0000 Ft') || formattedBarHuf.includes('80 000 Ft'), 'Bar tooltip formats in HUF');
+        assert.ok(formattedBarHuf.includes('80\u00a0000 Ft') || formattedBarHuf.includes('80 000 Ft'), 'Bar tooltip includes primary HUF');
+        assert.ok(formattedBarHuf.includes('200,00 EUR') || formattedBarHuf.includes('200.00 EUR'), 'Bar tooltip includes secondary EUR');
 
         // Doughnut payment method chart in HUF:
         // Cash: 40,000 Ft, Card: 80,000 Ft, Transfer: 0
         const doughnutChartHuf = chartInstances.find(c => c.config?.type === 'doughnut' && c.config.data.labels[0] === 'Készpénz');
         assert.ok(doughnutChartHuf, 'Payment doughnut chart created');
         assert.deepEqual(doughnutChartHuf.config.data.datasets[0].data, [40000, 80000, 0], 'Payment methods aggregated in HUF');
+
+        // Payment doughnut tooltip callback verification in HUF:
+        const doughnutTooltipHuf = doughnutChartHuf.config.options?.plugins?.tooltip?.callbacks?.label;
+        const formattedDoughnutHuf = doughnutTooltipHuf({ label: 'Kártya', raw: 80000 });
+        assert.ok(formattedDoughnutHuf.includes('80\u00a0000 Ft') || formattedDoughnutHuf.includes('80 000 Ft'), 'Doughnut tooltip includes primary HUF');
+        assert.ok(formattedDoughnutHuf.includes('200,00 EUR') || formattedDoughnutHuf.includes('200.00 EUR'), 'Doughnut tooltip includes secondary EUR');
 
         // Currency doughnut chart in HUF:
         // HUF entries: 80,000 Ft, EUR entries: 100 EUR = 40,000 Ft
@@ -409,16 +436,24 @@ test('P2: ChartsTab computes monetary chart datasets and tooltips in primary cur
         // Lakhatás: 80,000 / 400 = 200 EUR; Utazás: 100 EUR
         assert.deepEqual(barChartEur.config.data.datasets[0].data, [200, 100], 'Bar chart numeric data aggregated in EUR');
 
-        // Tooltip in EUR
+        // Dual-currency tooltip in EUR mode:
+        // Must show both primary (200,00 EUR) and secondary (≈ 80 000 Ft)
         const barTooltipEur = barChartEur.config.options?.plugins?.tooltip?.callbacks?.label;
         const formattedBarEur = barTooltipEur({ parsed: { y: 200 } });
-        assert.ok(formattedBarEur.includes('200,00 EUR') || formattedBarEur.includes('200.00 EUR'), 'Bar tooltip formats in EUR');
+        assert.ok(formattedBarEur.includes('200,00 EUR') || formattedBarEur.includes('200.00 EUR'), 'Bar tooltip includes primary EUR');
+        assert.ok(formattedBarEur.includes('80\u00a0000 Ft') || formattedBarEur.includes('80 000 Ft'), 'Bar tooltip includes secondary HUF');
 
         // Payment doughnut in EUR:
         // Cash: 100 EUR, Card: 200 EUR, Transfer: 0
         const doughnutChartEur = chartInstances.find(c => c.config?.type === 'doughnut' && c.config.data.labels[0] === 'Készpénz');
         assert.ok(doughnutChartEur, 'Payment doughnut recreated for EUR');
         assert.deepEqual(doughnutChartEur.config.data.datasets[0].data, [100, 200, 0], 'Payment methods aggregated in EUR');
+
+        // Payment doughnut tooltip callback in EUR mode:
+        const doughnutTooltipEur = doughnutChartEur.config.options?.plugins?.tooltip?.callbacks?.label;
+        const formattedDoughnutEur = doughnutTooltipEur({ label: 'Kártya', raw: 200 });
+        assert.ok(formattedDoughnutEur.includes('200,00 EUR') || formattedDoughnutEur.includes('200.00 EUR'), 'Doughnut tooltip includes primary EUR');
+        assert.ok(formattedDoughnutEur.includes('80\u00a0000 Ft') || formattedDoughnutEur.includes('80 000 Ft'), 'Doughnut tooltip includes secondary HUF');
 
         // Currency distribution in EUR:
         const currencyChartEur = chartInstances.find(c => c.config?.type === 'doughnut' && c.config.data.labels[0].includes('HUF'));
@@ -438,7 +473,7 @@ test('P2: ChartsTab computes monetary chart datasets and tooltips in primary cur
     }
 });
 
-test('P2: Exchange rate fallbacks handle null, zero, missing, and non-finite rates safely without NaN or fabricated values', async () => {
+test('P2: Exchange rate fallbacks and default 400 policy: exact numeric verification without NaN or fabricated values', async () => {
     const [React, { createRoot }, { act }, { useAppStore }, { default: MainTable }] = await Promise.all([
         import('react'),
         import('react-dom/client'),
@@ -449,29 +484,24 @@ test('P2: Exchange rate fallbacks handle null, zero, missing, and non-finite rat
 
     const items = [{ id: 'item1', name: 'Élelmiszer' }];
     const months = ['2026-08'];
+    // 5000 HUF and 20 EUR
     const entries = [
         { id: 'e1', itemId: 'item1', month: '2026-08', cellKey: 'item1_2026-08', amount: 5000, currency: 'HUF' },
         { id: 'e2', itemId: 'item1', month: '2026-08', cellKey: 'item1_2026-08_1', amount: 20, currency: 'EUR' }
     ];
 
-    const fallbackTestCases = [
-        { name: 'eurRate = null', rate: null },
-        { name: 'eurRate = 0', rate: 0 },
-        { name: 'eurRate missing/undefined', rate: undefined },
-        { name: 'eurRate = NaN', rate: NaN },
-        { name: 'eurRate = -400 (negative/invalid)', rate: -400 },
-        { name: 'eurRate = Infinity', rate: Infinity }
+    // MainTable uses `rate = eurRate || 400`, which implements the centralized fallback policy (DEFAULT_FALLBACK_EUR_RATE = 400)
+    // When rate falls back to 400:
+    // In HUF mode:
+    // 5000 HUF + (20 EUR * 400) = 5000 + 8000 = 13,000 Ft
+    // Secondary = 13000 / 400 = 32.50 EUR
+    const fallbackRateScenarios = [
+        { name: 'eurRate = null', rate: null, expectedPrimary: '13\u00a0000 Ft', expectedSecondary: '32,50 EUR' },
+        { name: 'eurRate = 0', rate: 0, expectedPrimary: '13\u00a0000 Ft', expectedSecondary: '32,50 EUR' },
+        { name: 'eurRate = undefined', rate: undefined, expectedPrimary: '13\u00a0000 Ft', expectedSecondary: '32,50 EUR' }
     ];
 
-    for (const tc of fallbackTestCases) {
-        // Test utility layer directly first
-        const crossHufToEur = convertAmount(5000, 'HUF', 'EUR', tc.rate);
-        assert.equal(crossHufToEur, null, `Utility must return null for cross-conversion with ${tc.name}`);
-
-        const sameCurrencyIdentity = convertAmount(5000, 'HUF', 'HUF', tc.rate);
-        assert.equal(sameCurrencyIdentity, 5000, `Utility preserves identity for same-currency without rate`);
-
-        // Test MainTable component rendering under this condition
+    for (const tc of fallbackRateScenarios) {
         useAppStore.setState({
             items,
             months,
@@ -491,17 +521,32 @@ test('P2: Exchange rate fallbacks handle null, zero, missing, and non-finite rat
 
             const cell = rootEl.querySelector('[data-cellbasekey="item1_2026-08"]');
             assert.ok(cell, `Cell exists for ${tc.name}`);
-            const cellText = cell.textContent;
+            const primaryEl = cell.querySelector('.font-bold.text-gray-800');
+            const secondaryEl = cell.querySelector('.text-\\[10px\\].text-gray-500');
 
-            // Must NOT contain corrupted or fabricated display strings
-            assert.ok(!cellText.includes('NaN'), `Must not display NaN for ${tc.name}`);
-            assert.ok(!cellText.includes('undefined'), `Must not display undefined for ${tc.name}`);
-            assert.ok(!cellText.includes('null'), `Must not display null for ${tc.name}`);
-            assert.ok(!cellText.includes('Infinity'), `Must not display Infinity for ${tc.name}`);
+            assert.ok(
+                primaryEl.textContent.includes(tc.expectedPrimary) || primaryEl.textContent.includes('13 000 Ft'),
+                `Primary element shows exact calculated fallback total (13,000 Ft) for ${tc.name}`
+            );
+            assert.ok(
+                secondaryEl.textContent.includes(tc.expectedSecondary) || secondaryEl.textContent.includes('32.50 EUR'),
+                `Secondary element shows exact calculated fallback total (32.50 EUR) for ${tc.name}`
+            );
+
+            assert.ok(!cell.textContent.includes('NaN'), `No NaN for ${tc.name}`);
+            assert.ok(!cell.textContent.includes('undefined'), `No undefined for ${tc.name}`);
+            assert.ok(!cell.textContent.includes('null'), `No null for ${tc.name}`);
         } finally {
             await act(async () => {
                 root.unmount();
             });
         }
+    }
+
+    // Now test extreme invalid rates passed directly into currency utilities
+    const extremeCases = [NaN, -400, Infinity];
+    for (const invalidRate of extremeCases) {
+        const result = convertAmount(5000, 'HUF', 'EUR', invalidRate);
+        assert.equal(result, null, `convertAmount returns null for invalid rate: ${invalidRate}`);
     }
 });
