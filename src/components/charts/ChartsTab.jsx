@@ -279,7 +279,7 @@ export default function ChartsTab() {
                     data: {
                         labels: labels,
                         datasets: [{
-                            label: 'Bejövő utalások (Ft)',
+                            label: `Bejövő utalások (${currSymbol})`,
                             data: data,
                             borderColor: '#10b981',
                             backgroundColor: 'rgba(16, 185, 129, 0.1)',
@@ -296,7 +296,7 @@ export default function ChartsTab() {
                         maintainAspectRatio: false,
                         plugins: {
                             legend: { display: true, position: 'top', labels: { font: { size: 11 } } },
-                            tooltip: { callbacks: { label: (ctx) => ctx.parsed.y.toLocaleString('hu-HU') + ' Ft' } }
+                            tooltip: { callbacks: { label: (ctx) => formatDualCurrency(ctx.parsed.y, primaryCurrency, primaryCurrency, eurRate) } }
                         },
                         scales: { y: { beginAtZero: true, ticks: { callback: (value) => (value / 1000).toFixed(0) + 'k' } } }
                     }

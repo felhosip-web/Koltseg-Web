@@ -410,6 +410,26 @@ test('P2: ChartsTab computes monetary chart datasets and dual-currency tooltips 
         assert.equal(currencyChartHuf.config.data.labels[1], 'EUR bejegyzések (Ft)');
         assert.deepEqual(currencyChartHuf.config.data.datasets[0].data, [80000, 40000]);
 
+        // Currency distribution tooltip callback verification in HUF:
+        const currencyTooltipHuf = currencyChartHuf.config.options?.plugins?.tooltip?.callbacks?.label;
+        assert.equal(typeof currencyTooltipHuf, 'function');
+        const formattedCurrHuf = currencyTooltipHuf({ label: 'HUF bejegyzések (Ft)', raw: 80000 });
+        assert.ok(formattedCurrHuf.includes('80\u00a0000 Ft') || formattedCurrHuf.includes('80 000 Ft'), 'Currency tooltip includes primary HUF');
+        assert.ok(formattedCurrHuf.includes('200,00 EUR') || formattedCurrHuf.includes('200.00 EUR'), 'Currency tooltip includes secondary EUR');
+
+        // Incoming Trend chart in HUF:
+        // 120,000 HUF -> dataset in HUF, label reflects (Ft), tooltip reflects dual-currency
+        const incomingTrendHuf = chartInstances.find(c => c.config?.type === 'line' && c.config.data?.datasets[0]?.label?.includes('Bejövő utalások'));
+        assert.ok(incomingTrendHuf, 'Incoming trend chart created in HUF');
+        assert.equal(incomingTrendHuf.config.data.datasets[0].label, 'Bejövő utalások (Ft)', 'Incoming trend label in HUF');
+        assert.deepEqual(incomingTrendHuf.config.data.datasets[0].data, [120000], 'Incoming trend data in HUF');
+
+        const incomingTooltipHuf = incomingTrendHuf.config.options?.plugins?.tooltip?.callbacks?.label;
+        assert.equal(typeof incomingTooltipHuf, 'function');
+        const formattedIncHuf = incomingTooltipHuf({ parsed: { y: 120000 } });
+        assert.ok(formattedIncHuf.includes('120\u00a0000 Ft') || formattedIncHuf.includes('120 000 Ft'), 'Incoming tooltip includes primary HUF');
+        assert.ok(formattedIncHuf.includes('300,00 EUR') || formattedIncHuf.includes('300.00 EUR'), 'Incoming tooltip includes secondary EUR (120,000 / 400)');
+
         // Fuel charts: verify original metrics are NOT converted to currency
         const odoChart = chartInstances.find(c => c.config?.data?.datasets[0]?.label === 'Km állás (km)');
         assert.ok(odoChart, 'Odometer chart created');
@@ -461,6 +481,26 @@ test('P2: ChartsTab computes monetary chart datasets and dual-currency tooltips 
         assert.equal(currencyChartEur.config.data.labels[0], 'HUF bejegyzések (EUR)');
         assert.equal(currencyChartEur.config.data.labels[1], 'EUR bejegyzések (EUR)');
         assert.deepEqual(currencyChartEur.config.data.datasets[0].data, [200, 100]);
+
+        // Currency distribution tooltip callback in EUR mode:
+        const currencyTooltipEur = currencyChartEur.config.options?.plugins?.tooltip?.callbacks?.label;
+        assert.equal(typeof currencyTooltipEur, 'function');
+        const formattedCurrEur = currencyTooltipEur({ label: 'HUF bejegyzések (EUR)', raw: 200 });
+        assert.ok(formattedCurrEur.includes('200,00 EUR') || formattedCurrEur.includes('200.00 EUR'), 'Currency tooltip includes primary EUR');
+        assert.ok(formattedCurrEur.includes('80\u00a0000 Ft') || formattedCurrEur.includes('80 000 Ft'), 'Currency tooltip includes secondary HUF');
+
+        // Incoming Trend chart in EUR mode:
+        // 120,000 HUF / 400 = 300 EUR
+        const incomingTrendEur = chartInstances.find(c => c.config?.type === 'line' && c.config.data?.datasets[0]?.label?.includes('Bejövő utalások'));
+        assert.ok(incomingTrendEur, 'Incoming trend chart recreated in EUR');
+        assert.equal(incomingTrendEur.config.data.datasets[0].label, 'Bejövő utalások (EUR)', 'Incoming trend label in EUR');
+        assert.deepEqual(incomingTrendEur.config.data.datasets[0].data, [300], 'Incoming trend data in EUR');
+
+        const incomingTooltipEur = incomingTrendEur.config.options?.plugins?.tooltip?.callbacks?.label;
+        assert.equal(typeof incomingTooltipEur, 'function');
+        const formattedIncEur = incomingTooltipEur({ parsed: { y: 300 } });
+        assert.ok(formattedIncEur.includes('300,00 EUR') || formattedIncEur.includes('300.00 EUR'), 'Incoming tooltip includes primary EUR');
+        assert.ok(formattedIncEur.includes('120\u00a0000 Ft') || formattedIncEur.includes('120 000 Ft'), 'Incoming tooltip includes secondary HUF (300 * 400)');
 
         // Fuel charts in EUR mode: must still maintain physical units (km, l/100km, Ft/l)
         const priceChartInEurMode = chartInstances.find(c => c.config?.data?.datasets[0]?.label === 'Üzemanyagár (Ft/l)');
