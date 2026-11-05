@@ -431,7 +431,7 @@ export default function ChartsTab() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="bg-white p-6 rounded-3xl shadow-xl border border-gray-100 md:col-span-2">
                     <h3 className="text-base font-semibold text-gray-700 mb-4 flex items-center gap-2">
-                        <i className="fas fa-chart-column text-blue-500"></i> Kiadások tételenként (Ft)
+                        <i className="fas fa-chart-column text-blue-500"></i> Kiadások tételenként ({stats.primaryCurrency === 'EUR' ? 'EUR' : 'Ft'})
                     </h3>
                     <div className="relative h-[300px]">
                         <canvas ref={barRef} id="barChart"></canvas>

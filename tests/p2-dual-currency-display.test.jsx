@@ -376,6 +376,8 @@ test('P2: ChartsTab computes monetary chart datasets and dual-currency tooltips 
         });
 
         // 1. Verify HUF Chart Configurations
+        assert.ok(rootEl.textContent.includes('Kiadások tételenként (Ft)'), 'ChartsTab visible heading displays (Ft) in HUF mode');
+
         const barChartHuf = chartInstances.find(c => c.config?.type === 'bar');
         assert.ok(barChartHuf, 'Bar chart created');
         assert.equal(barChartHuf.config.data.datasets[0].label, 'Kiadások (Ft)', 'Bar chart dataset label in HUF');
@@ -449,6 +451,8 @@ test('P2: ChartsTab computes monetary chart datasets and dual-currency tooltips 
         await act(async () => {
             useAppStore.setState({ primaryCurrency: 'EUR' });
         });
+
+        assert.ok(rootEl.textContent.includes('Kiadások tételenként (EUR)'), 'ChartsTab visible heading displays (EUR) in EUR mode');
 
         const barChartEur = chartInstances.find(c => c.config?.type === 'bar');
         assert.ok(barChartEur, 'Bar chart recreated for EUR');
