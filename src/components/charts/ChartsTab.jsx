@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useAppStore } from '../../store/useAppStore.js';
 import { appService } from '../../services/appService.js';
-import { convertAmount, formatCurrency, formatDualCurrency } from '../../utils/currency-utils.js';
+import { convertAmount, formatDualCurrency } from '../../utils/currency-utils.js';
 
 export default function ChartsTab() {
     const [stats, setStats] = useState(null);
