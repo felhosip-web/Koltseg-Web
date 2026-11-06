@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useAppStore } from '../../store/useAppStore.js';
 import { appService } from '../../services/appService.js';
-import { convertAmount, formatCurrency } from '../../utils/currency-utils.js';
+import { convertAmount, formatDualCurrency } from '../../utils/currency-utils.js';
 
 export default function ChartsTab() {
     const [stats, setStats] = useState(null);
@@ -153,7 +153,7 @@ export default function ChartsTab() {
                         legend: { display: false },
                         tooltip: {
                             callbacks: {
-                                label: (c) => formatCurrency(c.parsed.y, primaryCurrency)
+                                label: (c) => formatDualCurrency(c.parsed.y, primaryCurrency, primaryCurrency, eurRate)
                             }
                         }
                     },
@@ -197,7 +197,7 @@ export default function ChartsTab() {
                         legend: { position: 'right' },
                         tooltip: {
                             callbacks: {
-                                label: (c) => ` ${c.label}: ${formatCurrency(c.raw, primaryCurrency)}`
+                                label: (c) => ` ${c.label}: ${formatDualCurrency(c.raw, primaryCurrency, primaryCurrency, eurRate)}`
                             }
                         }
                     }
@@ -238,7 +238,7 @@ export default function ChartsTab() {
                         legend: { position: 'right' },
                         tooltip: {
                             callbacks: {
-                                label: (c) => ` ${c.label}: ${formatCurrency(c.raw, primaryCurrency)}`
+                                label: (c) => ` ${c.label}: ${formatDualCurrency(c.raw, primaryCurrency, primaryCurrency, eurRate)}`
                             }
                         }
                     }
@@ -279,7 +279,7 @@ export default function ChartsTab() {
                     data: {
                         labels: labels,
                         datasets: [{
-                            label: 'Bejövő utalások (Ft)',
+                            label: `Bejövő utalások (${currSymbol})`,
                             data: data,
                             borderColor: '#10b981',
                             backgroundColor: 'rgba(16, 185, 129, 0.1)',
@@ -296,7 +296,7 @@ export default function ChartsTab() {
                         maintainAspectRatio: false,
                         plugins: {
                             legend: { display: true, position: 'top', labels: { font: { size: 11 } } },
-                            tooltip: { callbacks: { label: (ctx) => ctx.parsed.y.toLocaleString('hu-HU') + ' Ft' } }
+                            tooltip: { callbacks: { label: (ctx) => formatDualCurrency(ctx.parsed.y, primaryCurrency, primaryCurrency, eurRate) } }
                         },
                         scales: { y: { beginAtZero: true, ticks: { callback: (value) => (value / 1000).toFixed(0) + 'k' } } }
                     }
@@ -431,7 +431,7 @@ export default function ChartsTab() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="bg-white p-6 rounded-3xl shadow-xl border border-gray-100 md:col-span-2">
                     <h3 className="text-base font-semibold text-gray-700 mb-4 flex items-center gap-2">
-                        <i className="fas fa-chart-column text-blue-500"></i> Kiadások tételenként (Ft)
+                        <i className="fas fa-chart-column text-blue-500"></i> Kiadások tételenként ({stats.primaryCurrency === 'EUR' ? 'EUR' : 'Ft'})
                     </h3>
                     <div className="relative h-[300px]">
                         <canvas ref={barRef} id="barChart"></canvas>
