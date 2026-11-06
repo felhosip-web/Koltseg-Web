@@ -25,6 +25,7 @@ import { PluginRuntime } from '../src/services/plugin/PluginRuntime.js';
 import { PluginUIRegistry } from '../src/services/plugin/PluginUIRegistry.js';
 import { PluginManagerService } from '../src/services/plugin/PluginManagerService.js';
 import { registerSamplePlugin } from '../src/plugins/samplePlugin.jsx';
+import { registerCurrencyConverterPlugin } from '../src/plugins/currencyConverterPlugin.jsx';
 import { OfflineHandler } from './offline-handler.js';
 import { getVersionManager } from './version-manager.js';
 import { MESSAGES, formatMessage } from './messages.js';
@@ -119,6 +120,7 @@ export class App {
         this.pluginUIRegistry = new PluginUIRegistry();
         this.pluginManager = new PluginManagerService(this.pluginRuntime, this.pluginUIRegistry);
         registerSamplePlugin(this.pluginRegistry, this.pluginUIRegistry);
+        registerCurrencyConverterPlugin(this.pluginRegistry, this.pluginUIRegistry);
 
         // === 9. BEJÖVŐ UTALÁSOK ===
         this.incomingManager = new IncomingManager(this.db, this.syncService);
