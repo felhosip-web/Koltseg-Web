@@ -51,19 +51,18 @@ export function createPluginContext(manifest, { storageService = null, appServic
         currency = Object.freeze({
             getRate() {
                 const state = appService?.getExchangeRateState?.();
-                if (state && typeof state.rate === 'number') {
-                    return state.rate;
+                const rate = state?.rate;
+                if (typeof rate === 'number' && Number.isFinite(rate) && rate > 0) {
+                    return rate;
                 }
-                const appInstance = appService?.getAppInstance?.() || appService;
-                return appInstance?.config?.eurRate || null;
+                return null;
             },
             getStatus() {
                 const state = appService?.getExchangeRateState?.();
                 if (state && state.status) {
                     return state.status;
                 }
-                const appInstance = appService?.getAppInstance?.() || appService;
-                return appInstance?.config?.exchangeRateService?.getStatus?.() || 'fallback';
+                return 'error';
             },
             getPrimaryCurrency() {
                 if (appService && typeof appService.getPrimaryCurrency === 'function') {
@@ -75,6 +74,19 @@ export function createPluginContext(manifest, { storageService = null, appServic
             convert(amount, fromCurrency, toCurrency) {
                 const rate = this.getRate();
                 return convertAmount(amount, fromCurrency, toCurrency, rate);
+            },
+            subscribe(listener) {
+                if (typeof listener !== 'function') return () => {};
+                if (appService && typeof appService.subscribeExchangeRate === 'function') {
+                    return appService.subscribeExchangeRate(() => {
+                        listener({
+                            rate: this.getRate(),
+                            status: this.getStatus(),
+                            primaryCurrency: this.getPrimaryCurrency()
+                        });
+                    });
+                }
+                return () => {};
             }
         });
     }

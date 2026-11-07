@@ -48,12 +48,23 @@ export const appService = {
     },
 
     getExchangeRateState() {
-        return appInstance?.config?.exchangeRateService?.getState() || {
+        if (appInstance?.config?.exchangeRateService?.getState) {
+            return appInstance.config.exchangeRateService.getState();
+        }
+        return {
             rate: 400,
             status: 'fallback',
             source: 'fallback',
             isStale: false
         };
+    },
+
+    subscribeExchangeRate(listener) {
+        if (typeof listener !== 'function') return () => {};
+        if (appInstance?.config?.exchangeRateService?.subscribe) {
+            return appInstance.config.exchangeRateService.subscribe(listener);
+        }
+        return () => {};
     },
 
     /**

@@ -41,6 +41,7 @@ const {
 } = await import('../src/plugins/currencyConverterPlugin.jsx');
 const { appService } = await import('../src/services/appService.js');
 const { registerSamplePlugin } = await import('../src/plugins/samplePlugin.jsx');
+const { useAppStore } = await import('../src/store/useAppStore.js');
 
 function getRootElement() {
     let el = document.getElementById('root');
@@ -83,7 +84,8 @@ test('PLG3 PR1 — Capability Factory: Missing "currency:read" permission leaves
 test('PLG3 PR1 — Capability Factory: Granted "currency:read" exposes only read-only, frozen currency API', () => {
     const mockAppService = {
         getExchangeRateState: () => ({ rate: 405.5, status: 'live' }),
-        getPrimaryCurrency: () => 'EUR'
+        getPrimaryCurrency: () => 'EUR',
+        subscribeExchangeRate: () => () => {}
     };
 
     const ctx = createPluginContext(CURRENCY_CONVERTER_MANIFEST, { appService: mockAppService });
@@ -94,6 +96,7 @@ test('PLG3 PR1 — Capability Factory: Granted "currency:read" exposes only read
     assert.equal(typeof ctx.currency.getStatus, 'function');
     assert.equal(typeof ctx.currency.getPrimaryCurrency, 'function');
     assert.equal(typeof ctx.currency.convert, 'function');
+    assert.equal(typeof ctx.currency.subscribe, 'function');
 
     // Values match host service
     assert.equal(ctx.currency.getRate(), 405.5);
@@ -150,27 +153,30 @@ test('PLG3 PR1 — Currency Capability: HUF -> EUR and EUR -> HUF conversion pre
     assert.equal(ctx.currency.convert('invalid-number', 'HUF', 'EUR'), 0);
 });
 
-test('PLG3 PR1 — Currency Capability: Invalid or unavailable rate returns null for cross-currency', () => {
+test('PLG3 PR1 — Currency Capability: Invalid or unavailable rate returns null without inventing fallbacks', () => {
     // Missing / invalid rate
     const mockAppServiceZero = {
-        getExchangeRateState: () => ({ rate: 0, status: 'fallback' }),
+        getExchangeRateState: () => ({ rate: 0, status: 'error' }),
         getPrimaryCurrency: () => 'HUF'
     };
     const ctxZero = createPluginContext(CURRENCY_CONVERTER_MANIFEST, { appService: mockAppServiceZero });
+    assert.equal(ctxZero.currency.getRate(), null);
     assert.equal(ctxZero.currency.convert(1000, 'HUF', 'EUR'), null);
 
     const mockAppServiceNegative = {
-        getExchangeRateState: () => ({ rate: -400, status: 'fallback' }),
+        getExchangeRateState: () => ({ rate: -400, status: 'error' }),
         getPrimaryCurrency: () => 'HUF'
     };
     const ctxNeg = createPluginContext(CURRENCY_CONVERTER_MANIFEST, { appService: mockAppServiceNegative });
+    assert.equal(ctxNeg.currency.getRate(), null);
     assert.equal(ctxNeg.currency.convert(1000, 'HUF', 'EUR'), null);
 
     const mockAppServiceNull = {
-        getExchangeRateState: () => ({ rate: null, status: 'fallback' }),
+        getExchangeRateState: () => ({ rate: null, status: 'error' }),
         getPrimaryCurrency: () => 'HUF'
     };
     const ctxNull = createPluginContext(CURRENCY_CONVERTER_MANIFEST, { appService: mockAppServiceNull });
+    assert.equal(ctxNull.currency.getRate(), null);
     assert.equal(ctxNull.currency.convert(1000, 'HUF', 'EUR'), null);
 });
 
@@ -230,7 +236,6 @@ test('PLG3 PR1 — CurrencyConverterComponent: Displays configured manual fallba
     const text = rootEl.textContent;
     assert.ok(text.includes('1 EUR = 395,00 Ft'));
     assert.ok(text.includes('Kézi beállítás'));
-    assert.ok(text.includes('Elsődleges: EUR'));
 
     root.unmount();
 });
@@ -314,12 +319,155 @@ test('PLG3 PR1 — CurrencyConverterComponent: Handles invalid or empty numeric 
 });
 
 // ==========================================
-// 4. Plugin Lifecycle Integration Tests
+// 4. Reactive Subscription & Event Updates Tests
+// ==========================================
+test('PLG3 PR1 — Reactive Updates: Live rate update changes displayed rate and conversion result immediately', async () => {
+    const rootEl = getRootElement();
+    const root = createRoot(rootEl);
+
+    let currentRateState = { rate: 400, status: 'live' };
+    const subscribers = new Set();
+
+    const mockAppService = {
+        getExchangeRateState: () => currentRateState,
+        getPrimaryCurrency: () => 'HUF',
+        subscribeExchangeRate: (cb) => {
+            subscribers.add(cb);
+            return () => subscribers.delete(cb);
+        }
+    };
+
+    const ctx = createPluginContext(CURRENCY_CONVERTER_MANIFEST, { appService: mockAppService });
+
+    await act(async () => {
+        root.render(React.createElement(CurrencyConverterComponent, { context: ctx }));
+    });
+
+    assert.ok(rootEl.textContent.includes('1 EUR = 400,00 Ft'));
+    assert.ok(rootEl.textContent.includes('2,50 EUR')); // 1000 HUF / 400 = 2.5 EUR
+
+    // Simulate exchange-rate update event
+    currentRateState = { rate: 500, status: 'live' };
+    await act(async () => {
+        for (const sub of subscribers) sub(currentRateState);
+    });
+
+    assert.ok(rootEl.textContent.includes('1 EUR = 500,00 Ft'));
+    assert.ok(rootEl.textContent.includes('2,00 EUR')); // 1000 HUF / 500 = 2.0 EUR
+
+    root.unmount();
+});
+
+test('PLG3 PR1 — Reactive Updates: Status-only update dynamically updates status badge', async () => {
+    const rootEl = getRootElement();
+    const root = createRoot(rootEl);
+
+    let currentRateState = { rate: 400, status: 'live' };
+    const subscribers = new Set();
+
+    const mockAppService = {
+        getExchangeRateState: () => currentRateState,
+        getPrimaryCurrency: () => 'HUF',
+        subscribeExchangeRate: (cb) => {
+            subscribers.add(cb);
+            return () => subscribers.delete(cb);
+        }
+    };
+
+    const ctx = createPluginContext(CURRENCY_CONVERTER_MANIFEST, { appService: mockAppService });
+
+    await act(async () => {
+        root.render(React.createElement(CurrencyConverterComponent, { context: ctx }));
+    });
+
+    assert.ok(rootEl.textContent.includes('Élő árfolyam'));
+
+    // Status change from live to stale
+    currentRateState = { rate: 400, status: 'stale' };
+    await act(async () => {
+        for (const sub of subscribers) sub(currentRateState);
+    });
+
+    assert.ok(rootEl.textContent.includes('Lejárt / Offline cache'));
+
+    root.unmount();
+});
+
+test('PLG3 PR1 — Reactive Updates: Primary currency change updates UI reactively', async () => {
+    const rootEl = getRootElement();
+    const root = createRoot(rootEl);
+
+    useAppStore.setState({ primaryCurrency: 'HUF' });
+
+    const mockAppService = {
+        getExchangeRateState: () => ({ rate: 400, status: 'live' }),
+        getPrimaryCurrency: () => useAppStore.getState().primaryCurrency,
+        subscribeExchangeRate: () => () => {}
+    };
+
+    const ctx = createPluginContext(CURRENCY_CONVERTER_MANIFEST, { appService: mockAppService });
+
+    await act(async () => {
+        root.render(React.createElement(CurrencyConverterComponent, { context: ctx }));
+    });
+
+    assert.ok(rootEl.textContent.includes('Elsődleges: HUF'));
+
+    // Update store primaryCurrency
+    await act(async () => {
+        useAppStore.setState({ primaryCurrency: 'EUR' });
+    });
+
+    assert.ok(rootEl.textContent.includes('Elsődleges: EUR'));
+
+    // Restore store state
+    useAppStore.setState({ primaryCurrency: 'HUF' });
+    root.unmount();
+});
+
+test('PLG3 PR1 — Reactive Updates: Unsubscribes on unmount and prevents duplicate subscriptions', async () => {
+    const rootEl = getRootElement();
+    const root = createRoot(rootEl);
+
+    let subscribeCalls = 0;
+    let unsubscribeCalls = 0;
+
+    const mockAppService = {
+        getExchangeRateState: () => ({ rate: 400, status: 'live' }),
+        getPrimaryCurrency: () => 'HUF',
+        subscribeExchangeRate: () => {
+            subscribeCalls++;
+            return () => {
+                unsubscribeCalls++;
+            };
+        }
+    };
+
+    const ctx = createPluginContext(CURRENCY_CONVERTER_MANIFEST, { appService: mockAppService });
+
+    await act(async () => {
+        root.render(React.createElement(CurrencyConverterComponent, { context: ctx }));
+    });
+
+    assert.equal(subscribeCalls, 1, 'Exactly one subscription should be opened');
+    assert.equal(unsubscribeCalls, 0);
+
+    // Unmount
+    await act(async () => {
+        root.unmount();
+    });
+
+    assert.equal(unsubscribeCalls, 1, 'Subscription must be cleaned up on unmount');
+});
+
+// ==========================================
+// 5. Plugin Lifecycle Integration Tests
 // ==========================================
 test('PLG3 PR1 — Lifecycle: Registration, initialization, setup validation, activation, deactivation, and disposal', async () => {
     const mockAppService = {
         getExchangeRateState: () => ({ rate: 400, status: 'live' }),
-        getPrimaryCurrency: () => 'HUF'
+        getPrimaryCurrency: () => 'HUF',
+        subscribeExchangeRate: () => () => {}
     };
 
     const registry = new PluginRegistry(null, mockAppService);
@@ -367,7 +515,8 @@ test('PLG3 PR1 — Host Integration: PluginHost renders CurrencyConverterCompone
 
     const mockAppService = {
         getExchangeRateState: () => ({ rate: 412.3, status: 'live' }),
-        getPrimaryCurrency: () => 'HUF'
+        getPrimaryCurrency: () => 'HUF',
+        subscribeExchangeRate: () => () => {}
     };
 
     const registry = new PluginRegistry(null, mockAppService);
@@ -390,7 +539,7 @@ test('PLG3 PR1 — Host Integration: PluginHost renders CurrencyConverterCompone
 });
 
 // ==========================================
-// 5. Regression Tests
+// 6. Regression Tests
 // ==========================================
 test('PLG3 PR1 — Regression: Composition root initializes both sample plugin and currency converter without modifying transaction data', () => {
     const registry = new PluginRegistry();

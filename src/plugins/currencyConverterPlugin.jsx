@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { formatCurrency } from '../utils/currency-utils.js';
+import { useAppStore } from '../store/useAppStore.js';
 
 export const CURRENCY_CONVERTER_MANIFEST = Object.freeze({
     id: 'firstparty.currency.converter',
@@ -74,6 +75,40 @@ export function CurrencyConverterComponent({ context }) {
     const [fromCurrency, setFromCurrency] = useState('HUF');
     const [toCurrency, setToCurrency] = useState('EUR');
 
+    // Reactive exchange rate state from capability
+    const [rateState, setRateState] = useState(() => ({
+        rate: currencyCap?.getRate?.() ?? null,
+        status: currencyCap?.getStatus?.() ?? 'fallback'
+    }));
+
+    // Subscribe to capability updates for live/stale/manual/fallback rate changes
+    useEffect(() => {
+        if (!currencyCap || typeof currencyCap.subscribe !== 'function') return;
+
+        // Sync initial state
+        setRateState({
+            rate: currencyCap.getRate(),
+            status: currencyCap.getStatus()
+        });
+
+        const unsubscribe = currencyCap.subscribe((updated) => {
+            setRateState({
+                rate: updated.rate,
+                status: updated.status
+            });
+        });
+
+        return () => {
+            if (typeof unsubscribe === 'function') {
+                unsubscribe();
+            }
+        };
+    }, [currencyCap]);
+
+    // Reactive store subscription for primaryCurrency
+    const storePrimaryCurrency = useAppStore(state => state.primaryCurrency);
+    const primaryCurrency = storePrimaryCurrency || currencyCap?.getPrimaryCurrency?.() || 'HUF';
+
     if (!currencyCap) {
         return (
             <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700">
@@ -83,9 +118,8 @@ export function CurrencyConverterComponent({ context }) {
         );
     }
 
-    const currentRate = currencyCap.getRate();
-    const currentStatus = currencyCap.getStatus();
-    const primaryCurrency = currencyCap.getPrimaryCurrency();
+    const currentRate = rateState.rate;
+    const currentStatus = rateState.status;
 
     const isRateValid = typeof currentRate === 'number' && Number.isFinite(currentRate) && currentRate > 0;
     const statusMeta = getStatusMeta(currentStatus);
