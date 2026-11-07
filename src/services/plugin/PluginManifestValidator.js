@@ -4,7 +4,8 @@
 export const KNOWN_PERMISSIONS = new Set([
     'storage:private',
     'ui:toast',
-    'expenses:read'
+    'expenses:read',
+    'currency:read'
 ]);
 
 export const SUPPORTED_API_VERSIONS = new Set(['1', 1]);

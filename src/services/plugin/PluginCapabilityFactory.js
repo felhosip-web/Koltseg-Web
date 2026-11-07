@@ -1,6 +1,8 @@
 // src/services/plugin/PluginCapabilityFactory.js
 // Host-side Central Capability Factory for PLG1 PluginContext
 
+import { convertAmount } from '../../utils/currency-utils.js';
+
 /**
  * Creates an isolated, restricted PluginContext containing host-enforced capabilities.
  * @param {Object} manifest - Validated plugin manifest contract
@@ -43,11 +45,58 @@ export function createPluginContext(manifest, { storageService = null, appServic
         }
     });
 
+    // 4. Scoped Currency Capability (currency:read)
+    let currency = null;
+    if (grantedPermissions.has('currency:read')) {
+        currency = Object.freeze({
+            getRate() {
+                const state = appService?.getExchangeRateState?.();
+                const rate = state?.rate;
+                if (typeof rate === 'number' && Number.isFinite(rate) && rate > 0) {
+                    return rate;
+                }
+                return null;
+            },
+            getStatus() {
+                const state = appService?.getExchangeRateState?.();
+                if (state && state.status) {
+                    return state.status;
+                }
+                return 'error';
+            },
+            getPrimaryCurrency() {
+                if (appService && typeof appService.getPrimaryCurrency === 'function') {
+                    return appService.getPrimaryCurrency();
+                }
+                const appInstance = appService?.getAppInstance?.() || appService;
+                return appInstance?.config?.primaryCurrency || 'HUF';
+            },
+            convert(amount, fromCurrency, toCurrency) {
+                const rate = this.getRate();
+                return convertAmount(amount, fromCurrency, toCurrency, rate);
+            },
+            subscribe(listener) {
+                if (typeof listener !== 'function') return () => {};
+                if (appService && typeof appService.subscribeExchangeRate === 'function') {
+                    return appService.subscribeExchangeRate(() => {
+                        listener({
+                            rate: this.getRate(),
+                            status: this.getStatus(),
+                            primaryCurrency: this.getPrimaryCurrency()
+                        });
+                    });
+                }
+                return () => {};
+            }
+        });
+    }
+
     // Construct restricted PluginContext
     const context = Object.freeze({
         storage,
         ui,
-        api
+        api,
+        currency
     });
 
     return context;
