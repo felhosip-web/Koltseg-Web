@@ -129,20 +129,28 @@ export function CurrencyConverterComponent({ context }) {
         setToCurrency(fromCurrency);
     };
 
-    // Amount validation
-    const parsedAmount = parseFloat(amountStr.replace(/\s+/g, '').replace(',', '.'));
-    const isAmountProvided = amountStr.trim() !== '';
-    const isAmountValid = isAmountProvided && Number.isFinite(parsedAmount);
+    // Strict amount validation: strip all whitespace, normalize comma to dot, match strictly against valid number format
+    const normalizedStr = amountStr.replace(/\s+/g, '').replace(',', '.');
+    const isAmountProvided = normalizedStr !== '';
+    const strictNumberRegex = /^[+-]?(\d+(\.\d*)?|\.\d+)$/;
+    const isFormatValid = strictNumberRegex.test(normalizedStr);
+    const parsedAmount = isFormatValid ? Number(normalizedStr) : NaN;
+    const isAmountValid = isAmountProvided && isFormatValid && Number.isFinite(parsedAmount);
+
+    const isSameCurrency = fromCurrency === toCurrency;
 
     let convertedValue = null;
     let calculationError = null;
 
-    if (!isRateValid) {
-        calculationError = 'Az árfolyam nem érhető el vagy érvénytelen. Az átváltás szünetel.';
-    } else if (!isAmountProvided) {
+    if (!isAmountProvided) {
         convertedValue = null;
     } else if (!isAmountValid) {
         calculationError = 'Kérjük, érvényes számot adjon meg összegként.';
+    } else if (isSameCurrency) {
+        // Same-currency conversion does not require an exchange rate
+        convertedValue = parsedAmount;
+    } else if (!isRateValid) {
+        calculationError = 'Az árfolyam nem érhető el vagy érvénytelen. Az átváltás szünetel.';
     } else {
         convertedValue = currencyCap.convert(parsedAmount, fromCurrency, toCurrency);
     }

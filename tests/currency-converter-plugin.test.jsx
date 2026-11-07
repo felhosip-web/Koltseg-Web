@@ -539,26 +539,58 @@ test('PLG3 PR1 — Host Integration: PluginHost renders CurrencyConverterCompone
 });
 
 // ==========================================
-// 6. Regression Tests
+// 6. Regression & Application Composition Root Tests
 // ==========================================
-test('PLG3 PR1 — Regression: Composition root initializes both sample plugin and currency converter without modifying transaction data', () => {
-    const registry = new PluginRegistry();
-    const uiRegistry = new PluginUIRegistry();
+test('PLG3 PR1 — Application Composition Root: App constructor registers Currency Converter and Sample plugins cleanly', async () => {
+    globalThis.window.__DISABLE_AUTO_INIT__ = true;
+    const { PwaManager } = await import('../js/pwa-manager.js');
+    const { TimeTrackerModule } = await import('../js/modules/time-tracker/time-tracker.js');
 
-    registerSamplePlugin(registry, uiRegistry);
-    registerCurrencyConverterPlugin(registry, uiRegistry);
+    // Isolate only the legacy background polling intervals during App instantiation
+    const origAutoUpdate = PwaManager.prototype.setupAutoUpdateCheck;
+    PwaManager.prototype.setupAutoUpdateCheck = () => {};
 
-    assert.ok(registry.has('firstparty.sample.plugin'));
-    assert.ok(registry.has('firstparty.currency.converter'));
-    assert.ok(uiRegistry.hasUI('firstparty.sample.plugin'));
-    assert.ok(uiRegistry.hasUI('firstparty.currency.converter'));
+    const origTimeTrackerInit = TimeTrackerModule.prototype.init;
+    TimeTrackerModule.prototype.init = () => {};
 
-    // Manifests are distinct and frozen
-    const sampleRecord = registry.get('firstparty.sample.plugin');
-    const converterRecord = registry.get('firstparty.currency.converter');
-    assert.deepEqual(sampleRecord.manifest.permissions, ['storage:private', 'ui:toast', 'expenses:read']);
-    assert.deepEqual(converterRecord.manifest.permissions, ['currency:read']);
+    let app = null;
 
-    // Primary currency is unaffected
-    assert.equal(appService.getPrimaryCurrency(), 'HUF');
+    try {
+        const { App } = await import('../js/app.js');
+        app = new App();
+
+        // Verify App's pluginRegistry contains both first-party plugins
+        assert.ok(app.pluginRegistry.has('firstparty.sample.plugin'));
+        assert.ok(app.pluginRegistry.has('firstparty.currency.converter'));
+
+        // Verify App's pluginUIRegistry contains both UI entries
+        assert.ok(app.pluginUIRegistry.hasUI('firstparty.sample.plugin'));
+        assert.ok(app.pluginUIRegistry.hasUI('firstparty.currency.converter'));
+
+        // Verify manifests and permissions
+        const converterRecord = app.pluginRegistry.get('firstparty.currency.converter');
+        assert.equal(converterRecord.manifest.name, 'Valutaváltó');
+        assert.deepEqual(converterRecord.manifest.permissions, ['currency:read']);
+
+        const sampleRecord = app.pluginRegistry.get('firstparty.sample.plugin');
+        assert.deepEqual(sampleRecord.manifest.permissions, ['storage:private', 'ui:toast', 'expenses:read']);
+
+        // Verify UI contract title and component
+        const uiEntry = app.pluginUIRegistry.getUI('firstparty.currency.converter');
+        assert.equal(uiEntry.title, 'Valutaváltó');
+        assert.equal(uiEntry.icon, 'fas fa-exchange-alt');
+        assert.equal(uiEntry.hasUI, true);
+        assert.equal(typeof uiEntry.component, 'function');
+
+        // Verify transaction data and stores remain completely untouched
+        assert.equal(app.entries.entries.length, 0);
+        assert.equal(app.items.items.length, 0);
+        assert.equal(app.months.months.length, 0);
+    } finally {
+        if (app && typeof app.destroy === 'function') {
+            app.destroy();
+        }
+        PwaManager.prototype.setupAutoUpdateCheck = origAutoUpdate;
+        TimeTrackerModule.prototype.init = origTimeTrackerInit;
+    }
 });
