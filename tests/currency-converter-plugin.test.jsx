@@ -301,19 +301,101 @@ test('PLG3 PR1 — CurrencyConverterComponent: Handles invalid or empty numeric 
 
     const inputSetter = Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value').set;
 
-    // Invalid numeric input
+    // Invalid numeric input: non-numeric text ("abc")
     await act(async () => {
         inputSetter.call(input, 'abc');
         input.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
     });
     assert.ok(rootEl.textContent.includes('Kérjük, érvényes számot adjon meg összegként.'));
 
-    // Empty input
+    // Invalid numeric input: trailing non-numeric characters ("100abc")
+    await act(async () => {
+        inputSetter.call(input, '100abc');
+        input.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    });
+    assert.ok(rootEl.textContent.includes('Kérjük, érvényes számot adjon meg összegként.'));
+
+    // Invalid numeric input: multiple decimal commas ("1,2,3")
+    await act(async () => {
+        inputSetter.call(input, '1,2,3');
+        input.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    });
+    assert.ok(rootEl.textContent.includes('Kérjük, érvényes számot adjon meg összegként.'));
+
+    // Invalid numeric input: multiple decimal dots ("1.2.3")
+    await act(async () => {
+        inputSetter.call(input, '1.2.3');
+        input.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    });
+    assert.ok(rootEl.textContent.includes('Kérjük, érvényes számot adjon meg összegként.'));
+
+    // Invalid numeric input: consecutive dots/commas ("100..5")
+    await act(async () => {
+        inputSetter.call(input, '100..5');
+        input.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    });
+    assert.ok(rootEl.textContent.includes('Kérjük, érvényes számot adjon meg összegként.'));
+
+    // Valid formatted number with whitespace and comma (" 1 250,50 ") is accepted
+    await act(async () => {
+        inputSetter.call(input, ' 1 250,50 ');
+        input.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    });
+    assert.ok(!rootEl.textContent.includes('Kérjük, érvényes számot adjon meg összegként.'));
+
+    // Empty input ("") shows empty prompt without calculation error
     await act(async () => {
         inputSetter.call(input, '');
         input.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
     });
     assert.ok(rootEl.textContent.includes('Adjon meg egy összeget az átváltáshoz.'));
+    assert.ok(!rootEl.textContent.includes('Kérjük, érvényes számot adjon meg összegként.'));
+
+    root.unmount();
+});
+
+test('PLG3 PR1 — CurrencyConverterComponent: Same-currency conversion does not require an exchange rate', async () => {
+    const rootEl = getRootElement();
+    const root = createRoot(rootEl);
+
+    // Unavailable exchange rate state
+    const mockAppService = {
+        getExchangeRateState: () => ({ rate: null, status: 'error' }),
+        getPrimaryCurrency: () => 'HUF'
+    };
+    const ctx = createPluginContext(CURRENCY_CONVERTER_MANIFEST, { appService: mockAppService });
+
+    await act(async () => {
+        root.render(React.createElement(CurrencyConverterComponent, { context: ctx }));
+    });
+
+    // Default is HUF -> EUR with unavailable rate => error message shown
+    assert.ok(rootEl.textContent.includes('Az árfolyam nem érhető el vagy érvénytelen.'));
+
+    const fromSelect = rootEl.querySelector('#currencyConverterFromSelect');
+    const toSelect = rootEl.querySelector('#currencyConverterToSelect');
+
+    // 1. Same-currency HUF -> HUF with unavailable rate: returns input amount and displays NO error
+    await act(async () => {
+        toSelect.value = 'HUF';
+        toSelect.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+    });
+
+    assert.ok(!rootEl.textContent.includes('Az árfolyam nem érhető el vagy érvénytelen.'));
+    assert.ok(rootEl.textContent.includes('1000 Ft'));
+    assert.ok(rootEl.textContent.includes('1000 Ft ='));
+
+    // 2. Same-currency EUR -> EUR with unavailable rate: returns input amount and displays NO error
+    await act(async () => {
+        fromSelect.value = 'EUR';
+        fromSelect.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+        toSelect.value = 'EUR';
+        toSelect.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+    });
+
+    assert.ok(!rootEl.textContent.includes('Az árfolyam nem érhető el vagy érvénytelen.'));
+    assert.ok(rootEl.textContent.includes('1000,00 EUR'));
+    assert.ok(rootEl.textContent.includes('1000,00 EUR ='));
 
     root.unmount();
 });
@@ -542,7 +624,11 @@ test('PLG3 PR1 — Host Integration: PluginHost renders CurrencyConverterCompone
 // 6. Regression & Application Composition Root Tests
 // ==========================================
 test('PLG3 PR1 — Application Composition Root: App constructor registers Currency Converter and Sample plugins cleanly', async () => {
+    const prevDisableAutoInit = globalThis.window.__DISABLE_AUTO_INIT__;
     globalThis.window.__DISABLE_AUTO_INIT__ = true;
+
+    const previousBoundApp = appService.getAppInstance();
+
     const { PwaManager } = await import('../js/pwa-manager.js');
     const { TimeTrackerModule } = await import('../js/modules/time-tracker/time-tracker.js');
 
@@ -590,7 +676,17 @@ test('PLG3 PR1 — Application Composition Root: App constructor registers Curre
         if (app && typeof app.destroy === 'function') {
             app.destroy();
         }
+
+        // Restore previously bound application instance on appService
+        if (previousBoundApp) {
+            appService.bind(previousBoundApp);
+        } else {
+            appService.unbind();
+        }
+
+        // Restore legacy prototypes and globals
         PwaManager.prototype.setupAutoUpdateCheck = origAutoUpdate;
         TimeTrackerModule.prototype.init = origTimeTrackerInit;
+        globalThis.window.__DISABLE_AUTO_INIT__ = prevDisableAutoInit;
     }
 });
