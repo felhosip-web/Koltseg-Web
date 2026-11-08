@@ -610,21 +610,34 @@ export class DataExportController {
                         // 2. Strict calendar date validation
                         if (!isValidCalendarDate(item.date)) continue;
 
-                        // 3. Duration validation: reject NaN, Infinity, -Infinity, zero, and negative values
+                        // 3. Duration validation: reject NaN, Infinity, -Infinity, non-integers, zero, and negative values
                         let dur = item.duration;
                         if (dur !== undefined && dur !== null) {
                             if (typeof dur === 'string' && dur.trim() !== '') {
                                 dur = Number(dur);
                             }
-                            if (typeof dur !== 'number' || !Number.isFinite(dur) || dur <= 0) {
+                            if (typeof dur !== 'number' || !Number.isInteger(dur) || dur < 1) {
                                 continue;
                             }
                         } else {
                             dur = 1;
                         }
 
-                        // 4. Stable ID generation: assign once during import preparation so retries remain idempotent
-                        const stableId = item.id || (typeof this.app.uuid === 'function' ? this.app.uuid() : generateUUID());
+                        const trimmedName = item.name.trim();
+                        const trimmedDesc = typeof item.description === 'string' ? item.description.trim() : (item.description || '');
+                        const trimmedLoc = typeof item.location === 'string' ? item.location.trim() : (item.location || '');
+
+                        // 4. Stable ID generation: use explicit ID or generate deterministic ID for ID-less items so re-import is idempotent
+                        let stableId = item.id;
+                        if (!stableId) {
+                            const raw = `work_import_${trimmedName}_${item.date}_${dur}_${trimmedDesc}_${trimmedLoc}`;
+                            let hash = 0;
+                            for (let ch = 0; ch < raw.length; ch++) {
+                                hash = ((hash << 5) - hash) + raw.charCodeAt(ch);
+                                hash |= 0;
+                            }
+                            stableId = `imp-${Math.abs(hash).toString(16).padStart(8, '0')}`;
+                        }
 
                         // 5. Preserve non-dangerous compatible metadata & legacy keys (e.g. _old_autoincrement_id)
                         const safeMetadata = {};
@@ -638,16 +651,24 @@ export class DataExportController {
                         const normalizedRecord = {
                             ...safeMetadata,
                             id: stableId,
-                            name: item.name.trim(),
-                            description: typeof item.description === 'string' ? item.description.trim() : (item.description || ''),
-                            location: typeof item.location === 'string' ? item.location.trim() : (item.location || ''),
+                            name: trimmedName,
+                            description: trimmedDesc,
+                            location: trimmedLoc,
                             date: item.date,
                             duration: dur,
                             status: typeof item.status === 'string' ? item.status : 'folyamatban'
                         };
 
-                        // Retain original created_at if present; do not invent historical creation date if missing
-                        if (item.created_at !== undefined) {
+                        // 7. Strictly validate created_at if present: reject malformed values, numbers, objects, and invalid date strings
+                        // Do not silently convert malformed timestamps into current timestamps
+                        if (item.created_at !== undefined && item.created_at !== null) {
+                            if (typeof item.created_at !== 'string' || item.created_at.trim() === '') {
+                                continue;
+                            }
+                            const parsedCreated = Date.parse(item.created_at);
+                            if (isNaN(parsedCreated)) {
+                                continue;
+                            }
                             normalizedRecord.created_at = item.created_at;
                         }
 

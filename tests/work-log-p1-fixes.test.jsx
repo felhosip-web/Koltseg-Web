@@ -14,13 +14,10 @@ function createMockDb(initialWorks = []) {
     initialWorks.forEach(w => store.set(String(w.id), { ...w }));
     return {
         store,
+        // Match real Database production API: getAll, save, delete, runTransaction (no get())
         getAll: async (table) => {
-            if (table === 'works') return Array.from(store.values());
+            if (table === 'works') return Array.from(store.values()).map(v => ({ ...v }));
             return [];
-        },
-        get: async (table, id) => {
-            if (table === 'works') return store.get(String(id)) || null;
-            return null;
         },
         save: async (table, record) => {
             if (table === 'works') {
@@ -33,6 +30,71 @@ function createMockDb(initialWorks = []) {
             if (table === 'works') {
                 store.delete(String(id));
             }
+        },
+        runTransaction: async (storeNames, mode, txFn) => {
+            const names = Array.isArray(storeNames) ? storeNames : [storeNames];
+            if (typeof txFn !== 'function') {
+                return Promise.reject(new Error('[DB] runTransaction requires a txFn callback function.'));
+            }
+            const stores = {};
+            // Track pending operations for atomic commit/rollback
+            const stagedPuts = [];
+            const stagedDeletes = [];
+
+            for (const name of names) {
+                if (name === 'works') {
+                    stores[name] = {
+                        get: (key, cb) => {
+                            const val = store.get(String(key));
+                            const cloned = val ? { ...val } : null;
+                            if (typeof cb === 'function') {
+                                cb(cloned);
+                                return undefined;
+                            }
+                            // Return an IDBRequest-like object matching real IDBObjectStore.get()
+                            const req = {
+                                result: cloned,
+                                onsuccess: null,
+                                onerror: null
+                            };
+                            queueMicrotask(() => {
+                                if (req.onsuccess) req.onsuccess({ target: req });
+                            });
+                            return req;
+                        },
+                        put: (data) => {
+                            stagedPuts.push({ storeName: name, key: String(data.id), data: { ...data } });
+                        },
+                        delete: (key) => {
+                            stagedDeletes.push({ storeName: name, key: String(key) });
+                        }
+                    };
+                }
+            }
+
+            let aborted = false;
+            const fakeTx = {
+                abort: () => {
+                    aborted = true;
+                }
+            };
+
+            try {
+                txFn(fakeTx, stores);
+                if (aborted) {
+                    throw new Error('Transaction aborted');
+                }
+                // Commit staged changes
+                for (const p of stagedPuts) {
+                    if (p.storeName === 'works') store.set(p.key, p.data);
+                }
+                for (const d of stagedDeletes) {
+                    if (d.storeName === 'works') store.delete(d.key);
+                }
+            } catch (err) {
+                return Promise.reject(err);
+            }
+            return Promise.resolve();
         }
     };
 }
@@ -246,7 +308,7 @@ test('P1-1: Work Log JSON Import validates malformed JSON, invalid schema, and i
     assert.equal(reportedInfo?.title, 'Érvénytelen adatok');
     assert.equal(workLogManager.works.length, 1);
 
-    // Scenario E: Duration validation (rejecting NaN, Infinity, -Infinity, 0, and negative numbers)
+    // Scenario E: Duration validation (rejecting NaN, Infinity, -Infinity, non-integers, 0, and negative numbers)
     reportedInfo = null;
     exportController.importWorkJson();
     fileInputOnChange({
@@ -256,6 +318,7 @@ test('P1-1: Work Log JSON Import validates malformed JSON, invalid schema, and i
                     works: [
                         { name: 'Zero Dur', date: '2026-11-01', duration: 0 },
                         { name: 'Negative Dur', date: '2026-11-01', duration: -2 },
+                        { name: 'Non Integer Dur', date: '2026-11-01', duration: 1.5 },
                         { name: 'NaN Dur', date: '2026-11-01', duration: 'not-a-number' }
                     ]
                 })
@@ -264,6 +327,26 @@ test('P1-1: Work Log JSON Import validates malformed JSON, invalid schema, and i
     });
     await new Promise(r => setTimeout(r, 15));
     assert.equal(reportedInfo?.title, 'Érvénytelen adatok');
+    assert.equal(workLogManager.works.length, 1);
+
+    // Scenario E2: created_at timestamp validation (rejecting numbers, objects, and malformed date strings without converting to current timestamp)
+    reportedInfo = null;
+    exportController.importWorkJson();
+    fileInputOnChange({
+        target: {
+            files: [{
+                text: JSON.stringify({
+                    works: [
+                        { name: 'Number CreatedAt', date: '2026-11-01', duration: 1, created_at: 123456789 },
+                        { name: 'Object CreatedAt', date: '2026-11-01', duration: 1, created_at: { date: '2026-01-01' } },
+                        { name: 'Malformed Date CreatedAt', date: '2026-11-01', duration: 1, created_at: 'not-a-real-date' }
+                    ]
+                })
+            }]
+        }
+    });
+    await new Promise(r => setTimeout(r, 15));
+    assert.equal(reportedInfo?.title, 'Érvénytelen adatok', 'Malformed created_at timestamps must be rejected');
     assert.equal(workLogManager.works.length, 1);
 
     // Scenario F: Prototype pollution protection and legacy metadata preservation
@@ -279,7 +362,7 @@ test('P1-1: Work Log JSON Import validates malformed JSON, invalid schema, and i
                             id: 'w-proto',
                             name: 'Proto Test Task',
                             date: '2026-11-02',
-                            duration: 1.5,
+                            duration: 2,
                             _old_autoincrement_id: 1234,
                             customTag: 'audit-legacy-tag',
                             __proto__: { polluted: true },
@@ -295,7 +378,7 @@ test('P1-1: Work Log JSON Import validates malformed JSON, invalid schema, and i
     assert.equal(workLogManager.works.length, 2);
     const importedProtoWork = workLogManager.works.find(w => w.name === 'Proto Test Task');
     assert.ok(importedProtoWork);
-    assert.equal(importedProtoWork.duration, 1.5);
+    assert.equal(importedProtoWork.duration, 2);
     assert.equal(importedProtoWork._old_autoincrement_id, 1234);
     assert.equal(importedProtoWork.customTag, 'audit-legacy-tag');
     assert.equal(Object.prototype.polluted, undefined, 'Object.prototype must not be polluted');
@@ -371,6 +454,44 @@ test('P1-1: Work Log JSON Import validates malformed JSON, invalid schema, and i
     const retriedWork = workLogManager.works.find(w => w.id === 'fail-rec-2');
     assert.ok(retriedWork);
     assert.equal(retriedWork.name, 'Sikertelen Tétel 2 Javítva');
+
+    // Scenario I: Idempotency of ID-less records & distinction between same-name different-date records
+    const initialCountBeforeIdless = workLogManager.works.length;
+    const idlessJsonPayload = JSON.stringify({
+        works: [
+            { name: 'Kerítés festés', date: '2026-11-05', duration: 4, description: 'Első réteg' },
+            { name: 'Kerítés festés', date: '2026-11-06', duration: 4, description: 'Második réteg' }
+        ]
+    });
+
+    reportedInfo = null;
+    exportController.importWorkJson();
+    fileInputOnChange({
+        target: {
+            files: [{ text: idlessJsonPayload }]
+        }
+    });
+    await new Promise(r => setTimeout(r, 25));
+    assert.equal(reportedInfo?.title, 'Sikeres importálás');
+    assert.equal(workLogManager.works.length, initialCountBeforeIdless + 2, 'Two distinct dates must create two distinct records');
+
+    // Find the two newly imported tasks
+    const firstLayer = workLogManager.works.find(w => w.name === 'Kerítés festés' && w.date === '2026-11-05');
+    const secondLayer = workLogManager.works.find(w => w.name === 'Kerítés festés' && w.date === '2026-11-06');
+    assert.ok(firstLayer && secondLayer);
+    assert.notEqual(firstLayer.id, secondLayer.id, 'Distinct dates must receive distinct deterministic IDs');
+
+    // Re-import the exact same ID-less payload: MUST BE IDEMPOTENT (no new duplicates added)
+    reportedInfo = null;
+    exportController.importWorkJson();
+    fileInputOnChange({
+        target: {
+            files: [{ text: idlessJsonPayload }]
+        }
+    });
+    await new Promise(r => setTimeout(r, 25));
+    assert.equal(reportedInfo?.title, 'Sikeres importálás');
+    assert.equal(workLogManager.works.length, initialCountBeforeIdless + 2, 'Re-importing identical ID-less payload must be idempotent');
 
     // Critical assertion: verify incomingManager financial ledger was never touched
     assert.equal(incomingManager.incomings.length, 1);
@@ -731,4 +852,45 @@ test('P1-3: WorkLogManager.save strictly preserves original persisted created_at
     assert.equal(editedFromDb.name, 'Módosított Közvetlen DB Olvasással');
     assert.equal(editedFromDb.created_at, initialCreatedAt, 'Must preserve original created_at from database adapter despite empty cache');
     assert.equal(editedFromDb.customMetadata, 'audit-tag-42');
+
+    // 6. Atomic Transaction Update & Rollback Verification:
+    // Verify that atomic transaction executes via runTransaction and commits
+    const atomicRecord = await workLogManager.save({
+        name: 'Atomic Test Work',
+        date: '2026-11-08',
+        duration: 2,
+        status: 'folyamatban'
+    });
+    const atomicCreatedAt = atomicRecord.created_at;
+
+    // Simulate updating via atomic transaction
+    const updatedAtomic = await workLogManager.save({
+        id: atomicRecord.id,
+        name: 'Atomic Test Work Updated',
+        duration: 3
+    });
+    assert.equal(updatedAtomic.created_at, atomicCreatedAt);
+    assert.equal(updatedAtomic.duration, 3);
+
+    // Verify transaction failure / rollback leaves original persisted record untouched
+    const origRunTx = db.runTransaction.bind(db);
+    db.runTransaction = async (storeNames, mode, txFn) => {
+        return Promise.reject(new Error('Simulated atomic transaction commit failure'));
+    };
+
+    await assert.rejects(
+        () => workLogManager.save({
+            id: atomicRecord.id,
+            name: 'This update must fail and rollback'
+        }),
+        /Simulated atomic transaction commit failure/
+    );
+
+    // Restore runTransaction and verify that original record remains completely unchanged
+    db.runTransaction = origRunTx;
+    await workLogManager.load();
+    const untouched = workLogManager.works.find(w => w.id === atomicRecord.id);
+    assert.equal(untouched.name, 'Atomic Test Work Updated');
+    assert.equal(untouched.duration, 3);
+    assert.equal(untouched.created_at, atomicCreatedAt);
 });
