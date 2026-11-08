@@ -271,6 +271,157 @@ test('P1-1: Work Log JSON Import validates malformed JSON, invalid schema, and i
     dom.window.close();
 });
 
+test('P1-2: appService.submitWorkForm returns the exact Promise returned by bound appInstance', async () => {
+    let capturedEvent = null;
+    const expectedPromise = Promise.resolve('submission_ok');
+
+    const fakeApp = {
+        submitWorkForm(event) {
+            capturedEvent = event;
+            return expectedPromise;
+        }
+    };
+
+    appService.bind(fakeApp);
+    const mockEvt = { preventDefault() {} };
+    const returnedPromise = appService.submitWorkForm(mockEvt);
+
+    assert.equal(returnedPromise, expectedPromise, 'appService.submitWorkForm must return exact Promise from appInstance');
+    assert.equal(capturedEvent, mockEvt);
+
+    appService.unbind();
+    assert.equal(appService.submitWorkForm(mockEvt), undefined, 'When unbound, returns undefined gracefully');
+});
+
+test('P1-2: WorkEditorModal component submits through form and enforces isSubmitting button state with controllable Promise', async () => {
+    const dom = new JSDOM(`
+        <!DOCTYPE html>
+        <html>
+            <body>
+                <div id="workAppEditorRoot"></div>
+            </body>
+        </html>
+    `, { url: 'http://localhost/' });
+
+    globalThis.window = dom.window;
+    globalThis.document = dom.window.document;
+    globalThis.localStorage = dom.window.localStorage;
+    globalThis.Event = dom.window.Event;
+    globalThis.CustomEvent = dom.window.CustomEvent;
+    globalThis.HTMLElement = dom.window.HTMLElement;
+    globalThis.Node = dom.window.Node;
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+
+    let resolveSave = null;
+    let rejectSave = null;
+    let saveCount = 0;
+
+    const fakeApp = {
+        _isSubmittingWork: false,
+        submitWorkForm: async (event) => {
+            if (event?.preventDefault) event.preventDefault();
+            if (fakeApp._isSubmittingWork) return;
+            fakeApp._isSubmittingWork = true;
+            saveCount++;
+
+            try {
+                return await new Promise((resolve, reject) => {
+                    resolveSave = () => {
+                        resolve({ id: 'saved-id' });
+                    };
+                    rejectSave = (err) => {
+                        reject(err);
+                    };
+                });
+            } catch (err) {
+                // Mimics App.prototype.submitWorkForm catching error and showing toast
+                console.error('[App] Hiba a munka mentése során:', err);
+            } finally {
+                fakeApp._isSubmittingWork = false;
+            }
+        }
+    };
+
+    appService.bind(fakeApp);
+
+    const root = createRoot(document.getElementById('workAppEditorRoot'));
+    const { act } = React;
+    await act(async () => {
+        root.render(React.createElement(WorkEditorModal));
+    });
+
+    const form = document.getElementById('workForm');
+    const submitBtn = document.getElementById('btnSaveWorkModal');
+
+    assert.equal(submitBtn.disabled, false);
+    assert.ok(submitBtn.textContent.includes('Mentés'));
+
+    // Step 1: Trigger first form submit event on #workForm
+    act(() => {
+        form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    });
+
+    // While Promise is pending, verify Save button is disabled and shows in-flight label
+    assert.equal(submitBtn.disabled, true, 'Save button must be disabled while in-flight');
+    assert.ok(submitBtn.textContent.includes('Mentés folyamatban...'), 'Button must show in-flight text');
+    assert.equal(saveCount, 1);
+
+    // Step 2: Trigger second form submit event while first is still pending
+    act(() => {
+        form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    });
+
+    // Verify second submit was blocked and did not initiate another save
+    assert.equal(saveCount, 1, 'Second submit while pending must be blocked');
+    assert.equal(submitBtn.disabled, true);
+
+    // Step 3: Resolve the pending save Promise
+    await act(async () => {
+        resolveSave();
+    });
+
+    // Verify Save button is restored to enabled and displays normal label
+    assert.equal(submitBtn.disabled, false, 'Save button must be re-enabled after completion');
+    assert.ok(submitBtn.textContent.includes('Mentés'));
+    assert.ok(!submitBtn.textContent.includes('Mentés folyamatban...'));
+    assert.equal(saveCount, 1, 'Exactly one save was performed');
+
+    // Step 4: Test rejection recovery via #workForm submission
+    act(() => {
+        form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    });
+
+    assert.equal(submitBtn.disabled, true);
+    assert.equal(saveCount, 2);
+
+    // Reject the save Promise
+    await act(async () => {
+        rejectSave(new Error('Network error on save'));
+    });
+
+    // Verify button state is restored after rejection
+    assert.equal(submitBtn.disabled, false, 'Save button must be re-enabled after rejection');
+    assert.ok(submitBtn.textContent.includes('Mentés'));
+
+    // Step 5: Verify subsequent form submission succeeds after previous rejection
+    act(() => {
+        form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    });
+    assert.equal(saveCount, 3);
+    assert.equal(submitBtn.disabled, true);
+
+    await act(async () => {
+        resolveSave();
+    });
+    assert.equal(submitBtn.disabled, false);
+
+    await act(async () => {
+        root.unmount();
+    });
+    appService.unbind();
+    dom.window.close();
+});
+
 test('P1-2: App.prototype.submitWorkForm real production method prevents duplicate submissions and manages lock', async () => {
     const dom = new JSDOM(`
         <!DOCTYPE html>
