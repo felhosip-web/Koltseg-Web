@@ -600,6 +600,19 @@ export class DataExportController {
                     // Validate items before writing
                     const validWorks = [];
                     const dangerousKeys = new Set(['__proto__', 'constructor', 'prototype']);
+                    const idlessOccurrenceCounts = new Map();
+
+                    // Helper for 64-bit FNV-1a deterministic hash (substantially collision-resistant and synchronous)
+                    const computeDeterministicHash64 = (str) => {
+                        let h1 = 0x811c9dc5;
+                        let h2 = 0x811c9dc5 ^ 0x5b79;
+                        for (let i = 0; i < str.length; i++) {
+                            const c = str.charCodeAt(i);
+                            h1 = Math.imul(h1 ^ c, 0x01000193);
+                            h2 = Math.imul(h2 ^ (c * 31), 0x01000193);
+                        }
+                        return (h1 >>> 0).toString(16).padStart(8, '0') + (h2 >>> 0).toString(16).padStart(8, '0');
+                    };
 
                     for (const item of data.works) {
                         if (!item || typeof item !== 'object') continue;
@@ -627,16 +640,25 @@ export class DataExportController {
                         const trimmedDesc = typeof item.description === 'string' ? item.description.trim() : (item.description || '');
                         const trimmedLoc = typeof item.location === 'string' ? item.location.trim() : (item.location || '');
 
-                        // 4. Stable ID generation: use explicit ID or generate deterministic ID for ID-less items so re-import is idempotent
-                        let stableId = item.id;
+                        // 4. Stable ID generation:
+                        // If explicit ID exists, use it.
+                        // If ID is omitted, construct a deterministic 64-bit identity incorporating content fields
+                        // and an occurrence index per file. This ensures:
+                        //   a) Re-importing the same ID-less file is idempotent and does not create duplicate entries.
+                        //   b) Identical duplicate items in the same file each get a distinct stable ID and are preserved.
+                        //   c) Different names, dates, or details do not collide.
+                        //
+                        // LIMITATION NOTE: Two otherwise completely indistinguishable records imported independently
+                        // across different files without IDs or distinguishing metadata cannot always be distinguished
+                        // as separate real-world records.
+                        let stableId = item.id ? String(item.id).trim() : null;
                         if (!stableId) {
-                            const raw = `work_import_${trimmedName}_${item.date}_${dur}_${trimmedDesc}_${trimmedLoc}`;
-                            let hash = 0;
-                            for (let ch = 0; ch < raw.length; ch++) {
-                                hash = ((hash << 5) - hash) + raw.charCodeAt(ch);
-                                hash |= 0;
-                            }
-                            stableId = `imp-${Math.abs(hash).toString(16).padStart(8, '0')}`;
+                            const contentFingerprint = `${trimmedName}|${item.date}|${dur}|${trimmedDesc}|${trimmedLoc}`;
+                            const occIndex = (idlessOccurrenceCounts.get(contentFingerprint) || 0) + 1;
+                            idlessOccurrenceCounts.set(contentFingerprint, occIndex);
+
+                            const hashKey = `${contentFingerprint}|#${occIndex}`;
+                            stableId = `imp-${computeDeterministicHash64(hashKey)}`;
                         }
 
                         // 5. Preserve non-dangerous compatible metadata & legacy keys (e.g. _old_autoincrement_id)

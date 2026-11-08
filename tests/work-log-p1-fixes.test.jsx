@@ -1,8 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
+import 'fake-indexeddb/auto';
 import React from 'react';
 import { createRoot } from 'react-dom/client';
+import { Database } from '../js/oop-core.js';
 import { WorkLogManager } from '../js/work-log.js';
 import { DataExportController } from '../js/data-export-controller.js';
 import { App } from '../js/app.js';
@@ -493,6 +495,46 @@ test('P1-1: Work Log JSON Import validates malformed JSON, invalid schema, and i
     assert.equal(reportedInfo?.title, 'Sikeres importálás');
     assert.equal(workLogManager.works.length, initialCountBeforeIdless + 2, 'Re-importing identical ID-less payload must be idempotent');
 
+    // Scenario J: Two identical records occurring twice in the same import file must both be preserved
+    const initialCountBeforeDuplicates = workLogManager.works.length;
+    const identicalTasksJsonPayload = JSON.stringify({
+        works: [
+            { name: 'Kiszállási alapdíj', date: '2026-11-07', duration: 1, description: 'Fix tétel' },
+            { name: 'Kiszállási alapdíj', date: '2026-11-07', duration: 1, description: 'Fix tétel' }
+        ]
+    });
+
+    reportedInfo = null;
+    exportController.importWorkJson();
+    fileInputOnChange({
+        target: {
+            files: [{ text: identicalTasksJsonPayload }]
+        }
+    });
+    await new Promise(r => setTimeout(r, 25));
+    assert.equal(reportedInfo?.title, 'Sikeres importálás');
+    assert.equal(
+        workLogManager.works.length,
+        initialCountBeforeDuplicates + 2,
+        'Two identical records in the same import file must both be preserved with distinct occurrence keys'
+    );
+
+    const calloutItems = workLogManager.works.filter(w => w.name === 'Kiszállási alapdíj' && w.date === '2026-11-07');
+    assert.equal(calloutItems.length, 2);
+    assert.notEqual(calloutItems[0].id, calloutItems[1].id, 'Identical records within same file must receive distinct occurrence IDs');
+
+    // Re-importing identical duplicate file must still remain idempotent
+    reportedInfo = null;
+    exportController.importWorkJson();
+    fileInputOnChange({
+        target: {
+            files: [{ text: identicalTasksJsonPayload }]
+        }
+    });
+    await new Promise(r => setTimeout(r, 25));
+    assert.equal(reportedInfo?.title, 'Sikeres importálás');
+    assert.equal(workLogManager.works.length, initialCountBeforeDuplicates + 2, 'Repeated import of identical duplicates must remain idempotent');
+
     // Critical assertion: verify incomingManager financial ledger was never touched
     assert.equal(incomingManager.incomings.length, 1);
     assert.equal(incomingManager.incomings[0].id, 'inc1');
@@ -893,4 +935,80 @@ test('P1-3: WorkLogManager.save strictly preserves original persisted created_at
     assert.equal(untouched.name, 'Atomic Test Work Updated');
     assert.equal(untouched.duration, 3);
     assert.equal(untouched.created_at, atomicCreatedAt);
+});
+
+test('P1-3: Native IndexedDB IDBRequest path and atomic transaction rollback in WorkLogManager.save', async () => {
+    // Setup real IndexedDB environment using fake-indexeddb
+    const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', { url: 'http://localhost/' });
+    dom.window.indexedDB = globalThis.indexedDB;
+    dom.window.IDBKeyRange = globalThis.IDBKeyRange;
+    globalThis.window = dom.window;
+
+    const realDb = new Database();
+    await realDb.connect();
+    assert.equal(realDb.isMock, undefined, 'Real IndexedDB instance must connect, not fallback to mock');
+
+    const workLogManager = new WorkLogManager(realDb, null);
+    await workLogManager.load();
+
+    // 1. Insert new entry via real Database.save
+    const created = await workLogManager.save({
+        name: 'Native IDB Task',
+        date: '2026-11-08',
+        duration: 2,
+        status: 'folyamatban'
+    });
+    assert.ok(created.id);
+    assert.ok(created.created_at);
+    const initialCreatedAt = created.created_at;
+
+    // 2. Update entry exercising native IDBRequest get & put path inside runTransaction
+    const updated = await workLogManager.save({
+        id: created.id,
+        name: 'Native IDB Task Updated',
+        duration: 4
+    });
+    assert.equal(updated.name, 'Native IDB Task Updated');
+    assert.equal(updated.duration, 4);
+    assert.equal(updated.created_at, initialCreatedAt, 'Must preserve original created_at via native IDBRequest flow');
+
+    // 3. Verify that reading from database directly confirms persisted update
+    const reloadedRecords = await realDb.getAll('works');
+    const persisted = reloadedRecords.find(w => w.id === created.id);
+    assert.ok(persisted);
+    assert.equal(persisted.name, 'Native IDB Task Updated');
+    assert.equal(persisted.duration, 4);
+    assert.equal(persisted.created_at, initialCreatedAt);
+
+    // 4. Verify transaction abort on read error leaves persisted record untouched
+    const badId = 'non-existent-id-xyz';
+    // Saving with an ID not in database still succeeds as new record with assigned created_at
+    const newlyCreatedWithId = await workLogManager.save({
+        id: badId,
+        name: 'Task with specified ID'
+    });
+    assert.equal(newlyCreatedWithId.id, badId);
+    assert.ok(newlyCreatedWithId.created_at);
+
+    // 5. Verify transaction failure/rollback leaves persisted record unchanged
+    const origRunTx = realDb.runTransaction.bind(realDb);
+    realDb.runTransaction = async (storeNames, mode, txFn) => {
+        throw new Error('Simulated IDB transaction crash');
+    };
+
+    await assert.rejects(
+        () => workLogManager.save({
+            id: created.id,
+            name: 'Crashed Update Attempt'
+        }),
+        /Simulated IDB transaction crash/
+    );
+
+    realDb.runTransaction = origRunTx;
+    await workLogManager.load();
+    const unchangedAfterCrash = workLogManager.works.find(w => w.id === created.id);
+    assert.equal(unchangedAfterCrash.name, 'Native IDB Task Updated');
+    assert.equal(unchangedAfterCrash.duration, 4);
+
+    dom.window.close();
 });

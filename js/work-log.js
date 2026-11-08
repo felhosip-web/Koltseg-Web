@@ -23,9 +23,26 @@ export class WorkLogManager {
      * Save a work log entry
      */
     async save(work) {
+        if (!work || typeof work !== 'object') {
+            throw new Error('Érvénytelen munka bejegyzés adat.');
+        }
+
         let workToSave = { ...work };
+
+        // Timestamp validation helper: strictly check non-empty string and valid ISO date parse
+        const isValidIsoTimestamp = (ts) => {
+            if (typeof ts !== 'string' || ts.trim() === '') return false;
+            return !isNaN(Date.parse(ts));
+        };
+
+        if (workToSave.created_at !== undefined && workToSave.created_at !== null) {
+            if (!isValidIsoTimestamp(workToSave.created_at)) {
+                throw new Error('Érvénytelen created_at időbélyeg formátum.');
+            }
+        }
+
         if (!workToSave.id) {
-            // New entry - generate UUID
+            // New entry - generate UUID and assign valid current created_at if not provided
             workToSave.id = generateUUID();
             workToSave.created_at = workToSave.created_at || new Date().toISOString();
             workToSave.updated_at = new Date().toISOString();
@@ -40,6 +57,8 @@ export class WorkLogManager {
                     const applyMergeAndPut = (existingRecord) => {
                         let recordToPut = { ...workToSave };
                         if (existingRecord) {
+                            // Existing record with original created_at: preserve it.
+                            // Existing legacy record without created_at: keep it missing (do NOT fabricate or overwrite).
                             const originalCreatedAt = existingRecord.created_at;
                             recordToPut = { ...existingRecord, ...recordToPut };
                             if (originalCreatedAt !== undefined) {
@@ -47,6 +66,10 @@ export class WorkLogManager {
                             } else {
                                 delete recordToPut.created_at;
                             }
+                        } else {
+                            // If an ID was supplied but no existing record was found in database,
+                            // treat it as a new insert: assign created_at if missing
+                            recordToPut.created_at = recordToPut.created_at || new Date().toISOString();
                         }
                         recordToPut.updated_at = new Date().toISOString();
                         resolvedRecord = recordToPut;
@@ -78,23 +101,7 @@ export class WorkLogManager {
                     workToSave = resolvedRecord;
                 }
             } else {
-                // Fallback if runTransaction is unavailable on custom mock
-                let existing = null;
-                if (this.db && typeof this.db.getAll === 'function') {
-                    const allPersisted = await this.db.getAll('works');
-                    existing = (allPersisted || []).find(w => String(w.id) === String(workToSave.id)) || null;
-                }
-                if (existing) {
-                    const originalCreatedAt = existing.created_at;
-                    workToSave = { ...existing, ...workToSave };
-                    if (originalCreatedAt !== undefined) {
-                        workToSave.created_at = originalCreatedAt;
-                    } else {
-                        delete workToSave.created_at;
-                    }
-                }
-                workToSave.updated_at = new Date().toISOString();
-                await this.db.save('works', workToSave);
+                throw new Error('[WorkLogManager] Atomic transaction execution (runTransaction) is required for editing work records.');
             }
         }
 
