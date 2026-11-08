@@ -225,7 +225,7 @@ test('P1-1: Work Log JSON Import validates malformed JSON, invalid schema, and i
     assert.equal(workLogManager.works.length, 1);
     assert.equal(incomingManager.incomings.length, 1);
 
-    // Scenario D: Valid JSON where records fail validation (e.g. missing name or date)
+    // Scenario D: Strict calendar date validation (rejecting impossible dates like 2026-02-31, 2023-02-29)
     reportedInfo = null;
     exportController.importWorkJson();
     fileInputOnChange({
@@ -233,10 +233,10 @@ test('P1-1: Work Log JSON Import validates malformed JSON, invalid schema, and i
             files: [{
                 text: JSON.stringify({
                     works: [
-                        { name: '', date: '2026-11-01' }, // empty name
-                        { name: 'Nincs Dátum' }, // missing date
-                        null,
-                        'invalid string'
+                        { name: 'Feb 31 Task', date: '2026-02-31', duration: 1 },
+                        { name: 'Apr 31 Task', date: '2026-04-31', duration: 1 },
+                        { name: 'Non Leap Feb 29', date: '2023-02-29', duration: 1 },
+                        { name: 'Malformed Date', date: 'invalid-date', duration: 1 }
                     ]
                 })
             }]
@@ -245,9 +245,28 @@ test('P1-1: Work Log JSON Import validates malformed JSON, invalid schema, and i
     await new Promise(r => setTimeout(r, 15));
     assert.equal(reportedInfo?.title, 'Érvénytelen adatok');
     assert.equal(workLogManager.works.length, 1);
-    assert.equal(incomingManager.incomings.length, 1);
 
-    // Scenario E: Valid JSON with valid work records imports successfully into workLogManager
+    // Scenario E: Duration validation (rejecting NaN, Infinity, -Infinity, 0, and negative numbers)
+    reportedInfo = null;
+    exportController.importWorkJson();
+    fileInputOnChange({
+        target: {
+            files: [{
+                text: JSON.stringify({
+                    works: [
+                        { name: 'Zero Dur', date: '2026-11-01', duration: 0 },
+                        { name: 'Negative Dur', date: '2026-11-01', duration: -2 },
+                        { name: 'NaN Dur', date: '2026-11-01', duration: 'not-a-number' }
+                    ]
+                })
+            }]
+        }
+    });
+    await new Promise(r => setTimeout(r, 15));
+    assert.equal(reportedInfo?.title, 'Érvénytelen adatok');
+    assert.equal(workLogManager.works.length, 1);
+
+    // Scenario F: Prototype pollution protection and legacy metadata preservation
     reportedInfo = null;
     globalThis.confirm = () => true;
     exportController.importWorkJson();
@@ -256,7 +275,16 @@ test('P1-1: Work Log JSON Import validates malformed JSON, invalid schema, and i
             files: [{
                 text: JSON.stringify({
                     works: [
-                        { id: 'w2', name: 'Új Munka 2', description: 'Desc 2', location: 'Debrecen', date: '2026-11-02', duration: 3, status: 'elvégzett' }
+                        {
+                            id: 'w-proto',
+                            name: 'Proto Test Task',
+                            date: '2026-11-02',
+                            duration: 1.5,
+                            _old_autoincrement_id: 1234,
+                            customTag: 'audit-legacy-tag',
+                            __proto__: { polluted: true },
+                            constructor: { prototype: { admin: true } }
+                        }
                     ]
                 })
             }]
@@ -265,8 +293,88 @@ test('P1-1: Work Log JSON Import validates malformed JSON, invalid schema, and i
     await new Promise(r => setTimeout(r, 25));
     assert.equal(reportedInfo?.title, 'Sikeres importálás');
     assert.equal(workLogManager.works.length, 2);
-    assert.ok(workLogManager.works.some(w => w.name === 'Új Munka 2'));
-    assert.equal(incomingManager.incomings.length, 1, 'Incoming ledger must NEVER be modified by Work Log import');
+    const importedProtoWork = workLogManager.works.find(w => w.name === 'Proto Test Task');
+    assert.ok(importedProtoWork);
+    assert.equal(importedProtoWork.duration, 1.5);
+    assert.equal(importedProtoWork._old_autoincrement_id, 1234);
+    assert.equal(importedProtoWork.customTag, 'audit-legacy-tag');
+    assert.equal(Object.prototype.polluted, undefined, 'Object.prototype must not be polluted');
+    assert.equal(Object.prototype.admin, undefined, 'Object.prototype must not be polluted');
+
+    // Scenario G: Cancellation leaves database untouched
+    globalThis.confirm = () => false;
+    exportController.importWorkJson();
+    fileInputOnChange({
+        target: {
+            files: [{
+                text: JSON.stringify({
+                    works: [
+                        { name: 'Cancelled Task', date: '2026-11-03', duration: 1 }
+                    ]
+                })
+            }]
+        }
+    });
+    await new Promise(r => setTimeout(r, 15));
+    assert.equal(workLogManager.works.length, 2, 'Cancelled import must not modify database');
+
+    // Scenario H: Partial failure reporting when some records fail save
+    globalThis.confirm = () => true;
+    let shouldFailSpecificId = 'fail-rec-2';
+    const origMgrSave = workLogManager.save.bind(workLogManager);
+    workLogManager.save = async (item) => {
+        if (item.id === shouldFailSpecificId) {
+            throw new Error('Disk quota exceeded for fail-rec-2');
+        }
+        return origMgrSave(item);
+    };
+
+    reportedInfo = null;
+    exportController.importWorkJson();
+    fileInputOnChange({
+        target: {
+            files: [{
+                text: JSON.stringify({
+                    works: [
+                        { id: 'succ-rec-1', name: 'Sikeres Tétel 1', date: '2026-11-04', duration: 1 },
+                        { id: 'fail-rec-2', name: 'Sikertelen Tétel 2', date: '2026-11-04', duration: 2 },
+                        { id: 'succ-rec-3', name: 'Sikeres Tétel 3', date: '2026-11-04', duration: 3 }
+                    ]
+                })
+            }]
+        }
+    });
+    await new Promise(r => setTimeout(r, 35));
+
+    assert.equal(reportedInfo?.title, 'Részleges importálás');
+    assert.ok(reportedInfo?.msg.includes('2 sikeres, 1 sikertelen'));
+    assert.ok(reportedInfo?.msg.includes('Sikertelen Tétel 2'));
+    assert.ok(reportedInfo?.msg.includes('Disk quota exceeded'));
+
+    // Retry scenario: retrying with the fixed failure should be idempotent and succeed without duplicates
+    workLogManager.save = origMgrSave;
+    reportedInfo = null;
+    exportController.importWorkJson();
+    fileInputOnChange({
+        target: {
+            files: [{
+                text: JSON.stringify({
+                    works: [
+                        { id: 'fail-rec-2', name: 'Sikertelen Tétel 2 Javítva', date: '2026-11-04', duration: 2 }
+                    ]
+                })
+            }]
+        }
+    });
+    await new Promise(r => setTimeout(r, 25));
+    assert.equal(reportedInfo?.title, 'Sikeres importálás');
+    const retriedWork = workLogManager.works.find(w => w.id === 'fail-rec-2');
+    assert.ok(retriedWork);
+    assert.equal(retriedWork.name, 'Sikertelen Tétel 2 Javítva');
+
+    // Critical assertion: verify incomingManager financial ledger was never touched
+    assert.equal(incomingManager.incomings.length, 1);
+    assert.equal(incomingManager.incomings[0].id, 'inc1');
 
     dom.window.close();
 });
@@ -613,4 +721,14 @@ test('P1-3: WorkLogManager.save strictly preserves original persisted created_at
     assert.equal(editedLegacy.name, 'Legacy Munka Frissítve');
     assert.equal(editedLegacy.created_at, undefined, 'Legacy record without created_at must not have a fake date fabricated');
     assert.ok(editedLegacy.updated_at);
+
+    // 5. Database compatibility: verify save retrieves persisted record via getAll('works') even if in-memory cache is stale or empty
+    workLogManager.works = []; // Deliberately clear in-memory cache to simulate stale state
+    const editedFromDb = await workLogManager.save({
+        id: createdRecord.id,
+        name: 'Módosított Közvetlen DB Olvasással'
+    });
+    assert.equal(editedFromDb.name, 'Módosított Közvetlen DB Olvasással');
+    assert.equal(editedFromDb.created_at, initialCreatedAt, 'Must preserve original created_at from database adapter despite empty cache');
+    assert.equal(editedFromDb.customMetadata, 'audit-tag-42');
 });

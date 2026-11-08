@@ -1,5 +1,20 @@
 // js/data-export-controller.js - Teljes Export funkciók (Excel, PDF, JSON)
 import { parseCellKey } from './utils/cell-key-utils.js';
+import { generateUUID } from './uuid-utils.js';
+
+function isValidCalendarDate(dateStr) {
+    if (typeof dateStr !== 'string') return false;
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr);
+    if (!match) return false;
+    const year = parseInt(match[1], 10);
+    const month = parseInt(match[2], 10);
+    const day = parseInt(match[3], 10);
+    if (month < 1 || month > 12 || day < 1 || day > 31) return false;
+    const dateObj = new Date(year, month - 1, day);
+    return dateObj.getFullYear() === year &&
+           dateObj.getMonth() === month - 1 &&
+           dateObj.getDate() === day;
+}
 
 export class DataExportController {
     /**
@@ -584,20 +599,59 @@ export class DataExportController {
 
                     // Validate items before writing
                     const validWorks = [];
+                    const dangerousKeys = new Set(['__proto__', 'constructor', 'prototype']);
+
                     for (const item of data.works) {
-                        if (item && typeof item === 'object' && typeof item.name === 'string' && item.name.trim() !== '' && typeof item.date === 'string') {
-                            validWorks.push({
-                                id: item.id || (typeof this.app.uuid === 'function' ? this.app.uuid() : undefined),
-                                name: item.name.trim(),
-                                description: typeof item.description === 'string' ? item.description.trim() : '',
-                                location: typeof item.location === 'string' ? item.location.trim() : '',
-                                date: item.date,
-                                duration: item.duration !== undefined ? Number(item.duration) : 1,
-                                status: typeof item.status === 'string' ? item.status : 'folyamatban',
-                                created_at: item.created_at || new Date().toISOString(),
-                                updated_at: item.updated_at || new Date().toISOString()
-                            });
+                        if (!item || typeof item !== 'object') continue;
+
+                        // 1. Name validation
+                        if (typeof item.name !== 'string' || item.name.trim() === '') continue;
+
+                        // 2. Strict calendar date validation
+                        if (!isValidCalendarDate(item.date)) continue;
+
+                        // 3. Duration validation: reject NaN, Infinity, -Infinity, zero, and negative values
+                        let dur = item.duration;
+                        if (dur !== undefined && dur !== null) {
+                            if (typeof dur === 'string' && dur.trim() !== '') {
+                                dur = Number(dur);
+                            }
+                            if (typeof dur !== 'number' || !Number.isFinite(dur) || dur <= 0) {
+                                continue;
+                            }
+                        } else {
+                            dur = 1;
                         }
+
+                        // 4. Stable ID generation: assign once during import preparation so retries remain idempotent
+                        const stableId = item.id || (typeof this.app.uuid === 'function' ? this.app.uuid() : generateUUID());
+
+                        // 5. Preserve non-dangerous compatible metadata & legacy keys (e.g. _old_autoincrement_id)
+                        const safeMetadata = {};
+                        for (const key of Object.keys(item)) {
+                            if (!dangerousKeys.has(key)) {
+                                safeMetadata[key] = item[key];
+                            }
+                        }
+
+                        // 6. Assemble normalized record, protecting core attributes from raw override
+                        const normalizedRecord = {
+                            ...safeMetadata,
+                            id: stableId,
+                            name: item.name.trim(),
+                            description: typeof item.description === 'string' ? item.description.trim() : (item.description || ''),
+                            location: typeof item.location === 'string' ? item.location.trim() : (item.location || ''),
+                            date: item.date,
+                            duration: dur,
+                            status: typeof item.status === 'string' ? item.status : 'folyamatban'
+                        };
+
+                        // Retain original created_at if present; do not invent historical creation date if missing
+                        if (item.created_at !== undefined) {
+                            normalizedRecord.created_at = item.created_at;
+                        }
+
+                        validWorks.push(normalizedRecord);
                     }
 
                     if (validWorks.length === 0) {
@@ -612,13 +666,41 @@ export class DataExportController {
 
                     if (shouldImport) {
                         let importedCount = 0;
+                        const failedRecords = [];
+
                         for (const item of validWorks) {
                             if (this.app.workLogManager && typeof this.app.workLogManager.save === 'function') {
-                                await this.app.workLogManager.save(item);
-                                importedCount++;
+                                try {
+                                    await this.app.workLogManager.save(item);
+                                    importedCount++;
+                                } catch (saveErr) {
+                                    console.error(`[WorkLogImport] Hiba a rekord (${item.name || item.id}) mentésekor:`, saveErr);
+                                    failedRecords.push({
+                                        id: item.id,
+                                        name: item.name,
+                                        error: saveErr?.message || 'Ismeretlen mentési hiba'
+                                    });
+                                }
                             }
                         }
-                        await this.app.hmiNotif.showInfo('Sikeres importálás', `${importedCount} munka adat sikeresen betöltve!`);
+
+                        if (failedRecords.length === 0) {
+                            await this.app.hmiNotif.showInfo('Sikeres importálás', `${importedCount} munka adat sikeresen betöltve!`);
+                        } else if (importedCount > 0) {
+                            const errDetails = failedRecords.slice(0, 5).map(f => `• ${f.name || f.id}: ${f.error}`).join('\n');
+                            const moreMsg = failedRecords.length > 5 ? `\n...és további ${failedRecords.length - 5} hiba.` : '';
+                            await this.app.hmiNotif.showInfo(
+                                'Részleges importálás',
+                                `${importedCount} sikeres, ${failedRecords.length} sikertelen a(z) ${validWorks.length} tételből.\nHibák:\n${errDetails}${moreMsg}`
+                            );
+                        } else {
+                            const errDetails = failedRecords.slice(0, 5).map(f => `• ${f.name || f.id}: ${f.error}`).join('\n');
+                            await this.app.hmiNotif.showInfo(
+                                'Importálási hiba',
+                                `Egyetlen munka adatot sem sikerült importálni (${failedRecords.length} hiba).\nHibák:\n${errDetails}`
+                            );
+                        }
+
                         this.app.updateReactStore?.();
                     }
                 } catch (err) {

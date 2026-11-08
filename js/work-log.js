@@ -29,17 +29,15 @@ export class WorkLogManager {
             workToSave.id = generateUUID();
             workToSave.created_at = workToSave.created_at || new Date().toISOString();
         } else {
-            // Editing existing entry - retrieve existing record to preserve created_at and unrelated metadata
+            // Editing existing entry - retrieve persisted record directly from database adapter
             let existing = null;
-            if (this.db && typeof this.db.get === 'function') {
-                try {
+            if (this.db) {
+                if (typeof this.db.get === 'function') {
                     existing = await this.db.get('works', workToSave.id);
-                } catch (e) {
-                    // Fallback to in-memory cache if db.get fails
-                    existing = (this.works || []).find(w => String(w.id) === String(workToSave.id));
+                } else if (typeof this.db.getAll === 'function') {
+                    const allPersisted = await this.db.getAll('works');
+                    existing = (allPersisted || []).find(w => String(w.id) === String(workToSave.id)) || null;
                 }
-            } else {
-                existing = (this.works || []).find(w => String(w.id) === String(workToSave.id));
             }
 
             if (existing) {
