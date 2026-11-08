@@ -600,18 +600,17 @@ export class DataExportController {
                     // Validate items before writing
                     const validWorks = [];
                     const dangerousKeys = new Set(['__proto__', 'constructor', 'prototype']);
+                    const excludedFromFingerprint = new Set(['id', 'created_at', 'updated_at', '__proto__', 'constructor', 'prototype']);
                     const idlessOccurrenceCounts = new Map();
 
-                    // Helper for 64-bit FNV-1a deterministic hash (substantially collision-resistant and synchronous)
-                    const computeDeterministicHash64 = (str) => {
-                        let h1 = 0x811c9dc5;
-                        let h2 = 0x811c9dc5 ^ 0x5b79;
-                        for (let i = 0; i < str.length; i++) {
-                            const c = str.charCodeAt(i);
-                            h1 = Math.imul(h1 ^ c, 0x01000193);
-                            h2 = Math.imul(h2 ^ (c * 31), 0x01000193);
-                        }
-                        return (h1 >>> 0).toString(16).padStart(8, '0') + (h2 >>> 0).toString(16).padStart(8, '0');
+                    // Web Crypto SHA-256 deterministic hash helper with hex output
+                    const computeSha256Hex = async (canonicalStr) => {
+                        const encoder = new TextEncoder();
+                        const dataBuffer = encoder.encode(canonicalStr);
+                        const hashBuffer = await globalThis.crypto.subtle.digest('SHA-256', dataBuffer);
+                        return Array.from(new Uint8Array(hashBuffer))
+                            .map(b => b.toString(16).padStart(2, '0'))
+                            .join('');
                     };
 
                     for (const item of data.works) {
@@ -639,26 +638,52 @@ export class DataExportController {
                         const trimmedName = item.name.trim();
                         const trimmedDesc = typeof item.description === 'string' ? item.description.trim() : (item.description || '');
                         const trimmedLoc = typeof item.location === 'string' ? item.location.trim() : (item.location || '');
+                        const status = typeof item.status === 'string' ? item.status : 'folyamatban';
 
                         // 4. Stable ID generation:
                         // If explicit ID exists, use it.
-                        // If ID is omitted, construct a deterministic 64-bit identity incorporating content fields
-                        // and an occurrence index per file. This ensures:
-                        //   a) Re-importing the same ID-less file is idempotent and does not create duplicate entries.
-                        //   b) Identical duplicate items in the same file each get a distinct stable ID and are preserved.
-                        //   c) Different names, dates, or details do not collide.
+                        // If ID is omitted, construct a canonical serialization of all distinguishing content
+                        // fields (name, date, duration, status, description, location, plus extra metadata sorted alphabetically,
+                        // strictly excluding identity and volatile timestamps like id, created_at, updated_at).
+                        // Then hash with Web Crypto SHA-256.
+                        // An occurrence count per unique canonical content payload ensures that multiple identical duplicate
+                        // records within the same file each receive a stable, distinct ID and are both preserved.
                         //
                         // LIMITATION NOTE: Two otherwise completely indistinguishable records imported independently
-                        // across different files without IDs or distinguishing metadata cannot always be distinguished
+                        // across different files without IDs or distinguishing metadata cannot always be identified
                         // as separate real-world records.
                         let stableId = item.id ? String(item.id).trim() : null;
                         if (!stableId) {
-                            const contentFingerprint = `${trimmedName}|${item.date}|${dur}|${trimmedDesc}|${trimmedLoc}`;
-                            const occIndex = (idlessOccurrenceCounts.get(contentFingerprint) || 0) + 1;
-                            idlessOccurrenceCounts.set(contentFingerprint, occIndex);
+                            // Extract extra distinguishing metadata properties in sorted order
+                            const extraMeta = {};
+                            const sortedKeys = Object.keys(item).sort();
+                            for (const k of sortedKeys) {
+                                if (!excludedFromFingerprint.has(k) && !['name', 'date', 'duration', 'status', 'description', 'location'].includes(k)) {
+                                    extraMeta[k] = item[k];
+                                }
+                            }
 
-                            const hashKey = `${contentFingerprint}|#${occIndex}`;
-                            stableId = `imp-${computeDeterministicHash64(hashKey)}`;
+                            const canonicalPayloadObj = {
+                                name: trimmedName,
+                                date: item.date,
+                                duration: dur,
+                                status: status,
+                                description: trimmedDesc,
+                                location: trimmedLoc,
+                                extra: extraMeta
+                            };
+                            const canonicalFingerprintStr = JSON.stringify(canonicalPayloadObj);
+
+                            const occIndex = (idlessOccurrenceCounts.get(canonicalFingerprintStr) || 0) + 1;
+                            idlessOccurrenceCounts.set(canonicalFingerprintStr, occIndex);
+
+                            const hashInput = JSON.stringify({
+                                payload: canonicalPayloadObj,
+                                occurrenceIndex: occIndex
+                            });
+
+                            const shaHex = await computeSha256Hex(hashInput);
+                            stableId = `imp-${shaHex}`;
                         }
 
                         // 5. Preserve non-dangerous compatible metadata & legacy keys (e.g. _old_autoincrement_id)
@@ -678,7 +703,7 @@ export class DataExportController {
                             location: trimmedLoc,
                             date: item.date,
                             duration: dur,
-                            status: typeof item.status === 'string' ? item.status : 'folyamatban'
+                            status: status
                         };
 
                         // 7. Strictly validate created_at if present: reject malformed values, numbers, objects, and invalid date strings

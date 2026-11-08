@@ -35,7 +35,8 @@ export class WorkLogManager {
             return !isNaN(Date.parse(ts));
         };
 
-        if (workToSave.created_at !== undefined && workToSave.created_at !== null) {
+        // Distinguish omitted created_at from explicitly supplied null, non-string, or malformed values
+        if ('created_at' in workToSave && workToSave.created_at !== undefined) {
             if (!isValidIsoTimestamp(workToSave.created_at)) {
                 throw new Error('Érvénytelen created_at időbélyeg formátum.');
             }
@@ -90,10 +91,10 @@ export class WorkLogManager {
                         };
                         getReq.onerror = (e) => {
                             const err = e?.target?.error || new Error('Database read failure during transaction');
-                            if (_tx && typeof _tx.abort === 'function') {
+                            // Let the error event bubble to tx.onerror to abort and reject cleanly
+                            if (_tx && typeof _tx.abort === 'function' && _tx.error === null && _tx._state === 'active') {
                                 try { _tx.abort(); } catch (_) {}
                             }
-                            throw err;
                         };
                     }
                 });
