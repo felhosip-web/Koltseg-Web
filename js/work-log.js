@@ -23,23 +23,45 @@ export class WorkLogManager {
      * Save a work log entry
      */
     async save(work) {
-        if (!work.id) {
+        let workToSave = { ...work };
+        if (!workToSave.id) {
             // New entry - generate UUID
-            work.id = generateUUID();
-            work.created_at = new Date().toISOString();
+            workToSave.id = generateUUID();
+            workToSave.created_at = workToSave.created_at || new Date().toISOString();
+        } else {
+            // Editing existing entry - retrieve existing record to preserve created_at and unrelated metadata
+            let existing = null;
+            if (this.db && typeof this.db.get === 'function') {
+                try {
+                    existing = await this.db.get('works', workToSave.id);
+                } catch (e) {
+                    // Fallback to in-memory cache if db.get fails
+                    existing = (this.works || []).find(w => String(w.id) === String(workToSave.id));
+                }
+            } else {
+                existing = (this.works || []).find(w => String(w.id) === String(workToSave.id));
+            }
+
+            if (existing) {
+                workToSave = {
+                    ...existing,
+                    ...workToSave,
+                    created_at: workToSave.created_at !== undefined ? workToSave.created_at : existing.created_at
+                };
+            }
         }
-        work.updated_at = new Date().toISOString();
+        workToSave.updated_at = new Date().toISOString();
         
-        await this.db.save('works', work);
+        await this.db.save('works', workToSave);
         await this.load();
         if (this.syncService && typeof this.syncService.push === 'function') {
             try {
-                await this.syncService.push('works', work);
+                await this.syncService.push('works', workToSave);
             } catch (err) {
                 console.warn('[WorkLogManager] Nem sikerült a felhőbe szinkronizálni:', err);
             }
         }
-        return work;
+        return workToSave;
     }
 
     /**

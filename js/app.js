@@ -462,8 +462,14 @@ export class App {
 
     async submitWorkForm(event) {
         if (event?.preventDefault) event.preventDefault();
+        if (this._isSubmittingWork) {
+            console.warn('[App] Work form submission already in progress, ignoring duplicate submit');
+            return;
+        }
+        this._isSubmittingWork = true;
 
-        const idInput = document.getElementById('workIdInput');
+        try {
+            const idInput = document.getElementById('workIdInput');
         const nameInput = document.getElementById('workNameInput');
         const descInput = document.getElementById('workDescriptionInput');
         const locInput = document.getElementById('workLocationInput');
@@ -493,9 +499,13 @@ export class App {
 
         if (idInput && idInput.value) {
             workData.id = idInput.value;
+            // Also carry forward existing in-memory created_at if available
+            const existingMemory = (this.workLogManager?.works || []).find(w => String(w.id) === String(idInput.value));
+            if (existingMemory && existingMemory.created_at) {
+                workData.created_at = existingMemory.created_at;
+            }
         }
 
-        try {
             await this.workLogManager.save(workData);
             this.updateReactStore();
             this.closeWorkModal();
@@ -503,6 +513,8 @@ export class App {
         } catch (err) {
             console.error('[App] Hiba a munka mentése során:', err);
             this.hmiNotif?.showToast?.('❌ Hiba történt a mentés során: ' + err.message, 'error');
+        } finally {
+            this._isSubmittingWork = false;
         }
     }
 

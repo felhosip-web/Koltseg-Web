@@ -439,35 +439,30 @@ export class DataExportController {
     async exportWorkExcel() {
         this.app.setSystemStatus?.('Munka Excel generálása...', false);
         try {
-            const entries = this.app.incomings?.entries || [];
-            if (entries.length === 0) {
+            const works = this.app.workLogManager?.works || [];
+            if (works.length === 0) {
                 await this.app.hmiNotif.showInfo('Nincs adat', 'Nincs megjeleníthető munka adat az Excel exportáláshoz!');
                 return;
             }
 
             const wb = XLSX.utils.book_new();
             
-            const data = [['Dátum', 'Megrendelő / Cég', 'Munka Leírása', 'Óra', 'Óradíj (EUR)', 'Összeg (EUR)', 'Típus', 'Státusz']];
+            const data = [['Sorszám', 'Munka Neve', 'Leírás', 'Helyszín', 'Dátum', 'Időtartam (nap)', 'Státusz']];
             
-            entries.forEach(e => {
-                const totalEur = parseFloat(e.amount || 0);
-                const hrs = parseFloat(e.hours || 0);
-                const hrRate = hrs > 0 ? (totalEur / hrs).toFixed(2) : 0;
-                
+            works.forEach((w, idx) => {
                 data.push([
-                    e.date,
-                    e.sender,
-                    e.note || '',
-                    hrs,
-                    hrRate,
-                    totalEur,
-                    e.type === 'income' ? 'Egyéb Bevétel' : 'Munka / Óradíj',
-                    e.completed ? 'Fizetve' : 'Folyamatban'
+                    idx + 1,
+                    w.name || '',
+                    w.description || '',
+                    w.location || '',
+                    w.date || '',
+                    w.duration !== undefined ? w.duration : 1,
+                    w.status || 'folyamatban'
                 ]);
             });
 
             const sheet = XLSX.utils.aoa_to_sheet(data);
-            sheet['!cols'] = [{ wch: 12 }, { wch: 25 }, { wch: 40 }, { wch: 10 }, { wch: 12 }, { wch: 15 }, { wch: 20 }, { wch: 15 }];
+            sheet['!cols'] = [{ wch: 10 }, { wch: 28 }, { wch: 40 }, { wch: 20 }, { wch: 14 }, { wch: 16 }, { wch: 16 }];
             XLSX.utils.book_append_sheet(wb, sheet, 'Munka Nyilvántartás');
             
             const dateStr = new Date().toISOString().split('T')[0];
@@ -482,18 +477,19 @@ export class DataExportController {
     async exportWorkPdf() {
         this.app.setSystemStatus?.('Munka PDF generálása...', false);
         try {
-            const entries = this.app.incomings?.entries || [];
-            if (entries.length === 0) {
+            const works = this.app.workLogManager?.works || [];
+            if (works.length === 0) {
                 await this.app.hmiNotif.showInfo('Nincs adat', 'Nincs megjeleníthető munka adat a PDF exportáláshoz!');
                 return;
             }
 
-            if (!window.jspdf) {
+            const jspdfModule = (typeof window !== 'undefined' && window.jspdf) || (typeof globalThis !== 'undefined' && globalThis.jspdf);
+            if (!jspdfModule) {
                 await this.app.hmiNotif.showInfo('❌ Hiba', 'PDF generáló modul nincs betöltve!');
                 return;
             }
 
-            const { jsPDF } = window.jspdf;
+            const { jsPDF } = jspdfModule;
             const doc = new jsPDF('landscape');
             
             doc.addFont("https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.66/fonts/Roboto/Roboto-Regular.ttf", "Roboto", "normal");
@@ -505,24 +501,20 @@ export class DataExportController {
             const dateStr = new Date().toISOString().split('T')[0];
             doc.text(`Generálva: ${dateStr}`, 14, 22);
 
-            const tableData = entries.map(e => {
-                const totalEur = parseFloat(e.amount || 0);
-                const hrs = parseFloat(e.hours || 0);
-                const hrRate = hrs > 0 ? (totalEur / hrs).toFixed(2) : 0;
-                
+            const tableData = works.map((w, idx) => {
                 return [
-                    e.date,
-                    e.sender,
-                    e.note || '',
-                    hrs.toString(),
-                    hrRate.toString(),
-                    `${totalEur.toFixed(2)} EUR`,
-                    e.completed ? 'Fizetve' : 'Folyamatban'
+                    (idx + 1).toString(),
+                    w.name || '',
+                    (w.description || '').replace(/\n/g, ' '),
+                    w.location || '-',
+                    w.date || '-',
+                    `${w.duration !== undefined ? w.duration : 1} nap`,
+                    w.status || 'folyamatban'
                 ];
             });
 
             doc.autoTable({
-                head: [['Dátum', 'Cég', 'Leírás', 'Óra', 'Óradíj', 'Összesen', 'Státusz']],
+                head: [['#', 'Munka Neve', 'Leírás', 'Helyszín', 'Dátum', 'Időtartam', 'Státusz']],
                 body: tableData,
                 startY: 30,
                 styles: { font: "Roboto", fontSize: 9 },
@@ -540,9 +532,9 @@ export class DataExportController {
     async exportWorkJson() {
         try {
             const data = {
-                incomings: this.app.incomings?.entries || [],
+                works: this.app.workLogManager?.works || [],
                 exportDate: new Date().toISOString(),
-                version: '5.2.0'
+                version: '7.3.0'
             };
             const jsonStr = JSON.stringify(data, null, 2);
             const blob = new Blob([jsonStr], { type: 'application/json' });
@@ -572,28 +564,66 @@ export class DataExportController {
             const reader = new FileReader();
             reader.onload = async event => {
                 try {
-                    const data = JSON.parse(event.target.result);
-                    if (!data.incomings) {
-                        await this.app.hmiNotif.showInfo('Érvénytelen fájl', 'A kiválasztott JSON fájl nem tartalmaz Munka (incomings) adatokat!');
+                    let data;
+                    try {
+                        data = JSON.parse(event.target.result);
+                    } catch (parseErr) {
+                        await this.app.hmiNotif.showInfo('❌ Hiba', 'Hibás JSON fájl formátum!');
                         return;
                     }
-                    
-                    if (confirm(`Biztosan betöltesz ${data.incomings.length} munka adatot? (Ez felülírja a meglévő munka adatokat!)`)) {
-                        for (const item of data.incomings) {
-                            if (!item.id) item.id = this.app.uuid();
-                            const existing = this.app.incomings.entries.find(x => String(x.id) === String(item.id));
-                            if (!existing) {
-                                await this.app.incomings.add(item);
-                            } else {
-                                await this.app.incomings.update(item.id, item);
+
+                    if (!data || typeof data !== 'object' || !Array.isArray(data.works)) {
+                        await this.app.hmiNotif.showInfo('Érvénytelen fájl', 'A kiválasztott JSON fájl nem tartalmaz Munka (works) adatokat!');
+                        return;
+                    }
+
+                    if (data.works.length === 0) {
+                        await this.app.hmiNotif.showInfo('Üres adatállomány', 'A JSON fájl nem tartalmaz importálható munka bejegyzéseket.');
+                        return;
+                    }
+
+                    // Validate items before writing
+                    const validWorks = [];
+                    for (const item of data.works) {
+                        if (item && typeof item === 'object' && typeof item.name === 'string' && item.name.trim() !== '' && typeof item.date === 'string') {
+                            validWorks.push({
+                                id: item.id || (typeof this.app.uuid === 'function' ? this.app.uuid() : undefined),
+                                name: item.name.trim(),
+                                description: typeof item.description === 'string' ? item.description.trim() : '',
+                                location: typeof item.location === 'string' ? item.location.trim() : '',
+                                date: item.date,
+                                duration: item.duration !== undefined ? Number(item.duration) : 1,
+                                status: typeof item.status === 'string' ? item.status : 'folyamatban',
+                                created_at: item.created_at || new Date().toISOString(),
+                                updated_at: item.updated_at || new Date().toISOString()
+                            });
+                        }
+                    }
+
+                    if (validWorks.length === 0) {
+                        await this.app.hmiNotif.showInfo('Érvénytelen adatok', 'A fájlban található bejegyzések egyike sem érvényes munka bejegyzés!');
+                        return;
+                    }
+
+                    let shouldImport = true;
+                    if (typeof confirm === 'function') {
+                        shouldImport = confirm(`Biztosan betöltesz ${validWorks.length} munka adatot?`);
+                    }
+
+                    if (shouldImport) {
+                        let importedCount = 0;
+                        for (const item of validWorks) {
+                            if (this.app.workLogManager && typeof this.app.workLogManager.save === 'function') {
+                                await this.app.workLogManager.save(item);
+                                importedCount++;
                             }
                         }
-                        await this.app.hmiNotif.showInfo('Sikeres importálás', 'Munka adatok sikeresen betöltve!');
+                        await this.app.hmiNotif.showInfo('Sikeres importálás', `${importedCount} munka adat sikeresen betöltve!`);
                         this.app.updateReactStore?.();
                     }
                 } catch (err) {
                     console.error('Work JSON import error:', err);
-                    await this.app.hmiNotif.showInfo('❌ Hiba', 'Hibás JSON fájl formátum!');
+                    await this.app.hmiNotif.showInfo('❌ Hiba', 'Hiba történt az importálás során: ' + (err.message || 'Ismeretlen hiba'));
                 }
             };
             reader.readAsText(file);
