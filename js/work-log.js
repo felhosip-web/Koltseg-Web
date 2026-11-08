@@ -43,11 +43,17 @@ export class WorkLogManager {
             }
 
             if (existing) {
+                // The original persisted created_at value must take precedence over any timestamp supplied by an edited object
+                const originalCreatedAt = existing.created_at;
                 workToSave = {
                     ...existing,
-                    ...workToSave,
-                    created_at: workToSave.created_at !== undefined ? workToSave.created_at : existing.created_at
+                    ...workToSave
                 };
+                if (originalCreatedAt !== undefined) {
+                    workToSave.created_at = originalCreatedAt;
+                } else {
+                    delete workToSave.created_at;
+                }
             }
         }
         workToSave.updated_at = new Date().toISOString();
