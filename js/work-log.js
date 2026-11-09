@@ -29,15 +29,28 @@ export class WorkLogManager {
 
         let workToSave = { ...work };
 
-        // Timestamp validation helper: strictly check non-empty string and valid ISO date parse
-        const isValidIsoTimestamp = (ts) => {
+        // Strict ISO-8601 validation helper: regex format check + calendar & time limits
+        const isValidStrictIso8601 = (ts) => {
             if (typeof ts !== 'string' || ts.trim() === '') return false;
-            return !isNaN(Date.parse(ts));
+            const match = ts.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/);
+            if (!match) return false;
+            const year = parseInt(match[1], 10);
+            const month = parseInt(match[2], 10);
+            const day = parseInt(match[3], 10);
+            const hour = parseInt(match[4], 10);
+            const minute = parseInt(match[5], 10);
+            const second = parseInt(match[6], 10);
+            if (month < 1 || month > 12) return false;
+            if (hour > 23 || minute > 59 || second > 59) return false;
+            const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+            if (day < 1 || day > daysInMonth) return false;
+            const d = new Date(ts);
+            return !isNaN(d.getTime());
         };
 
         // Distinguish omitted created_at from explicitly supplied null, non-string, or malformed values
         if ('created_at' in workToSave && workToSave.created_at !== undefined) {
-            if (!isValidIsoTimestamp(workToSave.created_at)) {
+            if (!isValidStrictIso8601(workToSave.created_at)) {
                 throw new Error('Érvénytelen created_at időbélyeg formátum.');
             }
         }

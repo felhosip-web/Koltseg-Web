@@ -331,7 +331,7 @@ test('P1-1: Work Log JSON Import validates malformed JSON, invalid schema, and i
     assert.equal(reportedInfo?.title, 'Érvénytelen adatok');
     assert.equal(workLogManager.works.length, 1);
 
-    // Scenario E2: created_at timestamp validation (rejecting numbers, objects, and malformed date strings without converting to current timestamp)
+    // Scenario E2: created_at timestamp validation (rejecting null, numbers, objects, empty strings, and non-ISO date strings without converting to current timestamp)
     reportedInfo = null;
     exportController.importWorkJson();
     fileInputOnChange({
@@ -339,9 +339,14 @@ test('P1-1: Work Log JSON Import validates malformed JSON, invalid schema, and i
             files: [{
                 text: JSON.stringify({
                     works: [
+                        { name: 'Null CreatedAt', date: '2026-11-01', duration: 1, created_at: null },
+                        { name: 'Empty String CreatedAt', date: '2026-11-01', duration: 1, created_at: '' },
+                        { name: 'Whitespace CreatedAt', date: '2026-11-01', duration: 1, created_at: '   ' },
                         { name: 'Number CreatedAt', date: '2026-11-01', duration: 1, created_at: 123456789 },
                         { name: 'Object CreatedAt', date: '2026-11-01', duration: 1, created_at: { date: '2026-01-01' } },
-                        { name: 'Malformed Date CreatedAt', date: '2026-11-01', duration: 1, created_at: 'not-a-real-date' }
+                        { name: 'Malformed Date CreatedAt', date: '2026-11-01', duration: 1, created_at: 'not-a-real-date' },
+                        { name: 'Non-ISO Date Only CreatedAt', date: '2026-11-01', duration: 1, created_at: '2026-11-01' },
+                        { name: 'Impossible Date ISO CreatedAt', date: '2026-11-01', duration: 1, created_at: '2026-02-31T12:00:00Z' }
                     ]
                 })
             }]
@@ -576,6 +581,49 @@ test('P1-1: Work Log JSON Import validates malformed JSON, invalid schema, and i
     await new Promise(r => setTimeout(r, 25));
     assert.equal(reportedInfo?.title, 'Sikeres importálás');
     assert.equal(workLogManager.works.length, initialCountBeforeStatusMeta + 3, 'Re-importing status/metadata variants must be idempotent');
+
+    // Scenario L: Recursive canonical metadata serialization produces stable IDs regardless of object key order
+    const initialCountBeforeNested = workLogManager.works.length;
+    const nestedOrder1Payload = JSON.stringify({
+        works: [
+            {
+                name: 'Komplex Feladat',
+                date: '2026-11-10',
+                duration: 5,
+                nestedDetails: { zKey: 10, aKey: { innerB: [1, 2], innerA: 'test' } }
+            }
+        ]
+    });
+    const nestedOrder2Payload = JSON.stringify({
+        works: [
+            {
+                name: 'Komplex Feladat',
+                date: '2026-11-10',
+                duration: 5,
+                nestedDetails: { aKey: { innerA: 'test', innerB: [1, 2] }, zKey: 10 }
+            }
+        ]
+    });
+
+    reportedInfo = null;
+    exportController.importWorkJson();
+    fileInputOnChange({ target: { files: [{ text: nestedOrder1Payload }] } });
+    await new Promise(r => setTimeout(r, 25));
+    assert.equal(reportedInfo?.title, 'Sikeres importálás');
+    assert.equal(workLogManager.works.length, initialCountBeforeNested + 1);
+    const nestedItem1 = workLogManager.works.find(w => w.name === 'Komplex Feladat');
+    assert.ok(nestedItem1);
+    const originalGeneratedId = nestedItem1.id;
+
+    // Importing the second payload with differently ordered nested keys must yield the EXACT same ID and remain idempotent
+    reportedInfo = null;
+    exportController.importWorkJson();
+    fileInputOnChange({ target: { files: [{ text: nestedOrder2Payload }] } });
+    await new Promise(r => setTimeout(r, 25));
+    assert.equal(reportedInfo?.title, 'Sikeres importálás');
+    assert.equal(workLogManager.works.length, initialCountBeforeNested + 1, 'Different nested key order must not produce a duplicate record');
+    const nestedItem2 = workLogManager.works.find(w => w.name === 'Komplex Feladat');
+    assert.equal(nestedItem2.id, originalGeneratedId, 'Canonical recursion must yield identical SHA-256 ID');
 
     // Critical assertion: verify incomingManager financial ledger was never touched
     assert.equal(incomingManager.incomings.length, 1);
@@ -909,6 +957,39 @@ test('P1-3: WorkLogManager.save strictly preserves original persisted created_at
 
     assert.equal(updatedRecord2.created_at, initialCreatedAt, 'Persisted original created_at must take precedence over replacement');
 
+    // 3b. Test strict timestamp validation on edit & create: reject invalid formats, explicit null, non-strings
+    await assert.rejects(
+        () => workLogManager.save({
+            name: 'New with null created_at',
+            created_at: null
+        }),
+        /Érvénytelen created_at időbélyeg formátum/
+    );
+
+    await assert.rejects(
+        () => workLogManager.save({
+            name: 'New with number created_at',
+            created_at: 123456789
+        }),
+        /Érvénytelen created_at időbélyeg formátum/
+    );
+
+    await assert.rejects(
+        () => workLogManager.save({
+            name: 'New with impossible date',
+            created_at: '2026-02-31T12:00:00.000Z'
+        }),
+        /Érvénytelen created_at időbélyeg formátum/
+    );
+
+    await assert.rejects(
+        () => workLogManager.save({
+            name: 'New with date-only non-ISO',
+            created_at: '2026-11-08'
+        }),
+        /Érvénytelen created_at időbélyeg formátum/
+    );
+
     // 4. Test legacy record without created_at does NOT receive an invented historical timestamp
     const legacyRecord = {
         id: 'legacy-work-100',
@@ -1025,7 +1106,8 @@ test('P1-3: Native IndexedDB IDBRequest path and atomic transaction rollback in 
     assert.equal(persisted.created_at, initialCreatedAt);
 
     // 4. Verify genuine IDBRequest read error triggers IDBRequest.onerror, aborts transaction, and rejects save()
-    let idbOnErrorExecuted = false;
+    // We use the ACTUAL IDBRequest returned by real store.get() and induce a real transaction abort while pending.
+    let realIdbRequestOnErrorExecuted = false;
     const nativeDb = realDb.db;
     const origTransaction = nativeDb.transaction.bind(nativeDb);
     nativeDb.transaction = function (storeNames, mode) {
@@ -1034,21 +1116,16 @@ test('P1-3: Native IndexedDB IDBRequest path and atomic transaction rollback in 
         tx.objectStore = function (name) {
             const store = origObjectStore(name);
             if (name === 'works') {
-                store.get = function (_key) {
-                    const errReq = {
-                        result: undefined,
-                        error: new DOMException('Simulated IDB hardware read failure', 'DataError'),
-                        readyState: 'done',
-                        onsuccess: null,
-                        onerror: null
-                    };
-                    queueMicrotask(() => {
-                        idbOnErrorExecuted = true;
-                        if (typeof errReq.onerror === 'function') {
-                            errReq.onerror({ target: errReq });
-                        }
+                const origStoreGet = store.get.bind(store);
+                store.get = function (key) {
+                    // Return genuine IDBRequest from the real object store
+                    const realReq = origStoreGet(key);
+                    realReq.addEventListener('error', () => {
+                        realIdbRequestOnErrorExecuted = true;
                     });
-                    return errReq;
+                    // Induce a transaction abort while the request is pending
+                    tx.abort();
+                    return realReq;
                 };
             }
             return store;
@@ -1056,16 +1133,16 @@ test('P1-3: Native IndexedDB IDBRequest path and atomic transaction rollback in 
         return tx;
     };
 
-    // Attempting to edit 'created.id' must abort and reject because of IDBRequest read error
+    // Attempting to edit 'created.id' must abort and reject because of genuine IDBRequest read error
     await assert.rejects(
         () => workLogManager.save({
             id: created.id,
             name: 'Corrupted Read Name Change Attempt'
         }),
-        /Transaction aborted|Simulated IDB hardware read failure/
+        /Transaction aborted|A request was aborted/
     );
 
-    assert.equal(idbOnErrorExecuted, true, 'IDBRequest.onerror handler must be executed');
+    assert.equal(realIdbRequestOnErrorExecuted, true, 'Genuine IDBRequest error listener must be executed');
 
     // Restore original native transaction method
     nativeDb.transaction = origTransaction;
