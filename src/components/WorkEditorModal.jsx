@@ -1,8 +1,10 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { appService } from '../services/appService.js';
 
 export default function WorkEditorModal() {
     const nameInputRef = useRef(null);
+    const isSubmittingRef = useRef(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     const handleCancel = (e) => {
         e.preventDefault();
@@ -14,9 +16,17 @@ export default function WorkEditorModal() {
         appService.deleteWorkLog();
     };
 
-    const handleFormSubmit = (e) => {
+    const handleFormSubmit = async (e) => {
         e.preventDefault();
-        appService.submitWorkForm(e);
+        if (isSubmittingRef.current) return;
+        isSubmittingRef.current = true;
+        setIsSubmitting(true);
+        try {
+            await appService.submitWorkForm(e);
+        } finally {
+            isSubmittingRef.current = false;
+            setIsSubmitting(false);
+        }
     };
 
     useEffect(() => {
@@ -124,8 +134,9 @@ export default function WorkEditorModal() {
                         <button type="button" id="btnCancelWorkModal" onClick={handleCancel}
                             className="flex-1 py-3.5 border border-gray-200 rounded-2xl text-gray-600 hover:bg-gray-100 transition text-center uppercase tracking-wider">Bezárás</button>
                         <button type="submit" id="btnSaveWorkModal"
-                            className="flex-1 py-3.5 bg-emerald-600 text-white hover:bg-emerald-700 rounded-2xl transition text-center font-black uppercase tracking-wider shadow-inner flex items-center justify-center gap-2">
-                            <i className="fas fa-save"></i> Mentés
+                            disabled={isSubmitting}
+                            className={`flex-1 py-3.5 bg-emerald-600 text-white hover:bg-emerald-700 rounded-2xl transition text-center font-black uppercase tracking-wider shadow-inner flex items-center justify-center gap-2 ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                            <i className={isSubmitting ? "fas fa-spinner fa-spin" : "fas fa-save"}></i> {isSubmitting ? 'Mentés folyamatban...' : 'Mentés'}
                         </button>
                     </div>
                 </form>

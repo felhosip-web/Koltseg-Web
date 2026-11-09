@@ -650,7 +650,7 @@ export const appService = {
 
     submitWorkForm(event) {
         if (appInstance?.submitWorkForm) {
-            appInstance.submitWorkForm(event);
+            return appInstance.submitWorkForm(event);
         }
     },
 

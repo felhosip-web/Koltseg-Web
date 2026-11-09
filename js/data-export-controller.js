@@ -1,5 +1,20 @@
 // js/data-export-controller.js - Teljes Export funkciók (Excel, PDF, JSON)
 import { parseCellKey } from './utils/cell-key-utils.js';
+import { generateUUID } from './uuid-utils.js';
+
+function isValidCalendarDate(dateStr) {
+    if (typeof dateStr !== 'string') return false;
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr);
+    if (!match) return false;
+    const year = parseInt(match[1], 10);
+    const month = parseInt(match[2], 10);
+    const day = parseInt(match[3], 10);
+    if (month < 1 || month > 12 || day < 1 || day > 31) return false;
+    const dateObj = new Date(year, month - 1, day);
+    return dateObj.getFullYear() === year &&
+           dateObj.getMonth() === month - 1 &&
+           dateObj.getDate() === day;
+}
 
 export class DataExportController {
     /**
@@ -439,35 +454,30 @@ export class DataExportController {
     async exportWorkExcel() {
         this.app.setSystemStatus?.('Munka Excel generálása...', false);
         try {
-            const entries = this.app.incomings?.entries || [];
-            if (entries.length === 0) {
+            const works = this.app.workLogManager?.works || [];
+            if (works.length === 0) {
                 await this.app.hmiNotif.showInfo('Nincs adat', 'Nincs megjeleníthető munka adat az Excel exportáláshoz!');
                 return;
             }
 
             const wb = XLSX.utils.book_new();
             
-            const data = [['Dátum', 'Megrendelő / Cég', 'Munka Leírása', 'Óra', 'Óradíj (EUR)', 'Összeg (EUR)', 'Típus', 'Státusz']];
+            const data = [['Sorszám', 'Munka Neve', 'Leírás', 'Helyszín', 'Dátum', 'Időtartam (nap)', 'Státusz']];
             
-            entries.forEach(e => {
-                const totalEur = parseFloat(e.amount || 0);
-                const hrs = parseFloat(e.hours || 0);
-                const hrRate = hrs > 0 ? (totalEur / hrs).toFixed(2) : 0;
-                
+            works.forEach((w, idx) => {
                 data.push([
-                    e.date,
-                    e.sender,
-                    e.note || '',
-                    hrs,
-                    hrRate,
-                    totalEur,
-                    e.type === 'income' ? 'Egyéb Bevétel' : 'Munka / Óradíj',
-                    e.completed ? 'Fizetve' : 'Folyamatban'
+                    idx + 1,
+                    w.name || '',
+                    w.description || '',
+                    w.location || '',
+                    w.date || '',
+                    w.duration !== undefined ? w.duration : 1,
+                    w.status || 'folyamatban'
                 ]);
             });
 
             const sheet = XLSX.utils.aoa_to_sheet(data);
-            sheet['!cols'] = [{ wch: 12 }, { wch: 25 }, { wch: 40 }, { wch: 10 }, { wch: 12 }, { wch: 15 }, { wch: 20 }, { wch: 15 }];
+            sheet['!cols'] = [{ wch: 10 }, { wch: 28 }, { wch: 40 }, { wch: 20 }, { wch: 14 }, { wch: 16 }, { wch: 16 }];
             XLSX.utils.book_append_sheet(wb, sheet, 'Munka Nyilvántartás');
             
             const dateStr = new Date().toISOString().split('T')[0];
@@ -482,18 +492,19 @@ export class DataExportController {
     async exportWorkPdf() {
         this.app.setSystemStatus?.('Munka PDF generálása...', false);
         try {
-            const entries = this.app.incomings?.entries || [];
-            if (entries.length === 0) {
+            const works = this.app.workLogManager?.works || [];
+            if (works.length === 0) {
                 await this.app.hmiNotif.showInfo('Nincs adat', 'Nincs megjeleníthető munka adat a PDF exportáláshoz!');
                 return;
             }
 
-            if (!window.jspdf) {
+            const jspdfModule = (typeof window !== 'undefined' && window.jspdf) || (typeof globalThis !== 'undefined' && globalThis.jspdf);
+            if (!jspdfModule) {
                 await this.app.hmiNotif.showInfo('❌ Hiba', 'PDF generáló modul nincs betöltve!');
                 return;
             }
 
-            const { jsPDF } = window.jspdf;
+            const { jsPDF } = jspdfModule;
             const doc = new jsPDF('landscape');
             
             doc.addFont("https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.66/fonts/Roboto/Roboto-Regular.ttf", "Roboto", "normal");
@@ -505,24 +516,20 @@ export class DataExportController {
             const dateStr = new Date().toISOString().split('T')[0];
             doc.text(`Generálva: ${dateStr}`, 14, 22);
 
-            const tableData = entries.map(e => {
-                const totalEur = parseFloat(e.amount || 0);
-                const hrs = parseFloat(e.hours || 0);
-                const hrRate = hrs > 0 ? (totalEur / hrs).toFixed(2) : 0;
-                
+            const tableData = works.map((w, idx) => {
                 return [
-                    e.date,
-                    e.sender,
-                    e.note || '',
-                    hrs.toString(),
-                    hrRate.toString(),
-                    `${totalEur.toFixed(2)} EUR`,
-                    e.completed ? 'Fizetve' : 'Folyamatban'
+                    (idx + 1).toString(),
+                    w.name || '',
+                    (w.description || '').replace(/\n/g, ' '),
+                    w.location || '-',
+                    w.date || '-',
+                    `${w.duration !== undefined ? w.duration : 1} nap`,
+                    w.status || 'folyamatban'
                 ];
             });
 
             doc.autoTable({
-                head: [['Dátum', 'Cég', 'Leírás', 'Óra', 'Óradíj', 'Összesen', 'Státusz']],
+                head: [['#', 'Munka Neve', 'Leírás', 'Helyszín', 'Dátum', 'Időtartam', 'Státusz']],
                 body: tableData,
                 startY: 30,
                 styles: { font: "Roboto", fontSize: 9 },
@@ -540,9 +547,9 @@ export class DataExportController {
     async exportWorkJson() {
         try {
             const data = {
-                incomings: this.app.incomings?.entries || [],
+                works: this.app.workLogManager?.works || [],
                 exportDate: new Date().toISOString(),
-                version: '5.2.0'
+                version: '7.3.0'
             };
             const jsonStr = JSON.stringify(data, null, 2);
             const blob = new Blob([jsonStr], { type: 'application/json' });
@@ -572,28 +579,233 @@ export class DataExportController {
             const reader = new FileReader();
             reader.onload = async event => {
                 try {
-                    const data = JSON.parse(event.target.result);
-                    if (!data.incomings) {
-                        await this.app.hmiNotif.showInfo('Érvénytelen fájl', 'A kiválasztott JSON fájl nem tartalmaz Munka (incomings) adatokat!');
+                    let data;
+                    try {
+                        data = JSON.parse(event.target.result);
+                    } catch (parseErr) {
+                        await this.app.hmiNotif.showInfo('❌ Hiba', 'Hibás JSON fájl formátum!');
                         return;
                     }
-                    
-                    if (confirm(`Biztosan betöltesz ${data.incomings.length} munka adatot? (Ez felülírja a meglévő munka adatokat!)`)) {
-                        for (const item of data.incomings) {
-                            if (!item.id) item.id = this.app.uuid();
-                            const existing = this.app.incomings.entries.find(x => String(x.id) === String(item.id));
-                            if (!existing) {
-                                await this.app.incomings.add(item);
-                            } else {
-                                await this.app.incomings.update(item.id, item);
+
+                    if (!data || typeof data !== 'object' || !Array.isArray(data.works)) {
+                        await this.app.hmiNotif.showInfo('Érvénytelen fájl', 'A kiválasztott JSON fájl nem tartalmaz Munka (works) adatokat!');
+                        return;
+                    }
+
+                    if (data.works.length === 0) {
+                        await this.app.hmiNotif.showInfo('Üres adatállomány', 'A JSON fájl nem tartalmaz importálható munka bejegyzéseket.');
+                        return;
+                    }
+
+                    // Validate items before writing
+                    const validWorks = [];
+                    const dangerousKeys = new Set(['__proto__', 'constructor', 'prototype']);
+                    const excludedFromFingerprint = new Set(['id', 'created_at', 'updated_at', '__proto__', 'constructor', 'prototype']);
+                    const idlessOccurrenceCounts = new Map();
+
+                    // Recursive canonical serialization helper: recursively sorts object keys while preserving array element order
+                    const canonicalizeValue = (val) => {
+                        if (val === null || typeof val !== 'object') {
+                            return val;
+                        }
+                        if (Array.isArray(val)) {
+                            return val.map(canonicalizeValue);
+                        }
+                        const sortedObj = {};
+                        const keys = Object.keys(val).sort();
+                        for (const k of keys) {
+                            sortedObj[k] = canonicalizeValue(val[k]);
+                        }
+                        return sortedObj;
+                    };
+
+                    // Web Crypto SHA-256 deterministic hash helper with hex output
+                    const computeSha256Hex = async (canonicalStr) => {
+                        const encoder = new TextEncoder();
+                        const dataBuffer = encoder.encode(canonicalStr);
+                        const hashBuffer = await globalThis.crypto.subtle.digest('SHA-256', dataBuffer);
+                        return Array.from(new Uint8Array(hashBuffer))
+                            .map(b => b.toString(16).padStart(2, '0'))
+                            .join('');
+                    };
+
+                    for (const item of data.works) {
+                        if (!item || typeof item !== 'object') continue;
+
+                        // 1. Name validation
+                        if (typeof item.name !== 'string' || item.name.trim() === '') continue;
+
+                        // 2. Strict calendar date validation
+                        if (!isValidCalendarDate(item.date)) continue;
+
+                        // 3. Duration validation: reject NaN, Infinity, -Infinity, non-integers, zero, and negative values
+                        let dur = item.duration;
+                        if (dur !== undefined && dur !== null) {
+                            if (typeof dur === 'string' && dur.trim() !== '') {
+                                dur = Number(dur);
+                            }
+                            if (typeof dur !== 'number' || !Number.isInteger(dur) || dur < 1) {
+                                continue;
+                            }
+                        } else {
+                            dur = 1;
+                        }
+
+                        const trimmedName = item.name.trim();
+                        const trimmedDesc = typeof item.description === 'string' ? item.description.trim() : (item.description || '');
+                        const trimmedLoc = typeof item.location === 'string' ? item.location.trim() : (item.location || '');
+                        const status = typeof item.status === 'string' ? item.status : 'folyamatban';
+
+                        // 4. Stable ID generation:
+                        // If explicit ID exists, use it.
+                        // If ID is omitted, construct a canonical serialization of all distinguishing content
+                        // fields (name, date, duration, status, description, location, plus extra metadata sorted alphabetically,
+                        // strictly excluding identity and volatile timestamps like id, created_at, updated_at).
+                        // Then hash with Web Crypto SHA-256.
+                        // An occurrence count per unique canonical content payload ensures that multiple identical duplicate
+                        // records within the same file each receive a stable, distinct ID and are both preserved.
+                        //
+                        // LIMITATION NOTE: Two otherwise completely indistinguishable records imported independently
+                        // across different files without IDs or distinguishing metadata cannot always be identified
+                        // as separate real-world records.
+                        let stableId = item.id ? String(item.id).trim() : null;
+                        if (!stableId) {
+                            // Extract extra distinguishing metadata properties in sorted order
+                            const extraMeta = {};
+                            const sortedKeys = Object.keys(item).sort();
+                            for (const k of sortedKeys) {
+                                if (!excludedFromFingerprint.has(k) && !['name', 'date', 'duration', 'status', 'description', 'location'].includes(k)) {
+                                    extraMeta[k] = item[k];
+                                }
+                            }
+
+                            const canonicalPayloadObj = {
+                                name: trimmedName,
+                                date: item.date,
+                                duration: dur,
+                                status: status,
+                                description: trimmedDesc,
+                                location: trimmedLoc,
+                                extra: canonicalizeValue(extraMeta)
+                            };
+                            const canonicalFingerprintStr = JSON.stringify(canonicalPayloadObj);
+
+                            const occIndex = (idlessOccurrenceCounts.get(canonicalFingerprintStr) || 0) + 1;
+                            idlessOccurrenceCounts.set(canonicalFingerprintStr, occIndex);
+
+                            const hashInput = JSON.stringify({
+                                payload: canonicalPayloadObj,
+                                occurrenceIndex: occIndex
+                            });
+
+                            const shaHex = await computeSha256Hex(hashInput);
+                            stableId = `imp-${shaHex}`;
+                        }
+
+                        // 5. Preserve non-dangerous compatible metadata & legacy keys (e.g. _old_autoincrement_id)
+                        const safeMetadata = {};
+                        for (const key of Object.keys(item)) {
+                            if (!dangerousKeys.has(key)) {
+                                safeMetadata[key] = item[key];
                             }
                         }
-                        await this.app.hmiNotif.showInfo('Sikeres importálás', 'Munka adatok sikeresen betöltve!');
+
+                        // 6. Assemble normalized record, protecting core attributes from raw override
+                        const normalizedRecord = {
+                            ...safeMetadata,
+                            id: stableId,
+                            name: trimmedName,
+                            description: trimmedDesc,
+                            location: trimmedLoc,
+                            date: item.date,
+                            duration: dur,
+                            status: status
+                        };
+
+                        // 7. Strictly validate created_at if present:
+                        // Distinguish missing created_at property from explicitly supplied null, non-string, or malformed value.
+                        // If explicitly present in imported JSON, reject invalid/null/malformed values completely.
+                        if ('created_at' in item) {
+                            if (item.created_at !== undefined) {
+                                if (typeof item.created_at !== 'string' || item.created_at.trim() === '') {
+                                    continue;
+                                }
+                                const match = item.created_at.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/);
+                                if (!match) {
+                                    continue;
+                                }
+                                const year = parseInt(match[1], 10);
+                                const month = parseInt(match[2], 10);
+                                const day = parseInt(match[3], 10);
+                                const hour = parseInt(match[4], 10);
+                                const minute = parseInt(match[5], 10);
+                                const second = parseInt(match[6], 10);
+                                if (month < 1 || month > 12) continue;
+                                if (hour > 23 || minute > 59 || second > 59) continue;
+                                const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+                                if (day < 1 || day > daysInMonth) continue;
+                                const d = new Date(item.created_at);
+                                if (isNaN(d.getTime())) continue;
+
+                                normalizedRecord.created_at = item.created_at;
+                            }
+                        }
+
+                        validWorks.push(normalizedRecord);
+                    }
+
+                    if (validWorks.length === 0) {
+                        await this.app.hmiNotif.showInfo('Érvénytelen adatok', 'A fájlban található bejegyzések egyike sem érvényes munka bejegyzés!');
+                        return;
+                    }
+
+                    let shouldImport = true;
+                    if (typeof confirm === 'function') {
+                        shouldImport = confirm(`Biztosan betöltesz ${validWorks.length} munka adatot?`);
+                    }
+
+                    if (shouldImport) {
+                        let importedCount = 0;
+                        const failedRecords = [];
+
+                        for (const item of validWorks) {
+                            if (this.app.workLogManager && typeof this.app.workLogManager.save === 'function') {
+                                try {
+                                    await this.app.workLogManager.save(item);
+                                    importedCount++;
+                                } catch (saveErr) {
+                                    console.error(`[WorkLogImport] Hiba a rekord (${item.name || item.id}) mentésekor:`, saveErr);
+                                    failedRecords.push({
+                                        id: item.id,
+                                        name: item.name,
+                                        error: saveErr?.message || 'Ismeretlen mentési hiba'
+                                    });
+                                }
+                            }
+                        }
+
+                        if (failedRecords.length === 0) {
+                            await this.app.hmiNotif.showInfo('Sikeres importálás', `${importedCount} munka adat sikeresen betöltve!`);
+                        } else if (importedCount > 0) {
+                            const errDetails = failedRecords.slice(0, 5).map(f => `• ${f.name || f.id}: ${f.error}`).join('\n');
+                            const moreMsg = failedRecords.length > 5 ? `\n...és további ${failedRecords.length - 5} hiba.` : '';
+                            await this.app.hmiNotif.showInfo(
+                                'Részleges importálás',
+                                `${importedCount} sikeres, ${failedRecords.length} sikertelen a(z) ${validWorks.length} tételből.\nHibák:\n${errDetails}${moreMsg}`
+                            );
+                        } else {
+                            const errDetails = failedRecords.slice(0, 5).map(f => `• ${f.name || f.id}: ${f.error}`).join('\n');
+                            await this.app.hmiNotif.showInfo(
+                                'Importálási hiba',
+                                `Egyetlen munka adatot sem sikerült importálni (${failedRecords.length} hiba).\nHibák:\n${errDetails}`
+                            );
+                        }
+
                         this.app.updateReactStore?.();
                     }
                 } catch (err) {
                     console.error('Work JSON import error:', err);
-                    await this.app.hmiNotif.showInfo('❌ Hiba', 'Hibás JSON fájl formátum!');
+                    await this.app.hmiNotif.showInfo('❌ Hiba', 'Hiba történt az importálás során: ' + (err.message || 'Ismeretlen hiba'));
                 }
             };
             reader.readAsText(file);
