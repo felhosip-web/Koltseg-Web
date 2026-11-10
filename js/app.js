@@ -39,6 +39,7 @@ import { setupDebugConsole, initDebugPanel } from './debug-panel.js';
 import { LogManager } from './log-manager.js';
 import { SecurityGuard } from './security-guard.js';
 import { WorkLogManager } from './work-log.js';
+import { validateWorkRecord, validateWorkDuration, isValidCalendarDate } from './utils/work-validation.js';
 import { GoogleDriveBackup } from './gdrive-backup.js';
 import { ModalManager } from './modal-manager.js';
 import { ModuleManager } from './module-manager.js';
@@ -488,12 +489,25 @@ export class App {
             return;
         }
 
+        const dateValue = (dateInput.value || '').trim();
+        if (!isValidCalendarDate(dateValue)) {
+            this.hmiNotif?.showToast?.('⚠️ Kérjük, adjon meg érvényes dátumot!', 'warning');
+            return;
+        }
+
+        const rawDur = durInput ? durInput.value : '';
+        const durValidation = validateWorkDuration(rawDur, { allowNumericString: true });
+        if (!durValidation.valid) {
+            this.hmiNotif?.showToast?.(`⚠️ ${durValidation.error}`, 'warning');
+            return;
+        }
+
         const workData = {
             name: nameValue,
             description: (descInput ? descInput.value : '').trim(),
             location: (locInput ? locInput.value : '').trim(),
-            date: dateInput.value,
-            duration: Number(durInput ? durInput.value : 1) || 1,
+            date: dateValue,
+            duration: durValidation.value,
             status: statusInput ? statusInput.value : 'folyamatban'
         };
 
@@ -504,6 +518,13 @@ export class App {
             if (existingMemory && existingMemory.created_at) {
                 workData.created_at = existingMemory.created_at;
             }
+        }
+
+        // Validate complete domain record
+        const recordValidation = validateWorkRecord(workData);
+        if (!recordValidation.valid) {
+            this.hmiNotif?.showToast?.(`⚠️ ${recordValidation.error}`, 'warning');
+            return;
         }
 
             await this.workLogManager.save(workData);

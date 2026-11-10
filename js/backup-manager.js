@@ -1,5 +1,6 @@
 // js/backup-manager.js
 //Backup kezelés
+import { validateWorkRecord } from './utils/work-validation.js';
 
 export class BackupManager {
     constructor(app) {
@@ -127,6 +128,20 @@ export class BackupManager {
         if (!confirmed) return;
         
         try {
+            // Validate complete works section BEFORE beginning any destructive database transactions
+            if (backupData.works !== undefined && backupData.works !== null) {
+                if (!Array.isArray(backupData.works)) {
+                    throw new Error('A backup works szekciója érvénytelen (tömb szükséges)!');
+                }
+                for (let i = 0; i < backupData.works.length; i++) {
+                    const item = backupData.works[i];
+                    const valRes = validateWorkRecord(item);
+                    if (!valRes.valid) {
+                        throw new Error(`Érvénytelen munka bejegyzés a backupban (#${i + 1}): ${valRes.error}`);
+                    }
+                }
+            }
+
             this.app.setSystemStatus?.('Backup visszaállítása...', true);
             
             const dbRaw = this.app.db?.db || this.app.db?._db;

@@ -1,20 +1,7 @@
 // js/data-export-controller.js - Teljes Export funkciók (Excel, PDF, JSON)
 import { parseCellKey } from './utils/cell-key-utils.js';
 import { generateUUID } from './uuid-utils.js';
-
-function isValidCalendarDate(dateStr) {
-    if (typeof dateStr !== 'string') return false;
-    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr);
-    if (!match) return false;
-    const year = parseInt(match[1], 10);
-    const month = parseInt(match[2], 10);
-    const day = parseInt(match[3], 10);
-    if (month < 1 || month > 12 || day < 1 || day > 31) return false;
-    const dateObj = new Date(year, month - 1, day);
-    return dateObj.getFullYear() === year &&
-           dateObj.getMonth() === month - 1 &&
-           dateObj.getDate() === day;
-}
+import { validateWorkRecord, isValidCalendarDate } from './utils/work-validation.js';
 
 export class DataExportController {
     /**
@@ -246,6 +233,20 @@ export class DataExportController {
     }
 
     async _performImport(data) {
+        // Validate works section before starting destructive readwrite transaction
+        if (data.works !== undefined && data.works !== null) {
+            if (!Array.isArray(data.works)) {
+                throw new Error('A backup works szekciója érvénytelen (tömb szükséges)!');
+            }
+            for (let i = 0; i < data.works.length; i++) {
+                const item = data.works[i];
+                const valRes = validateWorkRecord(item);
+                if (!valRes.valid) {
+                    throw new Error(`Érvénytelen munka bejegyzés a backupban (#${i + 1}): ${valRes.error}`);
+                }
+            }
+        }
+
         const dbRaw = this.app.db.db || this.app.db._db;
         if (!dbRaw) throw new Error('Nincs adatbázis kapcsolat!');
 

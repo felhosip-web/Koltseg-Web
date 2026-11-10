@@ -1,5 +1,6 @@
 // js/work-log.js - v5.2.0 - Munka nyilvántartó modul (UUID)
 import { generateUUID } from './uuid-utils.js';
+import { validateWorkRecord } from './utils/work-validation.js';
 
 export class WorkLogManager {
     constructor(db, syncService) {
@@ -13,8 +14,27 @@ export class WorkLogManager {
      */
     async load() {
         const loadedWorks = await this.db.getAll('works') || [];
-        // Sort works by created_at timestamp (newer first for display, but keep stable order)
-        loadedWorks.sort((a, b) => (a.created_at || '').localeCompare(b.created_at || ''));
+        // Sort works newest first: created_at descending (when timestamps exist).
+        // For equal created_at timestamps, tie-break by date descending, then ID.
+        // If neither record has created_at (legacy records), preserve stable ID ordering.
+        loadedWorks.sort((a, b) => {
+            const aCreated = a.created_at || '';
+            const bCreated = b.created_at || '';
+            if (aCreated && bCreated) {
+                const cmp = bCreated.localeCompare(aCreated);
+                if (cmp !== 0) return cmp;
+                const aDate = a.date || '';
+                const bDate = b.date || '';
+                if (aDate !== bDate) {
+                    return bDate.localeCompare(aDate);
+                }
+            } else if (bCreated) {
+                return 1;
+            } else if (aCreated) {
+                return -1;
+            }
+            return String(a.id || '').localeCompare(String(b.id || ''));
+        });
         this.works = loadedWorks;
         return this.works;
     }
@@ -23,37 +43,13 @@ export class WorkLogManager {
      * Save a work log entry
      */
     async save(work) {
-        if (!work || typeof work !== 'object') {
-            throw new Error('Érvénytelen munka bejegyzés adat.');
+        // Validate domain rules via centralized validator
+        const validation = validateWorkRecord(work);
+        if (!validation.valid) {
+            throw new Error(`[WorkLogManager] ${validation.error}`);
         }
 
-        let workToSave = { ...work };
-
-        // Strict ISO-8601 validation helper: regex format check + calendar & time limits
-        const isValidStrictIso8601 = (ts) => {
-            if (typeof ts !== 'string' || ts.trim() === '') return false;
-            const match = ts.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/);
-            if (!match) return false;
-            const year = parseInt(match[1], 10);
-            const month = parseInt(match[2], 10);
-            const day = parseInt(match[3], 10);
-            const hour = parseInt(match[4], 10);
-            const minute = parseInt(match[5], 10);
-            const second = parseInt(match[6], 10);
-            if (month < 1 || month > 12) return false;
-            if (hour > 23 || minute > 59 || second > 59) return false;
-            const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
-            if (day < 1 || day > daysInMonth) return false;
-            const d = new Date(ts);
-            return !isNaN(d.getTime());
-        };
-
-        // Distinguish omitted created_at from explicitly supplied null, non-string, or malformed values
-        if ('created_at' in workToSave && workToSave.created_at !== undefined) {
-            if (!isValidStrictIso8601(workToSave.created_at)) {
-                throw new Error('Érvénytelen created_at időbélyeg formátum.');
-            }
-        }
+        let workToSave = { ...validation.sanitizedRecord };
 
         if (!workToSave.id) {
             // New entry - generate UUID and assign valid current created_at if not provided
