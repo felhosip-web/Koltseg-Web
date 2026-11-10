@@ -108,8 +108,8 @@ test('P1-1: Work Log Export operations target workLogManager and preserve financ
     globalThis.localStorage = dom.window.localStorage;
 
     const mockWorks = [
-        { id: 'w1', name: 'Munka 1', description: 'Leírás 1', location: 'Budapest', date: '2026-11-01', duration: 2, status: 'folyamatban' },
-        { id: 'w2', name: 'Munka 2', description: 'Leírás 2', location: 'Debrecen', date: '2026-11-02', duration: 1, status: 'elvégzett' }
+        { id: 'w1', name: 'Munka 1', description: 'Leírás 1', location: 'Budapest', date: '2026-11-02', duration: 2, status: 'folyamatban' },
+        { id: 'w2', name: 'Munka 2', description: 'Leírás 2', location: 'Debrecen', date: '2026-11-01', duration: 1, status: 'elvégzett' }
     ];
 
     const db = createMockDb(mockWorks);

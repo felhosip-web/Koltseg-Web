@@ -233,54 +233,83 @@ export class DataExportController {
     }
 
     async _performImport(data) {
-        // Validate works section before starting destructive readwrite transaction
-        if (data.works !== undefined && data.works !== null) {
+        // Reject explicitly null works property
+        if (data.works === null) {
+            throw new Error('A backup works szekciója érvénytelen (null nem megengedett)!');
+        }
+
+        // Validate complete works section and check duplicate IDs before starting destructive readwrite transaction
+        let shouldRestoreWorks = false;
+        let validatedWorks = [];
+        if (data.works !== undefined) {
             if (!Array.isArray(data.works)) {
                 throw new Error('A backup works szekciója érvénytelen (tömb szükséges)!');
             }
+            const seenIds = new Set();
             for (let i = 0; i < data.works.length; i++) {
                 const item = data.works[i];
                 const valRes = validateWorkRecord(item, { requireComplete: true });
                 if (!valRes.valid) {
                     throw new Error(`Érvénytelen munka bejegyzés a backupban (#${i + 1}): ${valRes.error}`);
                 }
+                if (seenIds.has(item.id)) {
+                    throw new Error(`Duplikált munka azonosító a backupban: ${item.id}`);
+                }
+                seenIds.add(item.id);
+                validatedWorks.push(valRes.sanitizedRecord);
             }
+            shouldRestoreWorks = true;
         }
 
         const dbRaw = this.app.db.db || this.app.db._db;
         if (!dbRaw) throw new Error('Nincs adatbázis kapcsolat!');
 
-        const tx = dbRaw.transaction([
+        const activeStores = [
             'items',
             'months',
             'entries',
             'templates',
             'reminders',
             'incomings',
-            'incoming_senders',
-            'works'
-        ], 'readwrite');
+            'incoming_senders'
+        ];
+        if (shouldRestoreWorks) {
+            activeStores.push('works');
+        }
 
-        tx.objectStore('items').clear();
-        tx.objectStore('months').clear();
-        tx.objectStore('entries').clear();
-        tx.objectStore('templates').clear();
-        tx.objectStore('reminders').clear();
-        tx.objectStore('incomings').clear();
-        tx.objectStore('incoming_senders').clear();
-        tx.objectStore('works').clear();
+        const tx = dbRaw.transaction(activeStores, 'readwrite');
 
-        data.items?.forEach(item => tx.objectStore('items').put(item));
-        data.months?.forEach(m => {
-            if (typeof m === 'string') tx.objectStore('months').put({ month: m });
-            else tx.objectStore('months').put(m);
-        });
-        data.entries?.forEach(entry => tx.objectStore('entries').put(entry));
-        data.templates?.forEach(tpl => tx.objectStore('templates').put(tpl));
-        data.reminders?.forEach(rem => tx.objectStore('reminders').put(rem));
-        data.incomings?.forEach(incoming => tx.objectStore('incomings').put(incoming));
-        data.incoming_senders?.forEach(sender => tx.objectStore('incoming_senders').put(sender));
-        data.works?.forEach(work => tx.objectStore('works').put(work));
+        try {
+            tx.objectStore('items').clear();
+            tx.objectStore('months').clear();
+            tx.objectStore('entries').clear();
+            tx.objectStore('templates').clear();
+            tx.objectStore('reminders').clear();
+            tx.objectStore('incomings').clear();
+            tx.objectStore('incoming_senders').clear();
+            if (shouldRestoreWorks) {
+                tx.objectStore('works').clear();
+            }
+
+            data.items?.forEach(item => tx.objectStore('items').put(item));
+            data.months?.forEach(m => {
+                if (typeof m === 'string') tx.objectStore('months').put({ month: m });
+                else tx.objectStore('months').put(m);
+            });
+            data.entries?.forEach(entry => tx.objectStore('entries').put(entry));
+            data.templates?.forEach(tpl => tx.objectStore('templates').put(tpl));
+            data.reminders?.forEach(rem => tx.objectStore('reminders').put(rem));
+            data.incomings?.forEach(incoming => tx.objectStore('incomings').put(incoming));
+            data.incoming_senders?.forEach(sender => tx.objectStore('incoming_senders').put(sender));
+            if (shouldRestoreWorks) {
+                validatedWorks.forEach(work => tx.objectStore('works').put(work));
+            }
+        } catch (syncPutErr) {
+            if (typeof tx.abort === 'function') {
+                try { tx.abort(); } catch (_) {}
+            }
+            throw syncPutErr;
+        }
 
         await new Promise((resolve, reject) => {
             tx.oncomplete = resolve;

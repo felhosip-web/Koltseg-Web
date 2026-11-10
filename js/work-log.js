@@ -14,25 +14,39 @@ export class WorkLogManager {
      */
     async load() {
         const loadedWorks = await this.db.getAll('works') || [];
-        // Sort works newest first: created_at descending (when timestamps exist).
-        // For equal created_at timestamps, tie-break by date descending, then ID.
-        // If neither record has created_at (legacy records), preserve stable ID ordering.
+        // Sort works newest first by chronological instant:
+        // Parse created_at timestamps into epoch milliseconds so differences across timezones
+        // (e.g. UTC vs +02:00) sort accurately by actual point in time.
+        // If created_at timestamps represent the same instant or are missing/null,
+        // tie-break by date descending, then by deterministic ID ordering.
+        const parseInstant = (ts) => {
+            if (!ts || typeof ts !== 'string') return null;
+            const time = Date.parse(ts);
+            return isNaN(time) ? null : time;
+        };
+
         loadedWorks.sort((a, b) => {
-            const aCreated = a.created_at || '';
-            const bCreated = b.created_at || '';
-            if (aCreated && bCreated) {
-                const cmp = bCreated.localeCompare(aCreated);
-                if (cmp !== 0) return cmp;
-                const aDate = a.date || '';
-                const bDate = b.date || '';
-                if (aDate !== bDate) {
-                    return bDate.localeCompare(aDate);
+            const aInstant = parseInstant(a.created_at);
+            const bInstant = parseInstant(b.created_at);
+
+            if (aInstant !== null && bInstant !== null) {
+                if (bInstant !== aInstant) {
+                    return bInstant - aInstant; // Newest instant first
                 }
-            } else if (bCreated) {
+            } else if (bInstant !== null) {
                 return 1;
-            } else if (aCreated) {
+            } else if (aInstant !== null) {
                 return -1;
             }
+
+            // Both timestamps equal, invalid, or absent:
+            // Tie-break by work date descending, then by deterministic ID ordering.
+            const aDate = a.date || '';
+            const bDate = b.date || '';
+            if (aDate !== bDate) {
+                return bDate.localeCompare(aDate);
+            }
+
             return String(a.id || '').localeCompare(String(b.id || ''));
         });
         this.works = loadedWorks;

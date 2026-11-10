@@ -119,23 +119,38 @@ export function validateWorkRecord(work, options = {}) {
         return { valid: false, error: 'Tiltott objektum kulcs: prototípus tulajdonság észlelve.' };
     }
 
-    // 1. Optional created_at (checked first to preserve strict ISO timestamp error precedence)
+    // In complete record mode: ID must be a non-empty string
+    if (requireComplete) {
+        if (typeof work.id !== 'string' || work.id.trim() === '') {
+            return { valid: false, error: 'A munka azonosító (id) kötelező és nem lehet üres.' };
+        }
+    }
+
+    // 1. Optional created_at:
+    // If explicitly passed (even as null, number, or invalid string), strictly validate ISO format.
+    // In complete-record mode or when normalizing persisted records, null timestamps are treated consistently as absent.
     if ('created_at' in work && work.created_at !== undefined) {
         if (!isValidStrictIso8601(work.created_at)) {
             return { valid: false, error: 'Érvénytelen created_at időbélyeg formátum.' };
         }
     }
 
-    // 2. Optional updated_at
+    // 2. Optional updated_at:
+    // If non-null, strictly validate ISO format.
+    // If explicitly null, treat consistently as absent.
     if ('updated_at' in work && work.updated_at !== undefined) {
-        if (!isValidStrictIso8601(work.updated_at)) {
+        if (work.updated_at !== null && !isValidStrictIso8601(work.updated_at)) {
             return { valid: false, error: 'Érvénytelen updated_at időbélyeg formátum.' };
         }
     }
 
-    // 3. Work Name
-    if (typeof work.name !== 'string' || work.name.trim() === '') {
-        return { valid: false, error: 'A munka neve kötelező és nem lehet üres.' };
+    // 3. Work Name:
+    // In complete-record mode or new records: must be non-empty string.
+    // In partial-update mode: if omitted, allowed (preserved by atomic merge). If provided, must be non-empty string.
+    if (requireComplete || !work.id || 'name' in work) {
+        if (typeof work.name !== 'string' || work.name.trim() === '') {
+            return { valid: false, error: 'A munka neve kötelező és nem lehet üres.' };
+        }
     }
 
     // 4. Work Date:
@@ -164,7 +179,7 @@ export function validateWorkRecord(work, options = {}) {
     //   - Explicit null or undefined (when key is present) is rejected.
     //   - If defined, must be valid positive integer <= MAX_WORK_DURATION.
     //   - If creating new entry without duration, defaults to 1.
-    let durVal = work.duration;
+    let durVal = undefined;
     if (requireComplete) {
         if (work.duration === undefined || work.duration === null) {
             return { valid: false, error: 'Az időtartam kötelező.' };
@@ -190,22 +205,47 @@ export function validateWorkRecord(work, options = {}) {
     }
 
     // 6. Status:
-    // In complete records, status must be explicitly provided or strictly in VALID_WORK_STATUSES.
-    if (requireComplete && (work.status === undefined || work.status === null || String(work.status).trim() === '')) {
-        return { valid: false, error: 'A munka státusza kötelező.' };
-    }
-    const status = work.status !== undefined && work.status !== null ? String(work.status).trim() : 'folyamatban';
-    if (!VALID_WORK_STATUSES.includes(status)) {
-        return { valid: false, error: `Érvénytelen státusz: "${status}". Megengedett: ${VALID_WORK_STATUSES.join(', ')}.` };
+    // In complete records: status must be explicitly provided and strictly in VALID_WORK_STATUSES.
+    // In partial updates: if provided, must be in VALID_WORK_STATUSES. If omitted, preserve undefined.
+    let statusVal = undefined;
+    if (requireComplete) {
+        if (work.status === undefined || work.status === null || String(work.status).trim() === '') {
+            return { valid: false, error: 'A munka státusza kötelező.' };
+        }
+        statusVal = String(work.status).trim();
+        if (!VALID_WORK_STATUSES.includes(statusVal)) {
+            return { valid: false, error: `Érvénytelen státusz: "${statusVal}". Megengedett: ${VALID_WORK_STATUSES.join(', ')}.` };
+        }
+    } else {
+        if ('status' in work && work.status !== undefined && work.status !== null) {
+            statusVal = String(work.status).trim();
+            if (!VALID_WORK_STATUSES.includes(statusVal)) {
+                return { valid: false, error: `Érvénytelen státusz: "${statusVal}". Megengedett: ${VALID_WORK_STATUSES.join(', ')}.` };
+            }
+        } else if (!work.id) {
+            statusVal = 'folyamatban';
+        }
     }
 
-    const sanitizedRecord = {
-        ...work,
-        name: work.name.trim(),
-        description: typeof work.description === 'string' ? work.description.trim() : (work.description !== undefined ? work.description : ''),
-        location: typeof work.location === 'string' ? work.location.trim() : (work.location !== undefined ? work.location : ''),
-        status: status
-    };
+    const sanitizedRecord = { ...work };
+
+    // Clean null timestamps to undefined so they are consistently absent
+    if (sanitizedRecord.created_at === null) delete sanitizedRecord.created_at;
+    if (sanitizedRecord.updated_at === null) delete sanitizedRecord.updated_at;
+
+    if ('name' in work && typeof work.name === 'string') {
+        sanitizedRecord.name = work.name.trim();
+    }
+    if (!work.id || 'description' in work) {
+        sanitizedRecord.description = typeof work.description === 'string' ? work.description.trim() : (work.description !== undefined ? work.description : '');
+    }
+    if (!work.id || 'location' in work) {
+        sanitizedRecord.location = typeof work.location === 'string' ? work.location.trim() : (work.location !== undefined ? work.location : '');
+    }
+
+    if (statusVal !== undefined) {
+        sanitizedRecord.status = statusVal;
+    }
     if (work.date !== undefined && work.date !== null) {
         sanitizedRecord.date = work.date;
     } else if (!work.id && !requireComplete) {

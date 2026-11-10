@@ -16,11 +16,11 @@ The audit evaluated five core architectural dimensions:
 - **P0 Defects:** **0**. No critical data corruption, cross-ledger leakage, or catastrophic failure modes were detected.
 - **P1 Defects:** **0**. The P1 issues resolved in PR #200 remain fully intact and verified by regression test suites.
 - **P2 Defects (Medium Severity):** **3 confirmed defects**.
-  1. *Unvalidated Work Log Ingestion in Full Database Backup Restore (`DataExportController.restoreBackupData`)*: Restores arbitrary `data.works` directly into IndexedDB without field, date, or duration validation.
-  2. *Sorting Inversion & Inconsistency Between In-Memory Cache and UI Display*: `WorkLogManager.load()` sorts records ascending (`oldest first`), but documentation and typical UI expectation is descending (`newest first`), with zero tie-breaking on missing `created_at` or equal timestamps.
-  3. *Duration Form Parsing and Fallback Masking*: `App.prototype.submitWorkForm` uses `Number(durInput ? durInput.value : 1) || 1`, masking zero, negative numbers, or invalid strings as `1` without raising a user-facing validation warning, while `WorkLogManager.save()` performs no domain-level validation on duration or dates.
+  1. *Unvalidated Work Log Ingestion in Full Database Backup Restore and JSON Import*: Both `BackupManager.prototype.restoreFromBackup` and `DataExportController.prototype._performImport` restore arbitrary `data.works` directly into IndexedDB without field, date, or duration complete-record validation, risking database corruption.
+  2. *Sorting Inconsistency Across Timezones and Tie-Breaking*: `WorkLogManager.load()` performed simple string comparisons on `created_at` rather than evaluating true chronological instants (parsing epoch milliseconds), and lacked tie-breaking for equal or missing timestamps.
+  3. *Duration Form Parsing and Fallback Masking*: `App.prototype.submitWorkForm` used `Number(durInput ? durInput.value : 1) || 1`. When native browser HTML5 validation is bypassed (e.g. programmatic dispatch or script interaction), `0`, `NaN`, or empty string evaluate to falsy and silently mask to `1`, while negative values (e.g. `Number('-5') === -5`) evaluate to truthy and pass negative durations directly into persistence without domain validation.
 - **P3 Issues / Technical Debt:** **4 non-breaking findings**.
-  1. *Lack of Centralized Work Log Domain Validator Function*: Validation rules are split inconsistently between `submitWorkForm`, `importWorkJson`, and HTML5 form constraints.
+  1. *Lack of Centralized Work Log Domain Validator Function*: Validation rules were split inconsistently between `submitWorkForm`, `importWorkJson`, and HTML5 form constraints without distinguishing complete persisted records from partial atomic updates.
   2. *Default Date Calculation Uses UTC instead of Local Calendar Date*: `dateInput.value = new Date().toISOString().split('T')[0]` causes date shifts between 23:00 and 00:00 UTC+1/UTC+2 (Hungary timezone).
   3. *Unconstrained Free-Text `status` Ingestion in Core Manager*: `WorkLogManager.save` accepts any string as `status`, whereas UI only recognizes `'folyamatban'`, `'elvégzett'`, and `'meghiúsult'`.
   4. *Unsanitized HTML/Text Rendering in Export Utilities*: Excel and PDF exports do not strip or sanitize carriage returns uniformly in notes/locations.
@@ -82,7 +82,9 @@ Audit methods:
       status: statusInput ? statusInput.value : 'folyamatban'
   };
   ```
-- **Observed Behavior:** If the user enters `0`, `-5`, `NaN`, `abc`, or an empty string, `Number(...) || 1` silently defaults the duration to `1`.
+- **Observed Behavior:**
+  - If native HTML form validation is bypassed (e.g. via programmatic dispatch or non-compliant browsers), entering `0`, `NaN`, `abc`, or an empty string causes `Number(...) || 1` to evaluate the falsy number and silently mask it to `1`.
+  - For negative durations like `-5`, `Number('-5') || 1` evaluates to `-5` (truthy) rather than `1`, passing the negative number directly into `WorkLogManager.save()` which completely lacked duration validation.
 - **Expected Behavior:** An explicit validation error toast (`⚠️ Az időtartamnak pozitív egész számnak kell lennie (min. 1 nap)!`) should be displayed, and form submission should be rejected. Silently mutating user input from `0` or invalid values to `1` conceals user errors.
 - **Severity:** P2 (Usability & Validation Strictness).
 
@@ -157,20 +159,17 @@ Audit methods:
   - Ledger isolation: Tested and confirmed that `incomings` is never accessed or mutated.
 - **Verdict:** Fully compliant, reliable, and verified.
 
-### 6.2 Full Backup Restore Pipeline (`restoreBackupData`)
-- **File:** `js/data-export-controller.js` (lines 250–295)
-- **Observed Code:**
-  ```javascript
-  const tx = dbRaw.transaction([
-      'items', 'months', 'entries', 'templates', 'reminders', 'incomings', 'incoming_senders', 'works'
-  ], 'readwrite');
-  ...
-  tx.objectStore('works').clear();
-  ...
-  data.works?.forEach(work => tx.objectStore('works').put(work));
-  ```
-- **Observed Behavior:** Unlike `importWorkJson`, `restoreBackupData` does not perform item-level validation on `data.works`. If a corrupted backup JSON containing malformed work items (missing `name`, invalid `date`, negative `duration`, or prototype pollution keys) is restored, it writes those records directly into the `works` object store.
-- **Expected Behavior:** Validate each work entry before writing or sanitize records in `restoreBackupData` using the same domain rules as `importWorkJson`.
+### 6.2 Full Backup Restore Pipeline (`BackupManager.restoreFromBackup` and `DataExportController._performImport`)
+- **Files:** `js/backup-manager.js` (lines 125–180) and `js/data-export-controller.js` (lines 240–295)
+- **Observed Behavior:**
+  - Both backup restore entry points (`BackupManager.prototype.restoreFromBackup` and `DataExportController.prototype._performImport`) previously opened a destructive readwrite transaction on all 8 stores (clearing `works` alongside financial tables) without validating `data.works`.
+  - Neither path enforced complete-record validation (`id`, `name`, `date`, `duration`, `status`). Missing or `null` date/duration/works properties were not caught prior to clearing existing stores.
+  - Furthermore, duplicate IDs were not checked before opening the transaction, and synchronous write errors could leave the database wiped.
+- **Expected Behavior:**
+  - Distinguish complete-record validation (`requireComplete: true`) from partial updates.
+  - Validate the entire works array *before* opening the database transaction.
+  - Reject `works: null`, malformed sections, missing IDs, duplicate IDs, missing/null dates, and non-integer durations.
+  - If `works` is undefined (legacy backup without works), preserve existing works records instead of clearing the store.
 - **Severity:** P2 (Backup Restore Data Integrity).
 
 ---
@@ -178,21 +177,14 @@ Audit methods:
 ## 7. Sorting and Consistency Findings
 
 ### 7.1 Sorting in `WorkLogManager.load()`
-- **File:** `js/work-log.js` (lines 14–20)
-- **Observed Code:**
-  ```javascript
-  async load() {
-      const loadedWorks = await this.db.getAll('works') || [];
-      // Sort works by created_at timestamp (newer first for display, but keep stable order)
-      loadedWorks.sort((a, b) => (a.created_at || '').localeCompare(b.created_at || ''));
-      this.works = loadedWorks;
-      return this.works;
-  }
-  ```
+- **File:** `js/work-log.js` (lines 14–45)
 - **Observed Behavior:**
-  - The comment states: `(newer first for display, but keep stable order)`.
-  - However, `(a.created_at || '').localeCompare(b.created_at || '')` sorts **ascending** (`older first`), which is the exact opposite of "newer first".
-  - If `created_at` is missing (legacy records from before v5.2 UUID migration), empty strings result in tie comparisons with no secondary tie-breaking (e.g. by `date` or `id`).
+  - The original implementation used string comparison `localeCompare` on `created_at`, which sorted ascending (`older first`) and was timezone offset sensitive. For example, ISO timestamps with differing timezone offsets (e.g. `2026-11-10T10:00:00Z` vs `2026-11-10T11:30:00+02:00`) could sort incorrectly as plain strings despite representing different chronological instants.
+  - Equal timestamps or missing/null timestamps lacked deterministic tie-breaking.
+- **Expected Behavior:**
+  - Parse timestamps into chronological instants (epoch milliseconds via `Date.parse`) and sort descending (newest instant first).
+  - For equal or missing timestamps, tie-break by work date descending, and then by deterministic ID ordering.
+  - Treat null timestamps consistently with missing timestamps.
 - **Severity:** P2 (Sorting Inversion and Inconsistency).
 
 ### 7.2 UI Card and Table View Display
