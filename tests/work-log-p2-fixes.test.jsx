@@ -13,6 +13,8 @@ import {
 } from '../js/utils/work-validation.js';
 import { WorkLogManager } from '../js/work-log.js';
 import { BackupManager } from '../js/backup-manager.js';
+import { DataExportController } from '../js/data-export-controller.js';
+import { Database } from '../js/oop-core.js';
 import { App } from '../js/app.js';
 
 test('P2-1: Centralized validator accepts valid Work Log records and enforces boundary contracts', () => {
@@ -283,6 +285,7 @@ test('P2-5: WorkLogManager.save allows valid editing of existing records while p
 
     const manager = new WorkLogManager(mockDb, null);
 
+    // Partial update: only name and duration changed; omitted fields preserved
     const updated = await manager.save({
         id: 'work-abc-123',
         name: 'Módosított név',
@@ -297,6 +300,16 @@ test('P2-5: WorkLogManager.save allows valid editing of existing records while p
     assert.equal(updated.created_at, '2026-10-01T09:00:00Z', 'Original created_at must be strictly preserved');
     assert.equal(putRecord.custom_field, 'preserved-meta', 'Original metadata must be preserved');
     assert.ok(putRecord.updated_at !== '2026-10-01T09:00:00Z', 'updated_at should be refreshed');
+
+    // Partial update: explicit null date or null duration rejected on update
+    await assert.rejects(
+        () => manager.save({ id: 'work-abc-123', name: 'Név', date: null }),
+        /Érvénytelen dátum formátum/
+    );
+    await assert.rejects(
+        () => manager.save({ id: 'work-abc-123', name: 'Név', duration: null }),
+        /Az időtartamnak számnak kell lennie/
+    );
 });
 
 test('P2-6: WorkLogManager.load sorts newest first with deterministic tie-breaking for equal and missing timestamps', async () => {
@@ -378,8 +391,8 @@ test('P2-7: BackupManager.restoreFromBackup restores valid works and rejects inv
 
         const backupManager = new BackupManager(app);
 
-        // Case 1: Backup contains an invalid work record (negative duration)
-        const invalidBackup = {
+        // Subcase A: Backup contains a work record with duration: -1
+        let invalidBackup = {
             timestamp: '2026-11-09T10:00:00Z',
             items: [{ id: 'new-item' }],
             works: [
@@ -387,21 +400,58 @@ test('P2-7: BackupManager.restoreFromBackup restores valid works and rejects inv
                 { id: 'w2', name: 'Corrupt Work', date: '2026-11-10', duration: -1, status: 'folyamatban' }
             ]
         };
-
         app.storage.get = () => invalidBackup;
-
         let toastError = '';
-        app.hmiNotif.showToast = (msg, type) => {
-            if (type === 'error' || msg.includes('❌')) toastError = msg;
-        };
-
+        app.hmiNotif.showToast = (msg, type) => { if (type === 'error' || msg.includes('❌')) toastError = msg; };
         await backupManager.restoreFromBackup();
-
-        // Crucial requirement: No object stores should have been cleared!
-        assert.equal(clearedStores.length, 0, 'No stores should be cleared when validation fails');
+        assert.equal(clearedStores.length, 0, 'No stores should be cleared when negative duration');
         assert.ok(toastError.includes('Érvénytelen munka bejegyzés a backupban'), 'Error toast should explain failure');
 
-        // Case 2: Backup contains valid work records
+        // Subcase B: Backup contains work record with date: null
+        toastError = '';
+        invalidBackup = {
+            timestamp: '2026-11-09T10:00:00Z',
+            works: [{ id: 'w1', name: 'Work', date: null, duration: 2, status: 'folyamatban' }]
+        };
+        app.storage.get = () => invalidBackup;
+        await backupManager.restoreFromBackup();
+        assert.equal(clearedStores.length, 0, 'No stores should be cleared when date is null');
+        assert.ok(toastError.includes('dátuma kötelező') || toastError.includes('Érvénytelen munka bejegyzés'));
+
+        // Subcase C: Backup contains work record with missing date
+        toastError = '';
+        invalidBackup = {
+            timestamp: '2026-11-09T10:00:00Z',
+            works: [{ id: 'w1', name: 'Work', duration: 2, status: 'folyamatban' }]
+        };
+        app.storage.get = () => invalidBackup;
+        await backupManager.restoreFromBackup();
+        assert.equal(clearedStores.length, 0, 'No stores should be cleared when date is missing');
+        assert.ok(toastError.includes('dátuma kötelező') || toastError.includes('Érvénytelen munka bejegyzés'));
+
+        // Subcase D: Backup contains work record with duration: null
+        toastError = '';
+        invalidBackup = {
+            timestamp: '2026-11-09T10:00:00Z',
+            works: [{ id: 'w1', name: 'Work', date: '2026-11-10', duration: null, status: 'folyamatban' }]
+        };
+        app.storage.get = () => invalidBackup;
+        await backupManager.restoreFromBackup();
+        assert.equal(clearedStores.length, 0, 'No stores should be cleared when duration is null');
+        assert.ok(toastError.includes('időtartam kötelező') || toastError.includes('Érvénytelen munka bejegyzés'));
+
+        // Subcase E: Backup contains work record with missing duration
+        toastError = '';
+        invalidBackup = {
+            timestamp: '2026-11-09T10:00:00Z',
+            works: [{ id: 'w1', name: 'Work', date: '2026-11-10', status: 'folyamatban' }]
+        };
+        app.storage.get = () => invalidBackup;
+        await backupManager.restoreFromBackup();
+        assert.equal(clearedStores.length, 0, 'No stores should be cleared when duration is missing');
+        assert.ok(toastError.includes('időtartam kötelező') || toastError.includes('Érvénytelen munka bejegyzés'));
+
+        // Case 2: Backup contains valid complete work records
         clearedStores = [];
         putRecords = {};
         const validBackup = {
@@ -415,7 +465,6 @@ test('P2-7: BackupManager.restoreFromBackup restores valid works and rejects inv
 
         app.storage.get = () => validBackup;
 
-        // Complete the mock transaction synchronously
         const origTx = mockRawDb.transaction;
         mockRawDb.transaction = (storeNames, mode) => {
             const tx = origTx(storeNames, mode);
@@ -431,6 +480,180 @@ test('P2-7: BackupManager.restoreFromBackup restores valid works and rejects inv
         assert.equal(putRecords['works'][0].id, 'w1');
         assert.equal(putRecords['works'][1].id, 'w2');
 
+    } finally {
+        delete globalThis.window;
+        delete globalThis.document;
+    }
+});
+
+test('P2-8: DataExportController._performImport strictly validates complete work records and rejects invalid ones before opening IDB transaction', async () => {
+    let transactionOpened = false;
+    let clearedStores = [];
+
+    const mockRawDb = {
+        transaction: (storeNames, mode) => {
+            transactionOpened = true;
+            return {
+                objectStore: (storeName) => ({
+                    clear: () => { clearedStores.push(storeName); },
+                    put: () => {}
+                }),
+                oncomplete: null,
+                onerror: null
+            };
+        }
+    };
+
+    const mockApp = {
+        db: { db: mockRawDb },
+        items: { load: async () => {} },
+        months: { load: async () => {} },
+        entries: { load: async () => {} },
+        workLogManager: { load: async () => {} },
+        hmiNotif: { showToast: () => {} }
+    };
+
+    const controller = new DataExportController(mockApp);
+
+    // 1. Corrupt data with missing date
+    transactionOpened = false;
+    await assert.rejects(
+        () => controller._performImport({
+            works: [{ id: 'w-corrupt', name: 'Task', duration: 2, status: 'folyamatban' }]
+        }),
+        /A munka dátuma kötelező/
+    );
+    assert.equal(transactionOpened, false, 'IDB transaction must NOT be opened when date is missing');
+
+    // 2. Corrupt data with date: null
+    transactionOpened = false;
+    await assert.rejects(
+        () => controller._performImport({
+            works: [{ id: 'w-corrupt', name: 'Task', date: null, duration: 2, status: 'folyamatban' }]
+        }),
+        /A munka dátuma kötelező/
+    );
+    assert.equal(transactionOpened, false, 'IDB transaction must NOT be opened when date is null');
+
+    // 3. Corrupt data with duration: null
+    transactionOpened = false;
+    await assert.rejects(
+        () => controller._performImport({
+            works: [{ id: 'w-corrupt', name: 'Task', date: '2026-11-10', duration: null, status: 'folyamatban' }]
+        }),
+        /Az időtartam kötelező/
+    );
+    assert.equal(transactionOpened, false, 'IDB transaction must NOT be opened when duration is null');
+
+    // 4. Corrupt data with duration: -3
+    transactionOpened = false;
+    await assert.rejects(
+        () => controller._performImport({
+            works: [{ id: 'w-corrupt', name: 'Task', date: '2026-11-10', duration: -3, status: 'folyamatban' }]
+        }),
+        /legalább 1 napnak kell lennie/
+    );
+    assert.equal(transactionOpened, false, 'IDB transaction must NOT be opened when duration is negative');
+
+    // 5. Valid data restores and opens transaction
+    transactionOpened = false;
+    mockRawDb.transaction = (storeNames, mode) => {
+        transactionOpened = true;
+        const tx = {
+            objectStore: (storeName) => ({
+                clear: () => { clearedStores.push(storeName); },
+                put: () => {}
+            }),
+            oncomplete: null,
+            onerror: null
+        };
+        setTimeout(() => { if (tx.oncomplete) tx.oncomplete(); }, 0);
+        return tx;
+    };
+
+    await controller._performImport({
+        works: [{ id: 'w-valid', name: 'Valid Work', date: '2026-11-10', duration: 3, status: 'folyamatban' }]
+    });
+    assert.equal(transactionOpened, true, 'IDB transaction must be opened for valid import');
+    assert.ok(clearedStores.includes('works'));
+});
+
+test('P2-9: Real IndexedDB restore test using fake-indexeddb validates complete work records and preserves DB on failure', async () => {
+    const dom = new JSDOM(`<!DOCTYPE html><html><body></body></html>`);
+    dom.window.indexedDB = globalThis.indexedDB;
+    dom.window.IDBKeyRange = IDBKeyRange;
+    globalThis.window = dom.window;
+    globalThis.document = dom.window.document;
+
+    try {
+        const dbName = `test_db_restore_${Date.now()}`;
+        const db = new Database(dbName);
+        await db.connect();
+
+        // Populate initial database with an existing work item
+        const initialWork = {
+            id: 'initial-work-1',
+            name: 'Original Initial Work',
+            date: '2026-11-01',
+            duration: 5,
+            status: 'folyamatban'
+        };
+        await db.save('works', initialWork);
+
+        const loadedBefore = await db.getAll('works');
+        assert.equal(loadedBefore.length, 1);
+        assert.equal(loadedBefore[0].name, 'Original Initial Work');
+
+        const mockApp = {
+            db: db,
+            storage: { get: () => {} },
+            hmiNotif: {
+                showConfirm: async () => true,
+                showToast: () => {}
+            },
+            items: { load: async () => {} },
+            months: { load: async () => {} },
+            entries: { load: async () => {} },
+            workLogManager: { load: async () => {} }
+        };
+
+        const backupManager = new BackupManager(mockApp);
+
+        // Attempt restore with invalid backup (missing duration)
+        let toastError = '';
+        mockApp.hmiNotif.showToast = (msg) => { toastError = msg; };
+        mockApp.storage.get = () => ({
+            timestamp: new Date().toISOString(),
+            works: [
+                { id: 'w-invalid', name: 'Incomplete Work', date: '2026-11-10', status: 'folyamatban' } // missing duration
+            ]
+        });
+
+        await backupManager.restoreFromBackup();
+        assert.ok(toastError.includes('Az időtartam kötelező') || toastError.includes('Érvénytelen munka bejegyzés'));
+
+        // Verify that genuine IndexedDB contents were completely preserved
+        const loadedAfterFailed = await db.getAll('works');
+        assert.equal(loadedAfterFailed.length, 1, 'Initial work must be preserved in real IndexedDB');
+        assert.equal(loadedAfterFailed[0].name, 'Original Initial Work');
+
+        // Now attempt restore with valid backup
+        mockApp.storage.get = () => ({
+            timestamp: new Date().toISOString(),
+            works: [
+                { id: 'w-restored-1', name: 'Restored Work 1', date: '2026-11-10', duration: 2, status: 'elvégzett' }
+            ]
+        });
+
+        await backupManager.restoreFromBackup();
+
+        // Verify that genuine IndexedDB now contains the restored work
+        const loadedAfterSuccess = await db.getAll('works');
+        assert.equal(loadedAfterSuccess.length, 1);
+        assert.equal(loadedAfterSuccess[0].id, 'w-restored-1');
+        assert.equal(loadedAfterSuccess[0].name, 'Restored Work 1');
+
+        await db.close?.();
     } finally {
         delete globalThis.window;
         delete globalThis.document;

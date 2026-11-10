@@ -240,7 +240,7 @@ export class DataExportController {
             }
             for (let i = 0; i < data.works.length; i++) {
                 const item = data.works[i];
-                const valRes = validateWorkRecord(item);
+                const valRes = validateWorkRecord(item, { requireComplete: true });
                 if (!valRes.valid) {
                     throw new Error(`Érvénytelen munka bejegyzés a backupban (#${i + 1}): ${valRes.error}`);
                 }

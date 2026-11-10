@@ -105,6 +105,8 @@ export function validateWorkRecord(work, options = {}) {
         return { valid: false, error: 'Érvénytelen munka bejegyzés adat: objektum szükséges.' };
     }
 
+    const requireComplete = Boolean(options.requireComplete);
+
     // Check prototype pollution keys (check own properties including non-enumerable or JSON parsed __proto__)
     for (const key of Object.keys(work)) {
         if (DANGEROUS_KEYS.has(key)) {
@@ -136,26 +138,62 @@ export function validateWorkRecord(work, options = {}) {
         return { valid: false, error: 'A munka neve kötelező és nem lehet üres.' };
     }
 
-    // 4. Work Date (if present, validate calendar date; if creating new entry without date, require it unless defaulted)
-    if (work.date !== undefined && work.date !== null) {
+    // 4. Work Date:
+    // If requireComplete is true, date MUST be present, non-null, and a valid calendar date string.
+    // If requireComplete is false:
+    //   - Explicit null or empty string is rejected (prevent silent overwrite in atomic merge).
+    //   - If defined, must be a valid calendar date string.
+    if (requireComplete) {
+        if (work.date === undefined || work.date === null) {
+            return { valid: false, error: 'A munka dátuma kötelező (ÉÉÉÉ-HH-NN).' };
+        }
         if (!isValidCalendarDate(work.date)) {
             return { valid: false, error: 'Érvénytelen dátum formátum (ÉÉÉÉ-HH-NN szükséges).' };
         }
+    } else {
+        if ('date' in work) {
+            if (work.date === null || work.date === undefined || !isValidCalendarDate(work.date)) {
+                return { valid: false, error: 'Érvénytelen dátum formátum (ÉÉÉÉ-HH-NN szükséges).' };
+            }
+        }
     }
 
-    // 5. Work Duration (if present, validate integer >= 1; if creating new entry, duration defaults to 1 if omitted)
+    // 5. Work Duration:
+    // If requireComplete is true, duration MUST be present, non-null, and a valid positive integer <= MAX_WORK_DURATION.
+    // If requireComplete is false:
+    //   - Explicit null or undefined (when key is present) is rejected.
+    //   - If defined, must be valid positive integer <= MAX_WORK_DURATION.
+    //   - If creating new entry without duration, defaults to 1.
     let durVal = work.duration;
-    if (work.duration !== undefined && work.duration !== null) {
+    if (requireComplete) {
+        if (work.duration === undefined || work.duration === null) {
+            return { valid: false, error: 'Az időtartam kötelező.' };
+        }
         const durRes = validateWorkDuration(work.duration, options);
         if (!durRes.valid) {
             return { valid: false, error: durRes.error };
         }
         durVal = durRes.value;
-    } else if (!work.id) {
-        durVal = 1;
+    } else {
+        if ('duration' in work) {
+            if (work.duration === null || work.duration === undefined) {
+                return { valid: false, error: 'Az időtartamnak számnak kell lennie.' };
+            }
+            const durRes = validateWorkDuration(work.duration, options);
+            if (!durRes.valid) {
+                return { valid: false, error: durRes.error };
+            }
+            durVal = durRes.value;
+        } else if (!work.id) {
+            durVal = 1;
+        }
     }
 
-    // 6. Status
+    // 6. Status:
+    // In complete records, status must be explicitly provided or strictly in VALID_WORK_STATUSES.
+    if (requireComplete && (work.status === undefined || work.status === null || String(work.status).trim() === '')) {
+        return { valid: false, error: 'A munka státusza kötelező.' };
+    }
     const status = work.status !== undefined && work.status !== null ? String(work.status).trim() : 'folyamatban';
     if (!VALID_WORK_STATUSES.includes(status)) {
         return { valid: false, error: `Érvénytelen státusz: "${status}". Megengedett: ${VALID_WORK_STATUSES.join(', ')}.` };
@@ -168,9 +206,9 @@ export function validateWorkRecord(work, options = {}) {
         location: typeof work.location === 'string' ? work.location.trim() : (work.location !== undefined ? work.location : ''),
         status: status
     };
-    if (work.date !== undefined) {
+    if (work.date !== undefined && work.date !== null) {
         sanitizedRecord.date = work.date;
-    } else if (!work.id) {
+    } else if (!work.id && !requireComplete) {
         sanitizedRecord.date = new Date().toISOString().split('T')[0];
     }
     if (durVal !== undefined) sanitizedRecord.duration = durVal;
