@@ -127,19 +127,25 @@ export function validateWorkRecord(work, options = {}) {
     }
 
     // 1. Optional created_at:
-    // If explicitly passed (even as null, number, or invalid string), strictly validate ISO format.
-    // In complete-record mode or when normalizing persisted records, null timestamps are treated consistently as absent.
+    // In complete-record mode (requireComplete: true), null timestamps in backup files are treated as absent.
+    // In direct save/update mode (!requireComplete), explicitly passing created_at: null must be rejected to prevent corrupt updates.
     if ('created_at' in work && work.created_at !== undefined) {
-        if (!isValidStrictIso8601(work.created_at)) {
+        if (work.created_at === null) {
+            if (!requireComplete) {
+                return { valid: false, error: 'Érvénytelen created_at időbélyeg formátum.' };
+            }
+        } else if (!isValidStrictIso8601(work.created_at)) {
             return { valid: false, error: 'Érvénytelen created_at időbélyeg formátum.' };
         }
     }
 
     // 2. Optional updated_at:
-    // If non-null, strictly validate ISO format.
-    // If explicitly null, treat consistently as absent.
     if ('updated_at' in work && work.updated_at !== undefined) {
-        if (work.updated_at !== null && !isValidStrictIso8601(work.updated_at)) {
+        if (work.updated_at === null) {
+            if (!requireComplete) {
+                return { valid: false, error: 'Érvénytelen updated_at időbélyeg formátum.' };
+            }
+        } else if (!isValidStrictIso8601(work.updated_at)) {
             return { valid: false, error: 'Érvénytelen updated_at időbélyeg formátum.' };
         }
     }
@@ -206,7 +212,7 @@ export function validateWorkRecord(work, options = {}) {
 
     // 6. Status:
     // In complete records: status must be explicitly provided and strictly in VALID_WORK_STATUSES.
-    // In partial updates: if provided, must be in VALID_WORK_STATUSES. If omitted, preserve undefined.
+    // In partial updates: if provided, must be in VALID_WORK_STATUSES. Explicit null must be rejected. If omitted, preserve undefined.
     let statusVal = undefined;
     if (requireComplete) {
         if (work.status === undefined || work.status === null || String(work.status).trim() === '') {
@@ -217,7 +223,10 @@ export function validateWorkRecord(work, options = {}) {
             return { valid: false, error: `Érvénytelen státusz: "${statusVal}". Megengedett: ${VALID_WORK_STATUSES.join(', ')}.` };
         }
     } else {
-        if ('status' in work && work.status !== undefined && work.status !== null) {
+        if ('status' in work) {
+            if (work.status === null || work.status === undefined || String(work.status).trim() === '') {
+                return { valid: false, error: 'A munka státusza kötelező és érvényes státuszt igényel.' };
+            }
             statusVal = String(work.status).trim();
             if (!VALID_WORK_STATUSES.includes(statusVal)) {
                 return { valid: false, error: `Érvénytelen státusz: "${statusVal}". Megengedett: ${VALID_WORK_STATUSES.join(', ')}.` };

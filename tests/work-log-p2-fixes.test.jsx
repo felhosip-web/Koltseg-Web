@@ -53,6 +53,17 @@ test('P2-1: Centralized validator accepts valid Work Log records and enforces bo
 
     // 3. Complete-record mode checks
     assert.equal(validateWorkRecord(validFull, { requireComplete: true }).valid, true);
+    // Null timestamps in complete-record mode should be accepted and sanitized to absent (undefined)
+    const validWithNullTimestamps = {
+        ...validFull,
+        created_at: null,
+        updated_at: null
+    };
+    const resNullTs = validateWorkRecord(validWithNullTimestamps, { requireComplete: true });
+    assert.equal(resNullTs.valid, true);
+    assert.equal(resNullTs.sanitizedRecord.created_at, undefined);
+    assert.equal(resNullTs.sanitizedRecord.updated_at, undefined);
+
     // Missing ID in complete-record mode
     assert.equal(validateWorkRecord({ name: 'Work', date: '2026-11-15', duration: 1, status: 'folyamatban' }, { requireComplete: true }).valid, false);
     // Missing date in complete-record mode
@@ -215,6 +226,80 @@ test('P2-3: App.prototype.submitWorkForm rejects invalid duration without silent
     }
 });
 
+test('P2-10: Real IndexedDB DataExportController._performImport test using fake-indexeddb validates complete work records and preserves DB on failure', async () => {
+    const dom = new JSDOM(`<!DOCTYPE html><html><body></body></html>`);
+    dom.window.indexedDB = globalThis.indexedDB;
+    dom.window.IDBKeyRange = IDBKeyRange;
+    globalThis.window = dom.window;
+    globalThis.document = dom.window.document;
+
+    try {
+        const dbName = `test_db_perform_import_${Date.now()}`;
+        const db = new Database(dbName);
+        await db.connect();
+
+        // Seed initial works record
+        const initialWork = {
+            id: 'import-seed-work-1',
+            name: 'Original Seed Work',
+            date: '2026-11-01',
+            duration: 3,
+            status: 'folyamatban'
+        };
+        await db.save('works', initialWork);
+
+        const loadedBefore = await db.getAll('works');
+        assert.equal(loadedBefore.length, 1);
+        assert.equal(loadedBefore[0].name, 'Original Seed Work');
+
+        const mockApp = {
+            db: db,
+            items: { load: async () => {} },
+            months: { load: async () => {} },
+            entries: { load: async () => {} },
+            workLogManager: { load: async () => {} },
+            hmiNotif: { showToast: () => {} }
+        };
+
+        const controller = new DataExportController(mockApp);
+
+        // Attempt _performImport with corrupt work record (duration: null)
+        await assert.rejects(
+            () => controller._performImport({
+                works: [
+                    { id: 'w-corrupt', name: 'Corrupt Import Work', date: '2026-11-10', duration: null, status: 'folyamatban' }
+                ]
+            }),
+            /Az időtartam kötelező/
+        );
+
+        // Verify genuine IndexedDB contents remain intact after rejection
+        const loadedAfterFail = await db.getAll('works');
+        assert.equal(loadedAfterFail.length, 1, 'Initial work record must be preserved in real IndexedDB');
+        assert.equal(loadedAfterFail[0].id, 'import-seed-work-1');
+        assert.equal(loadedAfterFail[0].name, 'Original Seed Work');
+
+        // Attempt valid _performImport (with null timestamps accepted and sanitized)
+        await controller._performImport({
+            works: [
+                { id: 'w-import-1', name: 'Imported Work 1', date: '2026-11-15', duration: 4, status: 'elvégzett', created_at: null }
+            ]
+        });
+
+        // Verify valid import replaced works with the imported record
+        const loadedAfterSuccess = await db.getAll('works');
+        assert.equal(loadedAfterSuccess.length, 1);
+        assert.equal(loadedAfterSuccess[0].id, 'w-import-1');
+        assert.equal(loadedAfterSuccess[0].name, 'Imported Work 1');
+        assert.equal(loadedAfterSuccess[0].created_at, undefined);
+
+        await db.close?.();
+    } finally {
+        delete globalThis.window;
+        delete globalThis.document;
+    }
+});
+
 test('P2-4: WorkLogManager.save rejects invalid duration, invalid date, and invalid status via production API', async () => {
     const mockDb = {
         save: async () => {},
@@ -315,7 +400,7 @@ test('P2-5: WorkLogManager.save allows valid editing of existing records while p
     assert.equal(putRecord.custom_field, 'preserved-meta', 'Original metadata must be preserved');
     assert.ok(putRecord.updated_at !== '2026-10-01T09:00:00Z', 'updated_at should be refreshed');
 
-    // Partial update: explicit null date or null duration rejected on update
+    // Partial update: explicit null date, null duration, or null status rejected on update
     await assert.rejects(
         () => manager.save({ id: 'work-abc-123', name: 'Név', date: null }),
         /Érvénytelen dátum formátum/
@@ -323,6 +408,10 @@ test('P2-5: WorkLogManager.save allows valid editing of existing records while p
     await assert.rejects(
         () => manager.save({ id: 'work-abc-123', name: 'Név', duration: null }),
         /Az időtartamnak számnak kell lennie/
+    );
+    await assert.rejects(
+        () => manager.save({ id: 'work-abc-123', name: 'Név', status: null }),
+        /A munka státusza kötelező és érvényes státuszt igényel/
     );
 });
 
@@ -336,15 +425,25 @@ test('P2-6: WorkLogManager.load sorts newest first by instant across timezone of
         // Equal instants: tie-break by date descending
         { id: 'work-tie-earlier-date', name: 'Tie Earlier', date: '2026-10-10', duration: 1, created_at: '2026-10-20T10:00:00Z' },
         { id: 'work-tie-later-date', name: 'Tie Later', date: '2026-10-25', duration: 1, created_at: '2026-10-20T10:00:00Z' },
+        // One timestamp missing or null:
+        // Work OneTimestamp: date 2026-09-15, has timestamp 2026-09-15T10:00:00Z
+        // Work MissingTimestampLaterDate: date 2026-09-25, no timestamp
+        // Work MissingTimestampEarlierDate: date 2026-09-05, no timestamp
+        // Under our deterministic policy:
+        // When only one record has a timestamp, fallback to work date descending!
+        // So date 2026-09-25 > 2026-09-15 > 2026-09-05.
+        { id: 'work-has-ts', name: 'Has TS', date: '2026-09-15', duration: 1, created_at: '2026-09-15T10:00:00.000Z' },
+        { id: 'work-no-ts-later', name: 'No TS Later Date', date: '2026-09-25', duration: 1, created_at: null },
+        { id: 'work-no-ts-earlier', name: 'No TS Earlier Date', date: '2026-09-05', duration: 1 },
         // Deliberate counter-fixture where date order and ID order imply DIFFERENT results:
-        // Record X: date: '2026-09-20', id: 'zzz-id'
-        // Record Y: date: '2026-09-10', id: 'aaa-id'
+        // Record X: date: '2026-08-20', id: 'zzz-id'
+        // Record Y: date: '2026-08-10', id: 'aaa-id'
         // Date descending puts X first, whereas ID ascending would put Y first. Date order MUST take precedence!
-        { id: 'zzz-id', name: 'X', date: '2026-09-20', duration: 1 },
-        { id: 'aaa-id', name: 'Y', date: '2026-09-10', duration: 1 },
+        { id: 'zzz-id', name: 'X', date: '2026-08-20', duration: 1 },
+        { id: 'aaa-id', name: 'Y', date: '2026-08-10', duration: 1 },
         // Equal date without timestamps: ID ascending tie-breaks
-        { id: 'id-2', name: 'Equal Date 2', date: '2026-08-01', duration: 1 },
-        { id: 'id-1', name: 'Equal Date 1', date: '2026-08-01', duration: 1 }
+        { id: 'id-2', name: 'Equal Date 2', date: '2026-07-01', duration: 1 },
+        { id: 'id-1', name: 'Equal Date 1', date: '2026-07-01', duration: 1 }
     ];
 
     const mockDb = {
@@ -364,12 +463,19 @@ test('P2-6: WorkLogManager.load sorts newest first by instant across timezone of
     const idxTieEarlier = loaded.findIndex(w => w.id === 'work-tie-earlier-date');
     assert.ok(idxTieLater < idxTieEarlier, 'Tie Later (2026-10-25) must precede Tie Earlier (2026-10-10)');
 
-    // 3. Counter-fixture: date order precedes ID order
+    // 3. One timestamp missing or null: date descending tie-break runs
+    const idxNoTsLater = loaded.findIndex(w => w.id === 'work-no-ts-later');
+    const idxHasTs = loaded.findIndex(w => w.id === 'work-has-ts');
+    const idxNoTsEarlier = loaded.findIndex(w => w.id === 'work-no-ts-earlier');
+    assert.ok(idxNoTsLater < idxHasTs, 'No-TS with later date (2026-09-25) must precede Has-TS (date 2026-09-15)');
+    assert.ok(idxHasTs < idxNoTsEarlier, 'Has-TS (date 2026-09-15) must precede No-TS with earlier date (2026-09-05)');
+
+    // 4. Counter-fixture: date order precedes ID order
     const idxX = loaded.findIndex(w => w.id === 'zzz-id');
     const idxY = loaded.findIndex(w => w.id === 'aaa-id');
-    assert.ok(idxX < idxY, 'Record X (date 2026-09-20) must precede Record Y (date 2026-09-10) despite id zzz > aaa');
+    assert.ok(idxX < idxY, 'Record X (date 2026-08-20) must precede Record Y (date 2026-08-10) despite id zzz > aaa');
 
-    // 4. Equal date without timestamps: ID ascending tie-break
+    // 5. Equal date without timestamps: ID ascending tie-break
     const idxId1 = loaded.findIndex(w => w.id === 'id-1');
     const idxId2 = loaded.findIndex(w => w.id === 'id-2');
     assert.ok(idxId1 < idxId2, 'id-1 must precede id-2 when date and timestamps are identical');
