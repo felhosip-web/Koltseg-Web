@@ -180,11 +180,14 @@ Audit methods:
 - **File:** `js/work-log.js` (lines 14–45)
 - **Observed Behavior:**
   - The original implementation used string comparison `localeCompare` on `created_at`, which sorted ascending (`older first`) and was timezone offset sensitive. For example, ISO timestamps with differing timezone offsets (e.g. `2026-11-10T10:00:00Z` vs `2026-11-10T11:30:00+02:00`) could sort incorrectly as plain strings despite representing different chronological instants.
-  - Equal timestamps or missing/null timestamps lacked deterministic tie-breaking.
+  - Additionally, any non-transitive sorting that compares timestamps for some pairs and work dates for other pairs can introduce cyclic comparisons and violate the requirements of `Array.prototype.sort()`.
 - **Expected Behavior:**
-  - Parse timestamps into chronological instants (epoch milliseconds via `Date.parse`) and sort descending (newest instant first).
-  - For equal or missing timestamps, tie-break by work date descending, and then by deterministic ID ordering.
-  - Treat null timestamps consistently with missing timestamps.
+  - Implement a deterministic, group-first lexicographic policy to guarantee transitive ordering:
+    1. Records with valid `created_at` timestamps strictly precede records without a valid timestamp.
+    2. Within the valid-timestamp group, sort by parsed epoch milliseconds descending (newest instant first).
+    3. Within the missing/invalid-timestamp group, sort by work date descending.
+    4. If timestamps or dates are equal, resolve deterministically by ID ascending.
+    5. Treat `null`, `undefined`, empty, and unparseable timestamps consistently as missing.
 - **Severity:** P2 (Sorting Inversion and Inconsistency).
 
 ### 7.2 UI Card and Table View Display
@@ -333,8 +336,13 @@ When authorized to implement fixes in this session, execute in this order:
    - In `submitWorkForm`: Parse duration strictly; if `isNaN(dur) || !Number.isInteger(dur) || dur < 1`, display toast warning and halt submission.
    - In `WorkLogManager.save`: Enforce duration and date validation before persisting.
 3. **Step 3: Correct Sorting in `WorkLogManager.load`**
-   - Update sort comparator to sort descending (`(b.created_at || '').localeCompare(a.created_at || '')`).
-   - Add deterministic secondary tie-breaking by `date` descending, then `id` ascending.
+   - Implement a deterministic group-first lexicographic sorting policy guaranteeing mathematical transitivity:
+     1. Records with valid `created_at` timestamps come before records without a valid timestamp.
+     2. Records with valid timestamps are sorted by parsed epoch milliseconds descending (newest first).
+     3. Records without valid timestamps are sorted by work date descending.
+     4. Equal timestamps or dates are resolved deterministically by ID ascending.
+     5. `null`, `undefined`, empty, and invalid timestamps are treated consistently as missing.
+   - Never mix pairwise comparisons across different attribute types in a way that violates transitivity.
 4. **Step 4: Harden Full Backup Restore in `DataExportController.restoreBackupData`**
    - Sanitize and validate `data.works` entries using the validator before calling `tx.objectStore('works').put()`.
 5. **Step 5: Fix UTC Date Shift in `App.prototype.openWorkModal`**
