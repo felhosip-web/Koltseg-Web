@@ -365,7 +365,7 @@ The following regression test suites must be maintained and run after any fixes:
    - Rejection of invalid durations in form submission without silent mutation to 1.
    - Rejection of invalid durations in `WorkLogManager.save`.
    - Reverse chronological sorting in `WorkLogManager.load`.
-   - Backup restore filtering of malformed work records.
+   - Rejection of entire backup payload before opening destructive IndexedDB transactions in both `BackupManager.restoreFromBackup()` and `DataExportController._performImport()` if any Work Log record is invalid, verifying that existing database contents remain completely intact on validation failure.
 
 ---
 
