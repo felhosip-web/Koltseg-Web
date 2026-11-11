@@ -48,7 +48,8 @@ The audit inspected all production source files, components, and controllers par
 - `src/components/WorkEditorModal.jsx` (Modal UI component, refs, state, in-flight locks)
 - `src/WorkAppList.jsx` (List container, KPI calculations, search filters, card/table views)
 - `src/WorkAppHeader.jsx` (Module navigation, export/import action triggers)
-- `js/data-export-controller.js` (`exportWorkExcel`, `exportWorkPdf`, `exportWorkJson`, `importWorkJson`, `_buildBackupData`, `restoreBackupData`)
+- `js/backup-manager.js` (Full database backup restore: `BackupManager.prototype.restoreFromBackup`)
+- `js/data-export-controller.js` (`exportWorkExcel`, `exportWorkPdf`, `exportWorkJson`, `importWorkJson`, `_buildBackupData`, `_performImport`)
 - `js/sync-service.js` (Table registry, queue management, push/pull, `_reloadAndRender`)
 - `supabase/migrations/20260712222340_init_schema.sql` (Supabase schema and constraints for `works`)
 - Existing test suites: `tests/work-log-p1-fixes.test.jsx`, `tests/app-submit-work-form.test.jsx`, `tests/work-editor-modal.test.jsx`
@@ -112,7 +113,7 @@ Audit methods:
   }
   ```
 - **Evaluation:** Strict and correct. Fractional numbers, zero, negative numbers, `NaN`, and `Infinity` are rejected individually in `importWorkJson`.
-- **Finding:** No defect in `importWorkJson`. However, see Section 6 regarding `restoreBackupData`.
+- **Finding:** No defect in `importWorkJson`. However, see Section 6 regarding `BackupManager.restoreFromBackup()` and `DataExportController._performImport()`.
 
 ---
 
@@ -292,13 +293,13 @@ Audit methods:
 - **Observed Result:** Array order is `[Work A, Work B]`. In `WorkAppList`, Work A (the older work) is displayed at the top and numbered 1.
 - **Expected Result:** As stated in the method comment ("newer first for display"), order should be descending by `created_at` (or `date`), placing recent tasks at the top.
 
-### Bug 3: Unvalidated Work Record Ingestion in `restoreBackupData` (P2)
-- **Component / File:** `js/data-export-controller.js` (`restoreBackupData`, lines 282–283)
+### Bug 3: Unvalidated Work Record Ingestion in Full Backup Restore and Import (P2)
+- **Component / Files:** `js/backup-manager.js` (`BackupManager.prototype.restoreFromBackup`) and `js/data-export-controller.js` (`DataExportController.prototype._performImport`)
 - **Reproduction:**
-  1. Prepare a backup JSON with `data.works` containing `{ id: "bad-1", name: "", duration: -50, date: "invalid-date" }`.
-  2. Restore backup via "Teljes visszaállítás".
-- **Observed Result:** Corrupted work records are written directly to IndexedDB without validation.
-- **Expected Result:** Each work item in the backup should be validated against the Work Log schema before insertion.
+  1. Prepare a backup JSON with `data.works` containing `{ id: "bad-1", name: "", duration: -50, date: "invalid-date" }` (or missing date/duration, or `works: null`).
+  2. Trigger restore via "Teljes visszaállítás" or full JSON import.
+- **Observed Result:** The database transaction was opened and object stores were wiped, with corrupted work records written directly to IndexedDB without complete-record validation.
+- **Expected Result:** Both restore entry points must perform complete-record validation (`requireComplete: true`) before opening destructive IndexedDB transactions, rejecting invalid data and leaving existing database contents completely intact.
 
 ### Bug 4: UTC Date Shift in Work Modal Default Date (P3)
 - **Component / File:** `js/app.js` (`openWorkModal`, line 437)
@@ -343,8 +344,9 @@ When authorized to implement fixes in this session, execute in this order:
      4. Equal timestamps or dates are resolved deterministically by ID ascending.
      5. `null`, `undefined`, empty, and invalid timestamps are treated consistently as missing.
    - Never mix pairwise comparisons across different attribute types in a way that violates transitivity.
-4. **Step 4: Harden Full Backup Restore in `DataExportController.restoreBackupData`**
-   - Sanitize and validate `data.works` entries using the validator before calling `tx.objectStore('works').put()`.
+4. **Step 4: Harden Full Backup Restore in `BackupManager.prototype.restoreFromBackup` and `DataExportController.prototype._performImport`**
+   - Perform strict complete-record validation on `works` entries before opening destructive transactions or clearing object stores.
+   - Reject `works: null`, malformed entries, missing IDs, or duplicate IDs, and preserve existing records if `works` is absent in legacy backups.
 5. **Step 5: Fix UTC Date Shift in `App.prototype.openWorkModal`**
    - Format local date using `getFullYear()`, `getMonth()`, `getDate()`.
 6. **Step 6: Add Comprehensive Regression Tests in `tests/work-log-p2-fixes.test.jsx`**
