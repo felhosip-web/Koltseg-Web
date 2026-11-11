@@ -29,19 +29,25 @@ export class WorkLogManager {
             const aInstant = parseInstant(a.created_at);
             const bInstant = parseInstant(b.created_at);
 
-            // 1. If BOTH records have valid timestamps and represent different instants, sort newest first
-            if (aInstant !== null && bInstant !== null && aInstant !== bInstant) {
-                return bInstant - aInstant;
+            // 1. Valid created_at timestamps strictly precede missing/invalid timestamps
+            if (aInstant !== null && bInstant === null) return -1;
+            if (aInstant === null && bInstant !== null) return 1;
+
+            // 2. Within the valid-timestamp group, sort by parsed epoch milliseconds descending
+            if (aInstant !== null && bInstant !== null) {
+                if (aInstant !== bInstant) {
+                    return bInstant - aInstant;
+                }
             }
 
-            // 2. Otherwise (equal timestamps, one missing/null, or both missing/null), compare work dates descending
+            // 3. Within equal timestamps or within the missing/invalid-timestamp group, sort by work date descending
             const aDate = a.date || '';
             const bDate = b.date || '';
             if (aDate !== bDate) {
                 return bDate.localeCompare(aDate);
             }
 
-            // 3. Finally, compare IDs deterministically
+            // 4. Finally, compare IDs deterministically ascending
             return String(a.id || '').localeCompare(String(b.id || ''));
         });
         this.works = loadedWorks;

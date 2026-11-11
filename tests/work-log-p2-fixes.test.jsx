@@ -425,13 +425,7 @@ test('P2-6: WorkLogManager.load sorts newest first by instant across timezone of
         // Equal instants: tie-break by date descending
         { id: 'work-tie-earlier-date', name: 'Tie Earlier', date: '2026-10-10', duration: 1, created_at: '2026-10-20T10:00:00Z' },
         { id: 'work-tie-later-date', name: 'Tie Later', date: '2026-10-25', duration: 1, created_at: '2026-10-20T10:00:00Z' },
-        // One timestamp missing or null:
-        // Work OneTimestamp: date 2026-09-15, has timestamp 2026-09-15T10:00:00Z
-        // Work MissingTimestampLaterDate: date 2026-09-25, no timestamp
-        // Work MissingTimestampEarlierDate: date 2026-09-05, no timestamp
-        // Under our deterministic policy:
-        // When only one record has a timestamp, fallback to work date descending!
-        // So date 2026-09-25 > 2026-09-15 > 2026-09-05.
+        // Valid timestamp records strictly precede missing or null timestamp records:
         { id: 'work-has-ts', name: 'Has TS', date: '2026-09-15', duration: 1, created_at: '2026-09-15T10:00:00.000Z' },
         { id: 'work-no-ts-later', name: 'No TS Later Date', date: '2026-09-25', duration: 1, created_at: null },
         { id: 'work-no-ts-earlier', name: 'No TS Earlier Date', date: '2026-09-05', duration: 1 },
@@ -463,12 +457,13 @@ test('P2-6: WorkLogManager.load sorts newest first by instant across timezone of
     const idxTieEarlier = loaded.findIndex(w => w.id === 'work-tie-earlier-date');
     assert.ok(idxTieLater < idxTieEarlier, 'Tie Later (2026-10-25) must precede Tie Earlier (2026-10-10)');
 
-    // 3. One timestamp missing or null: date descending tie-break runs
-    const idxNoTsLater = loaded.findIndex(w => w.id === 'work-no-ts-later');
+    // 3. Valid timestamp records strictly precede missing or null timestamp records
     const idxHasTs = loaded.findIndex(w => w.id === 'work-has-ts');
+    const idxNoTsLater = loaded.findIndex(w => w.id === 'work-no-ts-later');
     const idxNoTsEarlier = loaded.findIndex(w => w.id === 'work-no-ts-earlier');
-    assert.ok(idxNoTsLater < idxHasTs, 'No-TS with later date (2026-09-25) must precede Has-TS (date 2026-09-15)');
-    assert.ok(idxHasTs < idxNoTsEarlier, 'Has-TS (date 2026-09-15) must precede No-TS with earlier date (2026-09-05)');
+    assert.ok(idxHasTs < idxNoTsLater, 'Valid timestamp must precede missing/null timestamp');
+    assert.ok(idxHasTs < idxNoTsEarlier, 'Valid timestamp must precede missing/null timestamp');
+    assert.ok(idxNoTsLater < idxNoTsEarlier, 'Within missing timestamp group, later work date precedes earlier');
 
     // 4. Counter-fixture: date order precedes ID order
     const idxX = loaded.findIndex(w => w.id === 'zzz-id');
@@ -479,6 +474,49 @@ test('P2-6: WorkLogManager.load sorts newest first by instant across timezone of
     const idxId1 = loaded.findIndex(w => w.id === 'id-1');
     const idxId2 = loaded.findIndex(w => w.id === 'id-2');
     assert.ok(idxId1 < idxId2, 'id-1 must precede id-2 when date and timestamps are identical');
+});
+
+test('P2-6b: Comparator satisfies transitivity and strict grouping (A, B, C fixture)', async () => {
+    // Mandated 3-record fixture:
+    // A: created_at = "2026-09-01T10:00:00Z", date = "2026-09-01"
+    // B: created_at = "2026-09-01T09:00:00Z", date = "2026-09-03"
+    // C: missing created_at, date = "2026-09-02"
+    // Under the transitive policy:
+    // A has timestamp 10:00Z, B has timestamp 09:00Z -> A precedes B.
+    // Both A and B have timestamps, C has no timestamp -> B precedes C.
+    // Transitivity guarantees A precedes C. Expected order: A, B, C.
+    const recordA = { id: 'rec-A', name: 'Work A', created_at: '2026-09-01T10:00:00Z', date: '2026-09-01', duration: 1, status: 'folyamatban' };
+    const recordB = { id: 'rec-B', name: 'Work B', created_at: '2026-09-01T09:00:00Z', date: '2026-09-03', duration: 1, status: 'folyamatban' };
+    const recordC = { id: 'rec-C', name: 'Work C', date: '2026-09-02', duration: 1, status: 'folyamatban' };
+
+    // Test across all 6 permutations to verify transitivity and stable outcome regardless of input order
+    const permutations = [
+        [recordA, recordB, recordC],
+        [recordA, recordC, recordB],
+        [recordB, recordA, recordC],
+        [recordB, recordC, recordA],
+        [recordC, recordA, recordB],
+        [recordC, recordB, recordA]
+    ];
+
+    for (const perm of permutations) {
+        const mockDb = { getAll: async () => [...perm] };
+        const manager = new WorkLogManager(mockDb, null);
+        const sorted = await manager.load();
+        assert.deepEqual(sorted.map(r => r.id), ['rec-A', 'rec-B', 'rec-C'], 'Sorting must be [rec-A, rec-B, rec-C] for all permutations');
+
+        // Repeated sorting produces identical result (idempotency)
+        const reSorted = await manager.load();
+        assert.deepEqual(reSorted.map(r => r.id), ['rec-A', 'rec-B', 'rec-C']);
+    }
+
+    // Verify fractional second precision
+    const frac1 = { id: 'frac-1', name: 'Frac 1', created_at: '2026-09-01T10:00:00.100Z', date: '2026-09-01', duration: 1, status: 'folyamatban' };
+    const frac2 = { id: 'frac-2', name: 'Frac 2', created_at: '2026-09-01T10:00:00.200Z', date: '2026-09-01', duration: 1, status: 'folyamatban' };
+    const mockDbFrac = { getAll: async () => [frac1, frac2] };
+    const managerFrac = new WorkLogManager(mockDbFrac, null);
+    const sortedFrac = await managerFrac.load();
+    assert.deepEqual(sortedFrac.map(r => r.id), ['frac-2', 'frac-1'], 'Frac 2 (10:00:00.200Z) must precede Frac 1 (10:00:00.100Z)');
 });
 
 test('P2-7: BackupManager.restoreFromBackup restores valid works and rejects invalid works BEFORE clearing database', async () => {
