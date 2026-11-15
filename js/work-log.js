@@ -1,5 +1,6 @@
 // js/work-log.js - v5.2.0 - Munka nyilvántartó modul (UUID)
 import { generateUUID } from './uuid-utils.js';
+import { validateWorkRecord } from './utils/work-validation.js';
 
 export class WorkLogManager {
     constructor(db, syncService) {
@@ -13,8 +14,42 @@ export class WorkLogManager {
      */
     async load() {
         const loadedWorks = await this.db.getAll('works') || [];
-        // Sort works by created_at timestamp (newer first for display, but keep stable order)
-        loadedWorks.sort((a, b) => (a.created_at || '').localeCompare(b.created_at || ''));
+        // Sort works newest first by chronological instant:
+        // Parse created_at timestamps into epoch milliseconds so differences across timezones
+        // (e.g. UTC vs +02:00) sort accurately by actual point in time.
+        // If created_at timestamps represent the same instant or are missing/null,
+        // tie-break by date descending, then by deterministic ID ordering.
+        const parseInstant = (ts) => {
+            if (!ts || typeof ts !== 'string') return null;
+            const time = Date.parse(ts);
+            return isNaN(time) ? null : time;
+        };
+
+        loadedWorks.sort((a, b) => {
+            const aInstant = parseInstant(a.created_at);
+            const bInstant = parseInstant(b.created_at);
+
+            // 1. Valid created_at timestamps strictly precede missing/invalid timestamps
+            if (aInstant !== null && bInstant === null) return -1;
+            if (aInstant === null && bInstant !== null) return 1;
+
+            // 2. Within the valid-timestamp group, sort by parsed epoch milliseconds descending
+            if (aInstant !== null && bInstant !== null) {
+                if (aInstant !== bInstant) {
+                    return bInstant - aInstant;
+                }
+            }
+
+            // 3. Within equal timestamps or within the missing/invalid-timestamp group, sort by work date descending
+            const aDate = a.date || '';
+            const bDate = b.date || '';
+            if (aDate !== bDate) {
+                return bDate.localeCompare(aDate);
+            }
+
+            // 4. Finally, compare IDs deterministically ascending
+            return String(a.id || '').localeCompare(String(b.id || ''));
+        });
         this.works = loadedWorks;
         return this.works;
     }
@@ -23,37 +58,13 @@ export class WorkLogManager {
      * Save a work log entry
      */
     async save(work) {
-        if (!work || typeof work !== 'object') {
-            throw new Error('Érvénytelen munka bejegyzés adat.');
+        // Validate domain rules via centralized validator
+        const validation = validateWorkRecord(work);
+        if (!validation.valid) {
+            throw new Error(`[WorkLogManager] ${validation.error}`);
         }
 
-        let workToSave = { ...work };
-
-        // Strict ISO-8601 validation helper: regex format check + calendar & time limits
-        const isValidStrictIso8601 = (ts) => {
-            if (typeof ts !== 'string' || ts.trim() === '') return false;
-            const match = ts.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/);
-            if (!match) return false;
-            const year = parseInt(match[1], 10);
-            const month = parseInt(match[2], 10);
-            const day = parseInt(match[3], 10);
-            const hour = parseInt(match[4], 10);
-            const minute = parseInt(match[5], 10);
-            const second = parseInt(match[6], 10);
-            if (month < 1 || month > 12) return false;
-            if (hour > 23 || minute > 59 || second > 59) return false;
-            const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
-            if (day < 1 || day > daysInMonth) return false;
-            const d = new Date(ts);
-            return !isNaN(d.getTime());
-        };
-
-        // Distinguish omitted created_at from explicitly supplied null, non-string, or malformed values
-        if ('created_at' in workToSave && workToSave.created_at !== undefined) {
-            if (!isValidStrictIso8601(workToSave.created_at)) {
-                throw new Error('Érvénytelen created_at időbélyeg formátum.');
-            }
-        }
+        let workToSave = { ...validation.sanitizedRecord };
 
         if (!workToSave.id) {
             // New entry - generate UUID and assign valid current created_at if not provided

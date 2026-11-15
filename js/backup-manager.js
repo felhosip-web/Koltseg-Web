@@ -1,5 +1,6 @@
 // js/backup-manager.js
 //Backup kezelés
+import { validateWorkRecord } from './utils/work-validation.js';
 
 export class BackupManager {
     constructor(app) {
@@ -127,44 +128,87 @@ export class BackupManager {
         if (!confirmed) return;
         
         try {
+            // Reject explicitly null works property
+            if (backupData.works === null) {
+                throw new Error('A backup works szekciója érvénytelen (null nem megengedett)!');
+            }
+
+            // Validate complete works section and check for duplicate IDs BEFORE beginning any destructive database transactions
+            let shouldRestoreWorks = false;
+            let validatedWorks = [];
+            if (backupData.works !== undefined) {
+                if (!Array.isArray(backupData.works)) {
+                    throw new Error('A backup works szekciója érvénytelen (tömb szükséges)!');
+                }
+                const seenIds = new Set();
+                for (let i = 0; i < backupData.works.length; i++) {
+                    const item = backupData.works[i];
+                    const valRes = validateWorkRecord(item, { requireComplete: true });
+                    if (!valRes.valid) {
+                        throw new Error(`Érvénytelen munka bejegyzés a backupban (#${i + 1}): ${valRes.error}`);
+                    }
+                    if (seenIds.has(item.id)) {
+                        throw new Error(`Duplikált munka azonosító a backupban: ${item.id}`);
+                    }
+                    seenIds.add(item.id);
+                    validatedWorks.push(valRes.sanitizedRecord);
+                }
+                shouldRestoreWorks = true;
+            }
+
             this.app.setSystemStatus?.('Backup visszaállítása...', true);
             
             const dbRaw = this.app.db?.db || this.app.db?._db;
             if (!dbRaw) throw new Error('Nincs adatbázis kapcsolat!');
-            
-            const tx = dbRaw.transaction([
+
+            const activeStores = [
                 'items',
                 'months',
                 'entries',
                 'templates',
                 'reminders',
                 'incomings',
-                'incoming_senders',
-                'works'
-            ], 'readwrite');
+                'incoming_senders'
+            ];
+            if (shouldRestoreWorks) {
+                activeStores.push('works');
+            }
             
-            // Törlés
-            tx.objectStore('items').clear();
-            tx.objectStore('months').clear();
-            tx.objectStore('entries').clear();
-            tx.objectStore('templates').clear();
-            tx.objectStore('reminders').clear();
-            tx.objectStore('incomings').clear();
-            tx.objectStore('incoming_senders').clear();
-            tx.objectStore('works').clear();
+            const tx = dbRaw.transaction(activeStores, 'readwrite');
             
-            // Visszaírás - helyesen
-            backupData.items?.forEach(item => tx.objectStore('items').put(item));
-            backupData.months?.forEach(m => {
-                const monthData = typeof m === 'object' ? m : { month: m };
-                tx.objectStore('months').put(monthData);
-            });
-            backupData.entries?.forEach(entry => tx.objectStore('entries').put(entry));
-            backupData.templates?.forEach(tpl => tx.objectStore('templates').put(tpl));
-            backupData.reminders?.forEach(rem => tx.objectStore('reminders').put(rem));
-            backupData.incomings?.forEach(incoming => tx.objectStore('incomings').put(incoming));
-            backupData.incoming_senders?.forEach(sender => tx.objectStore('incoming_senders').put(sender));
-            backupData.works?.forEach(work => tx.objectStore('works').put(work));
+            try {
+                // Törlés
+                tx.objectStore('items').clear();
+                tx.objectStore('months').clear();
+                tx.objectStore('entries').clear();
+                tx.objectStore('templates').clear();
+                tx.objectStore('reminders').clear();
+                tx.objectStore('incomings').clear();
+                tx.objectStore('incoming_senders').clear();
+                if (shouldRestoreWorks) {
+                    tx.objectStore('works').clear();
+                }
+
+                // Visszaírás - helyesen
+                backupData.items?.forEach(item => tx.objectStore('items').put(item));
+                backupData.months?.forEach(m => {
+                    const monthData = typeof m === 'object' ? m : { month: m };
+                    tx.objectStore('months').put(monthData);
+                });
+                backupData.entries?.forEach(entry => tx.objectStore('entries').put(entry));
+                backupData.templates?.forEach(tpl => tx.objectStore('templates').put(tpl));
+                backupData.reminders?.forEach(rem => tx.objectStore('reminders').put(rem));
+                backupData.incomings?.forEach(incoming => tx.objectStore('incomings').put(incoming));
+                backupData.incoming_senders?.forEach(sender => tx.objectStore('incoming_senders').put(sender));
+                if (shouldRestoreWorks) {
+                    validatedWorks.forEach(work => tx.objectStore('works').put(work));
+                }
+            } catch (syncPutErr) {
+                if (typeof tx.abort === 'function') {
+                    try { tx.abort(); } catch (_) {}
+                }
+                throw syncPutErr;
+            }
             
             await new Promise((resolve, reject) => {
                 tx.oncomplete = resolve;
