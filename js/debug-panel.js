@@ -674,7 +674,7 @@ function updateDebugLogs() {
     }
 }
 
-function getSupabaseSQLScript() {
+export function getSupabaseSQLScript() {
     return `-- Költségnyilvántartó v4.1 - Teljes Supabase SQL Táblaséma
 -- Futtasd le ezt a szkriptet a Supabase SQL Editor-jában!
 
@@ -754,8 +754,10 @@ CREATE TABLE IF NOT EXISTS incomings (
     sender TEXT NOT NULL,
     date TEXT NOT NULL,
     amount NUMERIC NOT NULL,
+    currency TEXT DEFAULT 'HUF',
     comment TEXT,
     "isStorno" BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 ALTER TABLE incomings ENABLE ROW LEVEL SECURITY;
@@ -909,5 +911,9 @@ EXECUTE FUNCTION delete_item_cascade();
 
 -- [MIGRÁCIÓ] Ha a tábla már létezik, futtasd le ezt is (Bevásárlólista bővítése)
 ALTER TABLE plugin_shopping_list ADD COLUMN IF NOT EXISTS qty NUMERIC;
+
+-- [MIGRÁCIÓ] Bejövő utalások deviza- és létrehozási idő mezői
+ALTER TABLE incomings ADD COLUMN IF NOT EXISTS currency TEXT DEFAULT 'HUF';
+ALTER TABLE incomings ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
 `;
 }

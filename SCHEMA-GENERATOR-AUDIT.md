@@ -1,7 +1,7 @@
 # Supabase SQL Schema Generátor - Audit és Javítás (SCHEMA-GENERATOR-AUDIT.md)
 
 ## Hol található a generátor?
-Az SQL séma generátor a `js/app.js` fájlban, a `getSupabaseSQLScript()` nevű globális függvényben található (körülbelül a 2047. sor környékén).
+Az SQL séma generátor a `js/debug-panel.js` fájlban, a `getSupabaseSQLScript()` függvényben található.
 
 ## Hogyan működik?
 A generátor egy statikus, több soros stringként (template literal) adja vissza a teljes Supabase SQL sémát, amelyet a felhasználó a UI-on keresztül (az 5-ször kattintós fejlesztői diagnosztika panelen) ki tud másolni a vágólapra, hogy aztán bemásolja és lefuttassa a Supabase SQL Editorjában. Létrehozza a szükséges táblákat (`items`, `months`, `entries`, `templates`, `reminders`, `incomings`, `incoming_senders`, `deleted_records`, `works`, `app_settings`, `plugin_fuel_logs`), valamint az RLS (Row Level Security) irányelveket, amelyek anonim kulccsal való működés esetén lehetővé teszik a hozzáférést (BYOK modell).
@@ -13,6 +13,8 @@ A generátor egy statikus, több soros stringként (template literal) adja vissz
 ## Mit javítottam?
 - A `getSupabaseSQLScript()` függvényben minden érintett táblánál az `id UUID PRIMARY KEY DEFAULT gen_random_uuid()` sort lecseréltem `id TEXT PRIMARY KEY` sorra.
 - A szkript végére hozzáadtam a hiányzó SQL triggert, ami kaszkád törlést végez az `entries` táblában, ha egy kategóriát (`items`) törölnek (a `cellKey` mintázat alapján).
+- A bejövő utalások `currency` mezőjét, valamint a kliens által küldött `created_at` mezőt a teljes séma és egy új migráció is tartalmazza.
+- A `works` tábla mezői illeszkednek a munkaűrlap által mentett adatokhoz.
 
 ## Példa a generált SQL-re (Kategóriák és Trigger)
 ```sql
