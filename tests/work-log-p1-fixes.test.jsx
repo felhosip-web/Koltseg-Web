@@ -108,8 +108,8 @@ test('P1-1: Work Log Export operations target workLogManager and preserve financ
     globalThis.localStorage = dom.window.localStorage;
 
     const mockWorks = [
-        { id: 'w1', name: 'Munka 1', description: 'Leírás 1', location: 'Budapest', date: '2026-11-02', duration: 2, status: 'folyamatban' },
-        { id: 'w2', name: 'Munka 2', description: 'Leírás 2', location: 'Debrecen', date: '2026-11-01', duration: 1, status: 'elvégzett' }
+        { id: 'w1', name: 'Munka 1', description: 'Leírás 1', location: 'Budapest', date: '2026-11-01', duration: 2, status: 'folyamatban' },
+        { id: 'w2', name: 'Munka 2', description: 'Leírás 2', location: 'Debrecen', date: '2026-11-02', duration: 1, status: 'elvégzett' }
     ];
 
     const db = createMockDb(mockWorks);
@@ -172,15 +172,20 @@ test('P1-1: Work Log Export operations target workLogManager and preserve financ
     const excelRows = writtenExcelFile.wb.Sheets['Munka Nyilvántartás'].data;
     assert.equal(excelRows.length, 3); // 1 header + 2 works
     assert.equal(excelRows[0][1], 'Munka Neve');
-    assert.equal(excelRows[1][1], 'Munka 1');
-    assert.equal(excelRows[2][1], 'Munka 2');
+    assert.deepEqual(
+        excelRows.slice(1).map(row => row[1]).sort(),
+        ['Munka 1', 'Munka 2']
+    );
 
     // 2. Test PDF export
     await exportController.exportWorkPdf();
     assert.ok(writtenPdfDoc, 'PDF document should have been generated');
     assert.ok(writtenPdfDoc.filename.startsWith('Munka_Nyilvantartas_'));
     assert.equal(writtenPdfDoc.tableOpts.body.length, 2);
-    assert.equal(writtenPdfDoc.tableOpts.body[0][1], 'Munka 1');
+    assert.deepEqual(
+        writtenPdfDoc.tableOpts.body.map(row => row[1]).sort(),
+        ['Munka 1', 'Munka 2']
+    );
 
     // 3. Test JSON export produces valid works structure
     let createdBlob = null;
@@ -201,7 +206,10 @@ test('P1-1: Work Log Export operations target workLogManager and preserve financ
     const parsedExport = JSON.parse(createdBlob.content);
     assert.ok(Array.isArray(parsedExport.works));
     assert.equal(parsedExport.works.length, 2);
-    assert.equal(parsedExport.works[0].name, 'Munka 1');
+    assert.deepEqual(
+        parsedExport.works.map(work => work.name).sort(),
+        ['Munka 1', 'Munka 2']
+    );
 
     dom.window.close();
 });
@@ -253,19 +261,37 @@ test('P1-1: Work Log JSON Import validates malformed JSON, invalid schema, and i
         return el;
     };
 
+    let fileReaderDone = null;
+
     globalThis.FileReader = class MockFileReader {
         readAsText(file) {
-            setTimeout(() => {
-                this.onload({ target: { result: file.text } });
-            }, 0);
+            fileReaderDone = new Promise((resolve, reject) => {
+                setTimeout(async () => {
+                    try {
+                        await this.onload({ target: { result: file.text } });
+                        resolve();
+                    } catch (error) {
+                        reject(error);
+                    }
+                }, 0);
+            });
         }
+    };
+
+    const waitForFileReader = async () => {
+        if (!fileReaderDone) {
+            throw new Error('FileReader operation was not started');
+        }
+        const pending = fileReaderDone;
+        fileReaderDone = null;
+        await pending;
     };
 
     // Scenario A: Malformed JSON syntax (causes JSON.parse() to throw)
     reportedInfo = null;
     exportController.importWorkJson();
     fileInputOnChange({ target: { files: [{ text: '{ invalid json syntax :' }] } });
-    await new Promise(r => setTimeout(r, 15));
+    await waitForFileReader();
     assert.equal(reportedInfo?.title, '❌ Hiba');
     assert.equal(reportedInfo?.msg, 'Hibás JSON fájl formátum!');
     assert.equal(workLogManager.works.length, 1, 'Existing works must remain untouched on malformed JSON');
@@ -275,7 +301,7 @@ test('P1-1: Work Log JSON Import validates malformed JSON, invalid schema, and i
     reportedInfo = null;
     exportController.importWorkJson();
     fileInputOnChange({ target: { files: [{ text: JSON.stringify({ items: [] }) }] } });
-    await new Promise(r => setTimeout(r, 15));
+    await waitForFileReader();
     assert.equal(reportedInfo?.title, 'Érvénytelen fájl');
     assert.equal(workLogManager.works.length, 1);
     assert.equal(incomingManager.incomings.length, 1);
@@ -284,7 +310,7 @@ test('P1-1: Work Log JSON Import validates malformed JSON, invalid schema, and i
     reportedInfo = null;
     exportController.importWorkJson();
     fileInputOnChange({ target: { files: [{ text: JSON.stringify({ works: [] }) }] } });
-    await new Promise(r => setTimeout(r, 15));
+    await waitForFileReader();
     assert.equal(reportedInfo?.title, 'Üres adatállomány');
     assert.equal(workLogManager.works.length, 1);
     assert.equal(incomingManager.incomings.length, 1);
@@ -306,7 +332,7 @@ test('P1-1: Work Log JSON Import validates malformed JSON, invalid schema, and i
             }]
         }
     });
-    await new Promise(r => setTimeout(r, 15));
+    await waitForFileReader();
     assert.equal(reportedInfo?.title, 'Érvénytelen adatok');
     assert.equal(workLogManager.works.length, 1);
 
@@ -327,7 +353,7 @@ test('P1-1: Work Log JSON Import validates malformed JSON, invalid schema, and i
             }]
         }
     });
-    await new Promise(r => setTimeout(r, 15));
+    await waitForFileReader();
     assert.equal(reportedInfo?.title, 'Érvénytelen adatok');
     assert.equal(workLogManager.works.length, 1);
 
@@ -352,7 +378,7 @@ test('P1-1: Work Log JSON Import validates malformed JSON, invalid schema, and i
             }]
         }
     });
-    await new Promise(r => setTimeout(r, 15));
+    await waitForFileReader();
     assert.equal(reportedInfo?.title, 'Érvénytelen adatok', 'Malformed created_at timestamps must be rejected');
     assert.equal(workLogManager.works.length, 1);
 
@@ -380,7 +406,7 @@ test('P1-1: Work Log JSON Import validates malformed JSON, invalid schema, and i
             }]
         }
     });
-    await new Promise(r => setTimeout(r, 25));
+    await waitForFileReader();
     assert.equal(reportedInfo?.title, 'Sikeres importálás');
     assert.equal(workLogManager.works.length, 2);
     const importedProtoWork = workLogManager.works.find(w => w.name === 'Proto Test Task');
@@ -405,7 +431,7 @@ test('P1-1: Work Log JSON Import validates malformed JSON, invalid schema, and i
             }]
         }
     });
-    await new Promise(r => setTimeout(r, 15));
+    await waitForFileReader();
     assert.equal(workLogManager.works.length, 2, 'Cancelled import must not modify database');
 
     // Scenario H: Partial failure reporting when some records fail save
@@ -434,7 +460,7 @@ test('P1-1: Work Log JSON Import validates malformed JSON, invalid schema, and i
             }]
         }
     });
-    await new Promise(r => setTimeout(r, 35));
+    await waitForFileReader();
 
     assert.equal(reportedInfo?.title, 'Részleges importálás');
     assert.ok(reportedInfo?.msg.includes('2 sikeres, 1 sikertelen'));
@@ -456,7 +482,7 @@ test('P1-1: Work Log JSON Import validates malformed JSON, invalid schema, and i
             }]
         }
     });
-    await new Promise(r => setTimeout(r, 25));
+    await waitForFileReader();
     assert.equal(reportedInfo?.title, 'Sikeres importálás');
     const retriedWork = workLogManager.works.find(w => w.id === 'fail-rec-2');
     assert.ok(retriedWork);
@@ -478,7 +504,7 @@ test('P1-1: Work Log JSON Import validates malformed JSON, invalid schema, and i
             files: [{ text: idlessJsonPayload }]
         }
     });
-    await new Promise(r => setTimeout(r, 25));
+    await waitForFileReader();
     assert.equal(reportedInfo?.title, 'Sikeres importálás');
     assert.equal(workLogManager.works.length, initialCountBeforeIdless + 2, 'Two distinct dates must create two distinct records');
 
@@ -496,7 +522,7 @@ test('P1-1: Work Log JSON Import validates malformed JSON, invalid schema, and i
             files: [{ text: idlessJsonPayload }]
         }
     });
-    await new Promise(r => setTimeout(r, 25));
+    await waitForFileReader();
     assert.equal(reportedInfo?.title, 'Sikeres importálás');
     assert.equal(workLogManager.works.length, initialCountBeforeIdless + 2, 'Re-importing identical ID-less payload must be idempotent');
 
@@ -516,7 +542,7 @@ test('P1-1: Work Log JSON Import validates malformed JSON, invalid schema, and i
             files: [{ text: identicalTasksJsonPayload }]
         }
     });
-    await new Promise(r => setTimeout(r, 25));
+    await waitForFileReader();
     assert.equal(reportedInfo?.title, 'Sikeres importálás');
     assert.equal(
         workLogManager.works.length,
@@ -536,7 +562,7 @@ test('P1-1: Work Log JSON Import validates malformed JSON, invalid schema, and i
             files: [{ text: identicalTasksJsonPayload }]
         }
     });
-    await new Promise(r => setTimeout(r, 25));
+    await waitForFileReader();
     assert.equal(reportedInfo?.title, 'Sikeres importálás');
     assert.equal(workLogManager.works.length, initialCountBeforeDuplicates + 2, 'Repeated import of identical duplicates must remain idempotent');
 
@@ -557,7 +583,7 @@ test('P1-1: Work Log JSON Import validates malformed JSON, invalid schema, and i
             files: [{ text: diffStatusAndMetaJsonPayload }]
         }
     });
-    await new Promise(r => setTimeout(r, 25));
+    await waitForFileReader();
     assert.equal(reportedInfo?.title, 'Sikeres importálás');
     assert.equal(
         workLogManager.works.length,
@@ -578,7 +604,7 @@ test('P1-1: Work Log JSON Import validates malformed JSON, invalid schema, and i
             files: [{ text: diffStatusAndMetaJsonPayload }]
         }
     });
-    await new Promise(r => setTimeout(r, 25));
+    await waitForFileReader();
     assert.equal(reportedInfo?.title, 'Sikeres importálás');
     assert.equal(workLogManager.works.length, initialCountBeforeStatusMeta + 3, 'Re-importing status/metadata variants must be idempotent');
 
@@ -608,7 +634,7 @@ test('P1-1: Work Log JSON Import validates malformed JSON, invalid schema, and i
     reportedInfo = null;
     exportController.importWorkJson();
     fileInputOnChange({ target: { files: [{ text: nestedOrder1Payload }] } });
-    await new Promise(r => setTimeout(r, 25));
+    await waitForFileReader();
     assert.equal(reportedInfo?.title, 'Sikeres importálás');
     assert.equal(workLogManager.works.length, initialCountBeforeNested + 1);
     const nestedItem1 = workLogManager.works.find(w => w.name === 'Komplex Feladat');
@@ -619,7 +645,7 @@ test('P1-1: Work Log JSON Import validates malformed JSON, invalid schema, and i
     reportedInfo = null;
     exportController.importWorkJson();
     fileInputOnChange({ target: { files: [{ text: nestedOrder2Payload }] } });
-    await new Promise(r => setTimeout(r, 25));
+    await waitForFileReader();
     assert.equal(reportedInfo?.title, 'Sikeres importálás');
     assert.equal(workLogManager.works.length, initialCountBeforeNested + 1, 'Different nested key order must not produce a duplicate record');
     const nestedItem2 = workLogManager.works.find(w => w.name === 'Komplex Feladat');

@@ -686,6 +686,36 @@ export class DataExportController {
                         const trimmedLoc = typeof item.location === 'string' ? item.location.trim() : (item.location || '');
                         const status = typeof item.status === 'string' ? item.status : 'folyamatban';
 
+                        let createdAt;
+                        // Validate created_at before stable ID generation.
+                        // Distinguish missing created_at property from explicitly supplied null, non-string, or malformed value.
+                        // If explicitly present in imported JSON, reject invalid/null/malformed values completely.
+                        if ('created_at' in item) {
+                            if (item.created_at !== undefined) {
+                                if (typeof item.created_at !== 'string' || item.created_at.trim() === '') {
+                                    continue;
+                                }
+                                const match = item.created_at.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/);
+                                if (!match) {
+                                    continue;
+                                }
+                                const year = parseInt(match[1], 10);
+                                const month = parseInt(match[2], 10);
+                                const day = parseInt(match[3], 10);
+                                const hour = parseInt(match[4], 10);
+                                const minute = parseInt(match[5], 10);
+                                const second = parseInt(match[6], 10);
+                                if (month < 1 || month > 12) continue;
+                                if (hour > 23 || minute > 59 || second > 59) continue;
+                                const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+                                if (day < 1 || day > daysInMonth) continue;
+                                const d = new Date(item.created_at);
+                                if (isNaN(d.getTime())) continue;
+
+                                createdAt = item.created_at;
+                            }
+                        }
+
                         // 4. Stable ID generation:
                         // If explicit ID exists, use it.
                         // If ID is omitted, construct a canonical serialization of all distinguishing content
@@ -751,34 +781,8 @@ export class DataExportController {
                             duration: dur,
                             status: status
                         };
-
-                        // 7. Strictly validate created_at if present:
-                        // Distinguish missing created_at property from explicitly supplied null, non-string, or malformed value.
-                        // If explicitly present in imported JSON, reject invalid/null/malformed values completely.
-                        if ('created_at' in item) {
-                            if (item.created_at !== undefined) {
-                                if (typeof item.created_at !== 'string' || item.created_at.trim() === '') {
-                                    continue;
-                                }
-                                const match = item.created_at.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/);
-                                if (!match) {
-                                    continue;
-                                }
-                                const year = parseInt(match[1], 10);
-                                const month = parseInt(match[2], 10);
-                                const day = parseInt(match[3], 10);
-                                const hour = parseInt(match[4], 10);
-                                const minute = parseInt(match[5], 10);
-                                const second = parseInt(match[6], 10);
-                                if (month < 1 || month > 12) continue;
-                                if (hour > 23 || minute > 59 || second > 59) continue;
-                                const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
-                                if (day < 1 || day > daysInMonth) continue;
-                                const d = new Date(item.created_at);
-                                if (isNaN(d.getTime())) continue;
-
-                                normalizedRecord.created_at = item.created_at;
-                            }
+                        if (createdAt !== undefined) {
+                            normalizedRecord.created_at = createdAt;
                         }
 
                         validWorks.push(normalizedRecord);

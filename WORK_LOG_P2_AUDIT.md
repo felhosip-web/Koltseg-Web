@@ -1,4 +1,7 @@
-# Munka Nyilvántartás (Work Log) Module — P2 Technical Audit Report
+# Munka Nyilvántartás (Work Log) Module — P2 Technical Audit Report (Historical Baseline: PR #200)
+
+> **Historical status:** This document records the Work Log module's state at the PR #200 audit baseline. Its findings and proposed actions describe that historical state, not necessarily the current implementation. PR #206 subsequently addressed the main P2 implementation areas: duration validation, deterministic newest-first sorting, and full backup payload validation. The separate modal date-prefill observation and the P3 technical-debt observations are not declared resolved by this note.
+
 
 ## 1. Executive Summary
 
@@ -383,10 +386,24 @@ In accordance with mandatory constraints:
 
 ## 15. Final Audit Conclusion
 
-The Work Log module is in a sound state following PR #200. The remaining defects identified in this P2 audit are bounded and actionable:
+This conclusion describes the state observed at the PR #200 audit baseline. The findings listed below were historical observations and must not be interpreted as a current post-PR #206 defect list:
 1. Form submission silently defaulting invalid durations to 1 instead of rejecting.
 2. Inverted sorting comparator in `WorkLogManager.load()`.
 3. Absence of validation on work records during full backup restore.
 4. Minor UTC timezone shift on modal date prefill.
 
-All 4 defects can be resolved cleanly with minimal risk using the recommended fix plan above.
+The subsequent PR #206 implementation addressed the first three main P2 implementation areas. The separate modal date-prefill observation is not independently confirmed as resolved by this audit update.
+
+---
+
+## 16. Post-PR #206 Implementation Status
+
+PR [#206](https://github.com/felhosip-web/Koltseg-Web/pull/206) implemented the following P2 corrections:
+
+1. **Duration validation:** strict parsing and validation prevent invalid duration values from silently falling back to `1`.
+2. **Deterministic ordering:** `WorkLogManager.load()` uses newest-first ordering based on timestamp instants, with deterministic date and ID tie-breaks. Missing timestamps are handled explicitly.
+3. **Full backup validation:** both full-backup restore paths validate the complete incoming payload before starting the database transaction, preventing partially applied restores caused by invalid records.
+
+The dedicated regression coverage is in `tests/work-log-p2-fixes.test.jsx`, including the newest-first timestamp and tie-break test.
+
+This update records the implementation scope of PR #206; it does not claim that every historical observation in this audit has been resolved. In particular, the modal date-prefill observation and the P3 technical-debt findings require separate verification before their status can be changed.
