@@ -51,6 +51,15 @@ export class SyncService {
         return false;
     }
 
+    _validateWorkRecordForSync(record) {
+        const validation = validateWorkRecord(record);
+        if (!validation.valid) {
+            const recordId = record && typeof record === 'object' ? record.id : null;
+            throw new Error(`Work Log record ${recordId || '(unknown)'} rejected: ${validation.error}`);
+        }
+        return validation.sanitizedRecord;
+    }
+
     /**
      * Boot-time reconciliation of durable IndexedDB outbox records into Sync Queue
      */
@@ -254,6 +263,15 @@ export class SyncService {
     addToQueue(operation, data, table, priority = 'normal', customKey = null) {
         if (this.isMuted) {
             return null;
+        }
+
+        if (table === 'works' && operation !== 'delete') {
+            try {
+                data = this._validateWorkRecordForSync(data);
+            } catch (error) {
+                console.error('[SYNC] Invalid Work Log record rejected before queueing:', error.message, data);
+                return null;
+            }
         }
 
         const resolvedKeyField = customKey || (table === 'months' ? 'month' : 'id');
@@ -466,6 +484,15 @@ export class SyncService {
     async _executeQueueItem(item) {
         const { operation, table } = item;
         let { data } = item;
+
+        if (table === 'works' && operation !== 'delete') {
+            try {
+                data = this._validateWorkRecordForSync(data);
+            } catch (error) {
+                console.error('[SYNC] Invalid queued Work Log record rejected:', error.message, data);
+                return { success: false, error: error.message, unrecoverable: true };
+            }
+        }
         
         // CloudSync használata a tényleges művelethez
         if (!this.cloud?.client) {
@@ -544,6 +571,15 @@ export class SyncService {
         if (this.isMuted) {
             console.log(`[SYNC] Muted, skipping push/queue for table: ${storeName}`);
             return;
+        }
+
+        if (storeName === 'works' && !isDelete) {
+            try {
+                data = this._validateWorkRecordForSync(data);
+            } catch (error) {
+                console.error('[SYNC] Invalid Work Log record rejected before push:', error.message, data);
+                throw error;
+            }
         }
 
         // Auto-fix invalid data BEFORE any operation
@@ -1352,11 +1388,7 @@ export class SyncService {
                     let cleanItem = record;
 
                     if (name === 'works') {
-                        const validation = validateWorkRecord(cleanItem);
-                        if (!validation.valid) {
-                            throw new Error(validation.error);
-                        }
-                        cleanItem = validation.sanitizedRecord;
+                        cleanItem = this._validateWorkRecordForSync(cleanItem);
                     }
 
                     if (!cleanItem.updated_at) {
@@ -1455,6 +1487,15 @@ export class SyncService {
      * Pusztán push művelet (csak feltöltés, merge nélkül)
      */
     async pushOnly(table, data) {
+        if (table === 'works') {
+            try {
+                data = this._validateWorkRecordForSync(data);
+            } catch (error) {
+                console.error('[SYNC] Invalid Work Log record rejected before push-only:', error.message, data);
+                throw error;
+            }
+        }
+
         if (!navigator.onLine) {
             console.log(`[SYNC] Offline, push-only naplózva: ${table}`);
             this.offline.addPendingChange(table, 'update', data);
