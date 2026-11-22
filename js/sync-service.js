@@ -4,7 +4,7 @@
 import { CloudSync } from './oop-core.js';
 import { generateUUID, isValidUUID } from './uuid-utils.js';
 import { SyncReport } from './sync-report.js';
-import { validateWorkRecord } from './utils/work-validation.js';
+import { validateWorkRecord, isValidStrictIso8601 } from './utils/work-validation.js';
 
 export class SyncService {
     /**
@@ -260,7 +260,7 @@ export class SyncService {
     /**
      * Művelet hozzáadása a queue-hoz
      */
-    addToQueue(operation, data, table, priority = 'normal', customKey = null) {
+    addToQueue(operation, data, table, priority = 'normal', customKey = null, tombstoneDeletedAt = null) {
         if (this.isMuted) {
             return null;
         }
@@ -297,6 +297,7 @@ export class SyncService {
                 customKey: resolvedKeyField,
                 priority,
                 timestamp: new Date().toISOString(),
+                tombstoneDeletedAt,
                 status: 'pending',
                 retryCount: 0
             };
@@ -312,6 +313,7 @@ export class SyncService {
             customKey: resolvedKeyField,
             priority, // 'high', 'normal', 'low'
             timestamp: new Date().toISOString(),
+            tombstoneDeletedAt,
             retryCount: 0,
             status: 'pending' // 'pending', 'processing', 'done', 'failed'
         };
@@ -718,6 +720,13 @@ export class SyncService {
      * A várakozási sor (queue) egyeztetése a felhőből összefésült (merged) adatokkal.
      * Ha a felhőbeli állapot frissebb volt (cloud wins), a régebbi helyi queue elem elavulttá válik és törlésre kerül.
      */
+    _isRecordNewerThanTombstone(record, deletedAt) {
+        if (!record || !isValidStrictIso8601(deletedAt) || !isValidStrictIso8601(record.updated_at)) {
+            return false;
+        }
+        return Date.parse(record.updated_at) > Date.parse(deletedAt);
+    }
+
     _reconcileQueueWithMergeResult(mergedData, failedTables) {
         if (!mergedData || typeof mergedData !== 'object') return;
 
@@ -737,6 +746,12 @@ export class SyncService {
 
             const tableMerged = mergedData[table] || [];
             const mergedRecord = tableMerged.find(r => String(r[keyField]) === String(keyValue));
+
+            if (operation === 'delete' && this._isRecordNewerThanTombstone(mergedRecord, queueItem.tombstoneDeletedAt)) {
+                console.log(`[SYNC] 🧹 Elavult tombstone-törlés eltávolítva a queue-ból: ${table} / ${keyValue}`);
+                prunedCount++;
+                return false;
+            }
 
             if (operation === 'create' || operation === 'update') {
                 if (mergedRecord) {
@@ -899,10 +914,18 @@ export class SyncService {
                     }
 
                     const keyField = targetTable === 'months' ? 'month' : 'id';
+                    const targetRecords = mergedData[targetTable];
+                    const targetRecord = Array.isArray(targetRecords)
+                        ? targetRecords.find(item => item && String(item[keyField]) === String(targetId))
+                        : null;
+                    if (this._isRecordNewerThanTombstone(targetRecord, tombstone.deleted_at)) {
+                        console.log(`[SYNC] ♻️ Újabb rekord megőrizve a régebbi tombstone ellenére: ${targetTable} / ${targetId}`);
+                        continue;
+                    }
                     
                     // Kiszűrjük a mergedData-ból
-                    if (mergedData[targetTable]) {
-                        mergedData[targetTable] = mergedData[targetTable].filter(item => String(item[keyField]) !== String(targetId));
+                    if (targetRecords) {
+                        mergedData[targetTable] = targetRecords.filter(item => String(item[keyField]) !== String(targetId));
                     }
                     
                     // Fizikailag töröljük a helyi IndexedDB-ből is
@@ -923,7 +946,7 @@ export class SyncService {
                             const deletePayload = targetTable === 'months'
                                 ? { month: targetId }
                                 : { id: targetId };
-                            this.addToQueue('delete', deletePayload, targetTable, 'high', keyField);
+                            this.addToQueue('delete', deletePayload, targetTable, 'high', keyField, tombstone.deleted_at);
                         } catch (e) {
                             console.warn(`[SYNC] Hiba a tombstone felhő-törlés queue-ba írása közben (${targetTable}/${targetId}):`, e);
                         }
