@@ -4,6 +4,7 @@
 import { CloudSync } from './oop-core.js';
 import { generateUUID, isValidUUID } from './uuid-utils.js';
 import { SyncReport } from './sync-report.js';
+import { validateWorkRecord } from './utils/work-validation.js';
 
 export class SyncService {
     /**
@@ -1347,7 +1348,16 @@ export class SyncService {
             // 2. Mentjük a frissített / új rekordokat
             for (const item of data) {
                 try {
-                    const { _source, _updated_at, ...cleanItem } = item;
+                    const { _source, _updated_at, ...record } = item;
+                    let cleanItem = record;
+
+                    if (name === 'works') {
+                        const validation = validateWorkRecord(cleanItem);
+                        if (!validation.valid) {
+                            throw new Error(validation.error);
+                        }
+                        cleanItem = validation.sanitizedRecord;
+                    }
 
                     if (!cleanItem.updated_at) {
                         cleanItem.updated_at = new Date().toISOString();

@@ -682,9 +682,15 @@ export class DataExportController {
                         }
 
                         const trimmedName = item.name.trim();
-                        const trimmedDesc = typeof item.description === 'string' ? item.description.trim() : (item.description || '');
-                        const trimmedLoc = typeof item.location === 'string' ? item.location.trim() : (item.location || '');
-                        const status = typeof item.status === 'string' ? item.status : 'folyamatban';
+                        const trimmedDesc = typeof item.description === 'string'
+                            ? item.description.trim()
+                            : (item.description === undefined ? '' : item.description);
+                        const trimmedLoc = typeof item.location === 'string'
+                            ? item.location.trim()
+                            : (item.location === undefined ? '' : item.location);
+                        const status = Object.prototype.hasOwnProperty.call(item, 'status')
+                            ? item.status
+                            : 'folyamatban';
 
                         let createdAt;
                         // Validate created_at before stable ID generation.
