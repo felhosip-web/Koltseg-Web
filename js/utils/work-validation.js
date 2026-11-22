@@ -179,6 +179,14 @@ export function validateWorkRecord(work, options = {}) {
         }
     }
 
+    if ('description' in work && typeof work.description !== 'string') {
+        return { valid: false, error: 'A munka leírása csak szöveg lehet.' };
+    }
+
+    if ('location' in work && typeof work.location !== 'string') {
+        return { valid: false, error: 'A munka helyszíne csak szöveg lehet.' };
+    }
+
     // 5. Work Duration:
     // If requireComplete is true, duration MUST be present, non-null, and a valid positive integer <= MAX_WORK_DURATION.
     // If requireComplete is false:

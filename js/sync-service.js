@@ -4,6 +4,7 @@
 import { CloudSync } from './oop-core.js';
 import { generateUUID, isValidUUID } from './uuid-utils.js';
 import { SyncReport } from './sync-report.js';
+import { validateWorkRecord } from './utils/work-validation.js';
 
 export class SyncService {
     /**
@@ -48,6 +49,15 @@ export class SyncService {
             return await app.pluginStorageService.removeHostOutboxRecord(opId);
         }
         return false;
+    }
+
+    _validateWorkRecordForSync(record) {
+        const validation = validateWorkRecord(record);
+        if (!validation.valid) {
+            const recordId = record && typeof record === 'object' ? record.id : null;
+            throw new Error(`Work Log record ${recordId || '(unknown)'} rejected: ${validation.error}`);
+        }
+        return validation.sanitizedRecord;
     }
 
     /**
@@ -253,6 +263,15 @@ export class SyncService {
     addToQueue(operation, data, table, priority = 'normal', customKey = null) {
         if (this.isMuted) {
             return null;
+        }
+
+        if (table === 'works' && operation !== 'delete') {
+            try {
+                data = this._validateWorkRecordForSync(data);
+            } catch (error) {
+                console.error('[SYNC] Invalid Work Log record rejected before queueing:', error.message, data);
+                return null;
+            }
         }
 
         const resolvedKeyField = customKey || (table === 'months' ? 'month' : 'id');
@@ -465,6 +484,15 @@ export class SyncService {
     async _executeQueueItem(item) {
         const { operation, table } = item;
         let { data } = item;
+
+        if (table === 'works' && operation !== 'delete') {
+            try {
+                data = this._validateWorkRecordForSync(data);
+            } catch (error) {
+                console.error('[SYNC] Invalid queued Work Log record rejected:', error.message, data);
+                return { success: false, error: error.message, unrecoverable: true };
+            }
+        }
         
         // CloudSync használata a tényleges művelethez
         if (!this.cloud?.client) {
@@ -543,6 +571,15 @@ export class SyncService {
         if (this.isMuted) {
             console.log(`[SYNC] Muted, skipping push/queue for table: ${storeName}`);
             return;
+        }
+
+        if (storeName === 'works' && !isDelete) {
+            try {
+                data = this._validateWorkRecordForSync(data);
+            } catch (error) {
+                console.error('[SYNC] Invalid Work Log record rejected before push:', error.message, data);
+                throw error;
+            }
         }
 
         // Auto-fix invalid data BEFORE any operation
@@ -1347,7 +1384,12 @@ export class SyncService {
             // 2. Mentjük a frissített / új rekordokat
             for (const item of data) {
                 try {
-                    const { _source, _updated_at, ...cleanItem } = item;
+                    const { _source, _updated_at, ...record } = item;
+                    let cleanItem = record;
+
+                    if (name === 'works') {
+                        cleanItem = this._validateWorkRecordForSync(cleanItem);
+                    }
 
                     if (!cleanItem.updated_at) {
                         cleanItem.updated_at = new Date().toISOString();
@@ -1445,6 +1487,15 @@ export class SyncService {
      * Pusztán push művelet (csak feltöltés, merge nélkül)
      */
     async pushOnly(table, data) {
+        if (table === 'works') {
+            try {
+                data = this._validateWorkRecordForSync(data);
+            } catch (error) {
+                console.error('[SYNC] Invalid Work Log record rejected before push-only:', error.message, data);
+                throw error;
+            }
+        }
+
         if (!navigator.onLine) {
             console.log(`[SYNC] Offline, push-only naplózva: ${table}`);
             this.offline.addPendingChange(table, 'update', data);
