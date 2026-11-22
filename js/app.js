@@ -435,7 +435,11 @@ export class App {
             if (title) title.innerText = 'Új munka rögzítése';
             if (idInput) idInput.value = '';
             if (dateInput) {
-                dateInput.value = new Date().toISOString().split('T')[0];
+                const now = new Date();
+                const year = now.getFullYear();
+                const month = String(now.getMonth() + 1).padStart(2, '0');
+                const day = String(now.getDate()).padStart(2, '0');
+                dateInput.value = `${year}-${month}-${day}`;
             }
             if (durInput) durInput.value = 1;
             if (statusInput) statusInput.value = 'folyamatban';
